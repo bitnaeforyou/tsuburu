@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as api from '../lib/api'
   import ErrorNote from '../lib/ErrorNote.svelte'
+  import { toSearch } from '../lib/router'
 
   let { id }: { id: number } = $props()
 
@@ -45,12 +46,22 @@
         event.preventDefault()
         go(current - 1)
       } else if (event.key === 'Escape') {
-        history.back()
+        back()
       }
     }
     addEventListener('keydown', onKey)
     return () => removeEventListener('keydown', onKey)
   })
+
+  /// 갤러리 URL로 바로 들어오면 돌아갈 히스토리가 없다. 그럴 때는 마지막
+  /// 검색으로, 그것도 없으면 검색 화면으로 보낸다.
+  function back() {
+    if (history.length > 1) {
+      history.back()
+      return
+    }
+    location.hash = sessionStorage.getItem('tsuburu.lastSearch') ?? toSearch('')
+  }
 
   function go(next: number) {
     if (!gallery) return
@@ -62,7 +73,7 @@
 </script>
 
 <header>
-  <button onclick={() => history.back()}>← Back</button>
+  <button onclick={back}>← Back</button>
   <h1>{gallery?.title ?? `#${id}`}</h1>
   {#if gallery}
     <span class="counter">{current + 1} / {gallery.pages.length}</span>

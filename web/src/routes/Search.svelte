@@ -18,6 +18,11 @@
   let controller: AbortController | null = null
 
   // 검색어가 바뀌면 처음부터 다시 그린다.
+  // 갤러리에서 돌아올 곳. 갤러리 URL로 바로 들어온 경우 히스토리가 없다.
+  $effect(() => {
+    if (query) sessionStorage.setItem('tsuburu.lastSearch', location.hash)
+  })
+
   $effect(() => {
     input = query
     ids = []
