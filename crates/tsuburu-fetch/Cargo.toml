@@ -1,0 +1,17 @@
+[package]
+name = "tsuburu-fetch"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tsuburu-hitomi = { path = "../tsuburu-hitomi" }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "stream", "gzip"] }
+tokio = { workspace = true, features = ["sync", "time"] }
+tracing = { workspace = true }
+quick_cache = "0.6"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+wiremock = "0.6"
