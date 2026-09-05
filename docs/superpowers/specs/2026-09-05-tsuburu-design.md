@@ -240,10 +240,111 @@ tsuburu는 콘텐츠를 호스팅하거나 재배포하지 않는다. 사용자 
 
 ## 12. 성능 목표
 
-마일스톤 1에서 실제 측정 후 확정한다. 측정 없이 수치를 정하지 않는다.
+2026-09-05에 실제 인덱스를 대상으로 측정했다(파이썬 프로브, 단일 커넥션 재사용,
+직렬 요청). 측정값:
 
-측정 항목:
-- 검색어 1개 질의의 HTTP 왕복 횟수 및 총 전송 바이트
-- 캐시 미적중 / 적중 시 검색 응답 시간
-- 태그 3개 AND 질의의 교집합 계산 시간
-- 릴리스 바이너리 크기, 유휴 상태 메모리 사용량
+| 검색어 | 갤러리 수 | B-tree 깊이 | 왕복 | 전송 | 소요 |
+|---|---|---|---|---|---|
+| naruto | 5,446 | 6 | 8 | 25 KB | 1,779 ms |
+| school | 201,682 | 6 | 8 | 810 KB | 2,442 ms |
+| tomboy | 14,773 | 6 | 8 | 62 KB | 1,663 ms |
+| glasses | 140,425 | 6 | 8 | 565 KB | 1,734 ms |
+
+읽어낸 사실:
+
+- **병목은 교집합이 아니라 B-tree 하강이다.** 깊이가 6~7로 일정하고 각 단계가
+  직렬 왕복이라, 왕복 지연(~200 ms)이 그대로 누적된다. 전송량은 노드당 464
+  바이트에 불과하다.
+- 따라서 최적화의 1순위는 **상위 노드 캐싱**이다. 루트와 상위 2개 레벨을
+  상주시키면 왕복이 8회에서 4~5회로 줄고, 검색을 반복할수록 더 줄어든다.
+- 데이터 블록은 결과가 많을 때 커진다(`school`은 810 KB). 그러나 첫 페이지에
+  필요한 것은 앞쪽 수십 개뿐이므로, 데이터 블록도 Range로 앞부분만 가져올 수
+  있다(4바이트 헤더 + N×4바이트). 단일 조건 브라우징에서 810 KB가 수백
+  바이트로 줄어든다. 복합 조건(AND)은 전체 목록이 필요하므로 예외다.
+
+### 목표
+
+- 캐시 미적중 검색: 1,000 ms 이하 (왕복 5회 이하)
+- 캐시 적중 검색: 300 ms 이하
+- 단일 조건 첫 페이지 전송량: 50 KB 이하
+- 릴리스 바이너리: 20 MB 이하
+
+## 부록 A. 확인된 hitomi 인덱스 포맷
+
+2026-09-05 기준. `searchlib.js`, `search.js`, `common.js`에서 확인하고 실제
+요청으로 검증했다.
+
+### 도메인
+
+`ltn.hitomi.la`는 더 이상 응답하지 않는다(연결 실패). 현재 도메인은
+**`ltn.gold-usergeneratedcontent.net`** 이며, 이미지는
+`a.gold-usergeneratedcontent.net` 계열이다. 7절이 전제한 "사이트는 반드시
+바뀐다"가 이미 한 차례 일어난 사례이므로, 도메인은 상수가 아니라 설정으로
+둔다.
+
+### 인덱스 버전
+
+`GET /{index_dir}/version?_={timestamp}` → 정수 문자열.
+`galleriesindex`, `languagesindex`, `nozomiurlindex`는 응답하나
+`tagindex`는 404다(별도 호스트). 검색 경로에는 `galleriesindex`만 필요하다.
+
+### 노드 (`/galleriesindex/galleries.{version}.index`)
+
+주소 `addr`에서 `Range: bytes={addr}-{addr+463}`으로 464바이트를 읽는다.
+모든 정수는 **빅엔디언**이다.
+
+```
+i32  number_of_keys
+  반복 { i32 key_size (1..=32); u8[key_size] key }
+i32  number_of_datas
+  반복 { u64 offset; i32 length }
+u64  subnode_addresses[17]      // B = 16, 즉 B+1개
+```
+
+`subnode_addresses`가 전부 0이면 리프다.
+
+### 검색
+
+- 검색 키 = `sha256(term)[0..4]` (4바이트)
+- 키 비교는 바이트 사전순, 짧은 쪽 길이까지만 비교
+- 루트는 주소 0. 키를 찾으면 같은 인덱스의 `datas[i]`가 결과다.
+
+### 데이터 블록 (`/galleriesindex/galleries.{version}.data`)
+
+`Range: bytes={offset}-{offset+length-1}`.
+
+```
+i32  number_of_galleryids
+i32  galleryids[number_of_galleryids]
+```
+
+전체 길이는 반드시 `number_of_galleryids * 4 + 4`와 같아야 한다.
+
+### 갤러리 메타데이터
+
+`GET /galleries/{id}.js` → `var galleryinfo = {...};` 형태. `var galleryinfo = `
+접두사를 떼면 JSON이다. `files[]`의 각 원소는 `hash`(64자 hex), `name`,
+`width`, `height`, `hasavif` 등을 가진다.
+
+### 이미지 URL
+
+`gg.js`가 매핑 규칙을 담고 있으며 주기적으로 갱신된다. 파싱해야 하는 것은 두
+가지다.
+
+- `gg.b` — 경로 접두사 문자열 (예: `'1788595201/'`)
+- `gg.m(g)` — 큰 switch 문. 나열된 case는 0을, 그 외에는 1을 반환한다.
+  즉 나열된 정수 집합만 추출하면 된다.
+
+해시로부터 URL을 만드는 절차:
+
+```
+last3 = hash[-3..]                  // 예: "3e2"
+g     = parse_hex(last3[2] + last3[0..2])   // "2" + "3e" -> 0x23e
+path  = gg.b + g.to_string() + "/" + hash
+sub   = "a" + (1 + gg.m(g))         // "a1" 또는 "a2"
+url   = https://{sub}.gold-usergeneratedcontent.net/{path}.avif
+```
+
+`hasavif`가 0이면 확장자를 `webp`로 바꾼다.
+
+이미지 요청에는 `Referer: https://hitomi.la/`가 필요하다.
