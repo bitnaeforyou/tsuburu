@@ -1,0 +1,19 @@
+[package]
+name = "tsuburu-hitomi"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# 다른 crate의 테스트에서 MockFetcher를 쓰기 위한 것.
+mock = []
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+sha2 = "0.10"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
