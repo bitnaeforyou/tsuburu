@@ -15,8 +15,11 @@ pub mod search;
 
 pub use fetcher::{FetchError, Fetcher};
 pub use gallery::{Gallery, GalleryError, GalleryFile, parse_gallery_info};
-pub use image::{GgMap, ImageError, image_url, parse_gg};
-pub use index::{MAX_NODE_SIZE, SearchError, b_search, fetch_gallery_ids, hash_term};
+pub use image::{GgMap, ImageError, image_url, parse_gg, thumbnail_url};
+pub use index::{
+    IdBlock, MAX_NODE_SIZE, SearchError, b_search, fetch_gallery_id_block, fetch_gallery_ids,
+    hash_term, warm_index,
+};
 pub use node::{Node, decode_node};
 pub use search::{Query, difference, intersect, parse_query};
 
@@ -27,6 +30,8 @@ pub const B: usize = 16;
 /// 전례가 있으므로 상수가 아니라 설정으로 둔다.
 #[derive(Debug, Clone)]
 pub struct Config {
+    /// 테스트에서 로컬 목 서버를 가리키기 위해 열어둔다. 기본은 `https`다.
+    pub scheme: String,
     pub ltn_domain: String,
     pub content_domain: String,
     pub referer: String,
@@ -35,6 +40,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            scheme: "https".into(),
             ltn_domain: "ltn.gold-usergeneratedcontent.net".into(),
             content_domain: "gold-usergeneratedcontent.net".into(),
             referer: "https://hitomi.la/".into(),
@@ -44,23 +50,23 @@ impl Default for Config {
 
 impl Config {
     pub fn galleries_index_url(&self, version: &str) -> String {
-        format!("https://{}/galleriesindex/galleries.{version}.index", self.ltn_domain)
+        format!("{}://{}/galleriesindex/galleries.{version}.index", self.scheme, self.ltn_domain)
     }
 
     pub fn galleries_data_url(&self, version: &str) -> String {
-        format!("https://{}/galleriesindex/galleries.{version}.data", self.ltn_domain)
+        format!("{}://{}/galleriesindex/galleries.{version}.data", self.scheme, self.ltn_domain)
     }
 
     pub fn version_url(&self, index_dir: &str, cache_buster: u64) -> String {
-        format!("https://{}/{index_dir}/version?_={cache_buster}", self.ltn_domain)
+        format!("{}://{}/{index_dir}/version?_={cache_buster}", self.scheme, self.ltn_domain)
     }
 
     pub fn gallery_info_url(&self, id: i32) -> String {
-        format!("https://{}/galleries/{id}.js", self.ltn_domain)
+        format!("{}://{}/galleries/{id}.js", self.scheme, self.ltn_domain)
     }
 
     pub fn gg_url(&self) -> String {
-        format!("https://{}/gg.js", self.ltn_domain)
+        format!("{}://{}/gg.js", self.scheme, self.ltn_domain)
     }
 }
 
@@ -100,6 +106,51 @@ pub async fn search_term(
     };
     let data_url = cfg.galleries_data_url(version);
     fetch_gallery_ids(fetcher, &data_url, entry, limit).await
+}
+
+/// 한 페이지 분량의 검색 결과.
+#[derive(Debug, Clone)]
+pub struct SearchPage {
+    /// 조건에 맞는 전체 개수. 단일 조건이면 데이터 블록 헤더에서 온다.
+    pub total: usize,
+    pub ids: Vec<i32>,
+}
+
+/// 페이지 단위 검색.
+///
+/// 단일 조건이면 데이터 블록의 앞 `offset + limit` 개만 읽는다. 결과가 20만
+/// 건인 검색어도 첫 페이지에는 수백 바이트만 오간다.
+pub async fn search_page(
+    fetcher: &dyn Fetcher,
+    cfg: &Config,
+    version: &str,
+    query: &Query,
+    offset: usize,
+    limit: usize,
+) -> Result<SearchPage, SearchError> {
+    if query.include.is_empty() {
+        return Ok(SearchPage { total: 0, ids: Vec::new() });
+    }
+
+    let single = query.include.len() == 1 && query.exclude.is_empty();
+    if single {
+        let term = &query.include[0];
+        let key = hash_term(&term.to_lowercase());
+        let index_url = cfg.galleries_index_url(version);
+        let Some(entry) = b_search(fetcher, &index_url, &key).await? else {
+            return Ok(SearchPage { total: 0, ids: Vec::new() });
+        };
+        let data_url = cfg.galleries_data_url(version);
+        let block =
+            fetch_gallery_id_block(fetcher, &data_url, entry, Some(offset + limit)).await?;
+        let ids = block.ids.into_iter().skip(offset).take(limit).collect();
+        return Ok(SearchPage { total: block.total, ids });
+    }
+
+    let all = search(fetcher, cfg, version, query, None).await?;
+    let total = all.len();
+    let ids = all.into_iter().skip(offset).take(limit).collect();
+    Ok(SearchPage { total, ids })
 }
 
 /// 복합 질의. include는 교집합, exclude는 차집합이다.
@@ -201,5 +252,12 @@ mod tests {
     fn config_domain_is_overridable() {
         let cfg = Config { ltn_domain: "example.test".into(), ..Config::default() };
         assert!(cfg.gg_url().starts_with("https://example.test/"));
+
+        let local = Config {
+            scheme: "http".into(),
+            ltn_domain: "127.0.0.1:9".into(),
+            ..Config::default()
+        };
+        assert!(local.gg_url().starts_with("http://127.0.0.1:9/"));
     }
 }

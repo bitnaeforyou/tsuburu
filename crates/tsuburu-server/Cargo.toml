@@ -1,0 +1,26 @@
+[package]
+name = "tsuburu-server"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tsuburu-hitomi = { path = "../tsuburu-hitomi" }
+tsuburu-fetch = { path = "../tsuburu-fetch" }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+tower-http = { version = "0.6", default-features = false, features = ["trace"] }
+tokio = { workspace = true, features = ["rt", "sync"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+quick_cache = "0.6"
+rust-embed = { version = "8", features = ["mime-guess"] }
+mime_guess = "2"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+wiremock = "0.6"
+tsuburu-hitomi = { path = "../tsuburu-hitomi", features = ["mock"] }

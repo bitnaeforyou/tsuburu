@@ -120,6 +120,25 @@ pub async fn fetch_gallery_ids(
     entry: (u64, i32),
     limit: Option<usize>,
 ) -> Result<Vec<i32>, SearchError> {
+    Ok(fetch_gallery_id_block(fetcher, data_url, entry, limit).await?.ids)
+}
+
+/// 블록 전체 개수와 읽어온 ID들.
+///
+/// 부분 읽기를 하더라도 헤더에 전체 개수가 들어 있으므로, 결과 총계를 알기
+/// 위해 블록 전체를 받을 필요가 없다.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdBlock {
+    pub total: usize,
+    pub ids: Vec<i32>,
+}
+
+pub async fn fetch_gallery_id_block(
+    fetcher: &dyn Fetcher,
+    data_url: &str,
+    entry: (u64, i32),
+    limit: Option<usize>,
+) -> Result<IdBlock, SearchError> {
     let (offset, length) = entry;
     if length <= 0 || length > 100_000_000 {
         return Err(SearchError::GalleryCount(length));
@@ -132,7 +151,8 @@ pub async fn fetch_gallery_ids(
     let buf = fetcher.get_range(data_url, offset..offset + want).await?;
 
     if limit.is_none() {
-        return decode_gallery_ids(&buf);
+        let ids = decode_gallery_ids(&buf)?;
+        return Ok(IdBlock { total: ids.len(), ids });
     }
 
     // 부분 읽기에서는 전체 길이 검증을 할 수 없다. 헤더가 말하는 개수와 실제로
@@ -146,7 +166,58 @@ pub async fn fetch_gallery_ids(
     }
     let available = (buf.len() - 4) / 4;
     let take = available.min(count as usize);
-    Ok(read_ids(&buf[4..4 + take * 4]))
+    Ok(IdBlock { total: count as usize, ids: read_ids(&buf[4..4 + take * 4]) })
+}
+
+/// 인덱스 상위 노드를 미리 받아둔다.
+///
+/// 검색은 루트부터 리프까지 노드를 **직렬로** 타고 내려간다. 실측 깊이가 6~7
+/// 이므로 왕복 지연이 그대로 누적되고, 이것이 검색 비용의 대부분이다. 상위
+/// 노드는 어떤 검색어를 넣든 동일하게 지나가므로, 미리 받아 캐시에 얹어두면
+/// 이후 모든 검색이 그만큼 짧아진다.
+///
+/// `levels`는 루트 아래로 몇 단계를 예열할지다. 한 레벨은 동시에 요청하며,
+/// 실패하거나 깨진 노드는 조용히 건너뛴다. 예열은 최적화일 뿐이므로 실패가
+/// 검색의 정확성에 영향을 주지 않는다.
+///
+/// 캐시를 갖지 않는 [`Fetcher`] 구현에 대해서는 아무 효과가 없다.
+pub async fn warm_index(
+    fetcher: &dyn Fetcher,
+    index_url: &str,
+    levels: usize,
+) -> Result<usize, SearchError> {
+    let root_raw = fetcher.get_range(index_url, 0..MAX_NODE_SIZE).await?;
+    let root = decode_node(&root_raw)?;
+
+    let mut warmed = 1usize;
+    let mut frontier: Vec<u64> = child_addresses(&root);
+
+    for _ in 0..levels {
+        if frontier.is_empty() {
+            break;
+        }
+        let fetched = futures_util::future::join_all(
+            frontier
+                .iter()
+                .map(|&addr| fetcher.get_range(index_url, addr..addr + MAX_NODE_SIZE)),
+        )
+        .await;
+
+        let mut next = Vec::new();
+        for raw in fetched.into_iter().flatten() {
+            warmed += 1;
+            if let Ok(node) = decode_node(&raw) {
+                next.extend(child_addresses(&node));
+            }
+        }
+        frontier = next;
+    }
+
+    Ok(warmed)
+}
+
+fn child_addresses(node: &Node) -> Vec<u64> {
+    node.subnode_addresses.iter().copied().filter(|&a| a != 0).collect()
 }
 
 #[cfg(test)]
@@ -243,6 +314,45 @@ mod tests {
         block.extend_from_slice(&6i32.to_be_bytes());
         let f = MockFetcher::with("data", block);
         assert_eq!(fetch_gallery_ids(&f, "data", (0, 12), Some(99)).await.unwrap(), vec![5, 6]);
+    }
+
+    #[tokio::test]
+    async fn partial_read_still_reports_the_full_total() {
+        let mut block = 1000i32.to_be_bytes().to_vec();
+        for i in 0..1000i32 {
+            block.extend_from_slice(&i.to_be_bytes());
+        }
+        let f = MockFetcher::with("data", block);
+        let got = fetch_gallery_id_block(&f, "data", (0, 4004), Some(3)).await.unwrap();
+        assert_eq!(got.total, 1000, "total comes from the header, not the slice");
+        assert_eq!(got.ids.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn warming_visits_root_and_the_requested_levels() {
+        // 루트 -> 자식 2개 -> 손자 1개
+        let mut index = vec![0u8; 464 * 4];
+        write_node(&mut index[0..464], &[&[0x50]], &[(0, 0)], &[464, 928]);
+        write_node(&mut index[464..928], &[&[0x10]], &[(0, 4)], &[1392]);
+        write_node(&mut index[928..1392], &[&[0x90]], &[(0, 4)], &[]);
+        write_node(&mut index[1392..1856], &[&[0x05]], &[(0, 4)], &[]);
+        let f = MockFetcher::with("idx", index);
+
+        // 한 레벨만 예열하면 루트 + 자식 2개
+        assert_eq!(warm_index(&f, "idx", 1).await.unwrap(), 3);
+        assert_eq!(f.call_count(), 3);
+    }
+
+    #[tokio::test]
+    async fn warming_two_levels_reaches_grandchildren() {
+        let mut index = vec![0u8; 464 * 4];
+        write_node(&mut index[0..464], &[&[0x50]], &[(0, 0)], &[464, 928]);
+        write_node(&mut index[464..928], &[&[0x10]], &[(0, 4)], &[1392]);
+        write_node(&mut index[928..1392], &[&[0x90]], &[(0, 4)], &[]);
+        write_node(&mut index[1392..1856], &[&[0x05]], &[(0, 4)], &[]);
+        let f = MockFetcher::with("idx", index);
+
+        assert_eq!(warm_index(&f, "idx", 2).await.unwrap(), 4);
     }
 
     #[test]
