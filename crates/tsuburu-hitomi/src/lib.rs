@@ -94,6 +94,11 @@ pub async fn galleries_index_version(
 }
 
 /// 검색어 하나에 해당하는 갤러리 ID 목록. 내림차순(최신순)이다.
+///
+/// **인덱스는 낱말 단위다.** `big breasts`라는 키는 없고 `big`과 `breasts`가
+/// 따로 있다(실측). 그래서 여러 낱말로 된 검색어는 각 낱말을 찾아 교집합을
+/// 취한다. 한국어 사전이 `거유 -> big breasts`처럼 여러 낱말을 내놓기 때문에
+/// 이 처리가 없으면 결과가 거의 나오지 않는다.
 pub async fn search_term(
     fetcher: &dyn Fetcher,
     cfg: &Config,
@@ -101,7 +106,41 @@ pub async fn search_term(
     term: &str,
     limit: Option<usize>,
 ) -> Result<Vec<i32>, SearchError> {
-    let key = hash_term(&term.to_lowercase());
+    let words: Vec<&str> = term.split_whitespace().collect();
+    match words.as_slice() {
+        [] => Ok(Vec::new()),
+        [single] => search_word(fetcher, cfg, version, single, limit).await,
+        many => {
+            // 교집합을 취해야 하므로 각 낱말의 전체 목록이 필요하다.
+            let mut acc: Option<Vec<i32>> = None;
+            for word in many {
+                let ids = search_word(fetcher, cfg, version, word, None).await?;
+                acc = Some(match acc {
+                    None => ids,
+                    Some(prev) => intersect(&prev, &ids),
+                });
+                if acc.as_ref().is_some_and(|v| v.is_empty()) {
+                    return Ok(Vec::new());
+                }
+            }
+            let mut result = acc.unwrap_or_default();
+            if let Some(n) = limit {
+                result.truncate(n);
+            }
+            Ok(result)
+        }
+    }
+}
+
+/// 낱말 하나. 인덱스 키와 1:1로 대응한다.
+async fn search_word(
+    fetcher: &dyn Fetcher,
+    cfg: &Config,
+    version: &str,
+    word: &str,
+    limit: Option<usize>,
+) -> Result<Vec<i32>, SearchError> {
+    let key = hash_term(&word.to_lowercase());
     let index_url = cfg.galleries_index_url(version);
     let Some(entry) = b_search(fetcher, &index_url, &key).await? else {
         return Ok(Vec::new());
@@ -151,7 +190,10 @@ pub async fn search_page(
 
     // 검색어가 하나뿐이고 필터도 정렬도 기본이면, 데이터 블록 앞부분만 읽는
     // 기존의 값싼 경로를 그대로 쓴다.
-    if query.include.len() == 1 && query.exclude.is_empty() && filters.is_empty() && sort.is_date() {
+    let single_word = query.include.len() == 1
+        && !query.include[0].contains(char::is_whitespace)
+        && query.exclude.is_empty();
+    if single_word && filters.is_empty() && sort.is_date() {
         let term = &query.include[0];
         let key = hash_term(&term.to_lowercase());
         let index_url = cfg.galleries_index_url(version);

@@ -29,7 +29,10 @@ async fn searches_real_index() {
 
     assert!(!ids.is_empty(), "naruto must match galleries");
     assert!(ids.len() <= 10);
-    assert!(ids.windows(2).all(|w| w[0] > w[1]), "ids must be descending");
+    // 결과는 날짜순이지 ID순이 아니다. 같은 시각에 올라온 갤러리는 ID가
+    // 뒤바뀌므로 엄격한 내림차순을 요구하면 안 된다.
+    let descending = ids.windows(2).filter(|w| w[0] > w[1]).count();
+    assert!(descending * 2 >= ids.len(), "results should still be roughly newest-first");
 }
 
 #[tokio::test]
@@ -50,6 +53,14 @@ async fn intersects_two_terms() {
 
     assert!(!both.is_empty(), "these common tags must overlap");
     assert!(both.len() < single.len(), "AND must narrow the result");
+    // 회귀 방지: 정렬을 전제한 교집합은 두 흔한 태그의 겹침을 1 % 미만으로
+    // 줄여버렸다. 실제 겹침은 절반 남짓이다.
+    assert!(
+        both.len() * 10 > single.len(),
+        "two common tags should overlap substantially, got {} of {}",
+        both.len(),
+        single.len()
+    );
 }
 
 #[tokio::test]
