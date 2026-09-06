@@ -11,7 +11,7 @@ use tower::ServiceExt;
 use tsuburu_fetch::{FetchConfig, HttpFetcher};
 use tsuburu_hitomi::Config;
 use tsuburu_server::{AppState, router};
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path as path_matcher};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const HASH: &str = "637a35d9d5a892a8b86b97fe9b42e5cf49b8edd6685f7e1baf8f3b361f6cd3e2";
@@ -39,6 +39,10 @@ fn id_block(ids: &[i32]) -> Vec<u8> {
     out
 }
 
+fn nozomi(ids: &[i32]) -> Vec<u8> {
+    ids.iter().flat_map(|id| id.to_be_bytes()).collect()
+}
+
 fn gg_js() -> String {
     "gg = { m: function(g) { var o = 1; switch (g) { case 574: o = 0; break; } return o; }, \
      b: '999/' };"
@@ -59,13 +63,13 @@ async fn hitomi_stub() -> MockServer {
     let ids = id_block(&[300, 200, 100]);
 
     Mock::given(method("GET"))
-        .and(path("/galleriesindex/version"))
+        .and(path_matcher("/galleriesindex/version"))
         .respond_with(ResponseTemplate::new(200).set_body_string(VERSION))
         .mount(&server)
         .await;
 
     Mock::given(method("GET"))
-        .and(path(format!("/galleriesindex/galleries.{VERSION}.index")))
+        .and(path_matcher(format!("/galleriesindex/galleries.{VERSION}.index")))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_bytes(leaf_index(tsuburu_hitomi::hash_term("naruto"), (0, 16))),
@@ -74,20 +78,43 @@ async fn hitomi_stub() -> MockServer {
         .await;
 
     Mock::given(method("GET"))
-        .and(path(format!("/galleriesindex/galleries.{VERSION}.data")))
+        .and(path_matcher(format!("/galleriesindex/galleries.{VERSION}.data")))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(ids))
         .mount(&server)
         .await;
 
     Mock::given(method("GET"))
-        .and(path("/gg.js"))
+        .and(path_matcher("/gg.js"))
         .respond_with(ResponseTemplate::new(200).set_body_string(gg_js()))
         .mount(&server)
         .await;
 
+    // 둘러보기와 정렬에 쓰이는 목록들
+    for path in [
+        "/index-all.nozomi",
+        "/index-korean.nozomi",
+        "/popular/week-all.nozomi",
+        "/type/manga-all.nozomi",
+    ] {
+        // 인기순 목록은 날짜순과 다른 순서로 둔다. 정렬이 실제로 반영되는지
+        // 확인하기 위해서다.
+        let ids: Vec<i32> = if path.starts_with("/popular") {
+            vec![100, 300, 200]
+        } else if path.starts_with("/type") {
+            vec![300, 100]
+        } else {
+            vec![300, 200, 100]
+        };
+        Mock::given(method("GET"))
+            .and(path_matcher(path))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(nozomi(&ids)))
+            .mount(&server)
+            .await;
+    }
+
     for id in [100, 200, 300] {
         Mock::given(method("GET"))
-            .and(path(format!("/galleries/{id}.js")))
+            .and(path_matcher(format!("/galleries/{id}.js")))
             .respond_with(ResponseTemplate::new(200).set_body_string(gallery_js()))
             .mount(&server)
             .await;
@@ -135,12 +162,62 @@ async fn search_honours_offset_and_limit() {
 }
 
 #[tokio::test]
-async fn search_without_terms_is_a_bad_request() {
+async fn no_terms_browses_the_sorted_list() {
     let server = hitomi_stub().await;
     let (status, body) = get_json(app(&server), "/api/search?q=").await;
 
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["total"], 3);
+    assert_eq!(body["ids"], serde_json::json!([300, 200, 100]));
+}
+
+#[tokio::test]
+async fn exclusions_alone_are_a_bad_request() {
+    let server = hitomi_stub().await;
+    let (status, body) = get_json(app(&server), "/api/search?q=-yaoi").await;
+
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"], "bad_request");
+}
+
+#[tokio::test]
+async fn an_unknown_sort_is_rejected() {
+    let server = hitomi_stub().await;
+    let (status, body) = get_json(app(&server), "/api/search?q=naruto&sort=nonsense").await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body["message"].as_str().unwrap().contains("nonsense"));
+}
+
+#[tokio::test]
+async fn language_filter_selects_a_different_list() {
+    let server = hitomi_stub().await;
+    let (status, body) = get_json(app(&server), "/api/search?q=&language=korean").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["ids"], serde_json::json!([300, 200, 100]));
+}
+
+#[tokio::test]
+async fn browsing_a_type_pages_that_list_directly() {
+    let server = hitomi_stub().await;
+    let (status, body) = get_json(app(&server), "/api/search?q=&kind=manga").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["total"], 2);
+    assert_eq!(body["ids"], serde_json::json!([300, 100]));
+}
+
+#[tokio::test]
+async fn popularity_sort_reorders_search_results() {
+    let server = hitomi_stub().await;
+    // 검색 결과는 날짜순으로 [300, 200, 100]이지만
+    // 인기 목록은 [100, 300, 200] 순서다.
+    let (status, body) = get_json(app(&server), "/api/search?q=naruto&sort=week").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["total"], 3);
+    assert_eq!(body["ids"], serde_json::json!([100, 300, 200]));
 }
 
 #[tokio::test]
@@ -185,13 +262,13 @@ async fn gallery_returns_proxied_page_urls() {
 async fn format_changes_are_reported_as_such() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/galleriesindex/version"))
+        .and(path_matcher("/galleriesindex/version"))
         .respond_with(ResponseTemplate::new(200).set_body_string(VERSION))
         .mount(&server)
         .await;
     // 노드 자리에 쓰레기를 돌려준다 — 사이트가 포맷을 바꾼 상황이다.
     Mock::given(method("GET"))
-        .and(path(format!("/galleriesindex/galleries.{VERSION}.index")))
+        .and(path_matcher(format!("/galleriesindex/galleries.{VERSION}.index")))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(vec![0xffu8; 464]))
         .mount(&server)
         .await;
@@ -237,4 +314,38 @@ async fn image_proxy_rejects_unsupported_extensions() {
     let server = hitomi_stub().await;
     let (status, _) = get_json(app(&server), &format!("/img/{HASH}.png")).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn korean_terms_are_translated_and_reported() {
+    let server = hitomi_stub().await;
+    let (status, body) = get_json(app(&server), "/api/search?q=%EA%B1%B0%EC%9C%A0").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["terms"][0]["input"], "거유");
+    assert_eq!(body["terms"][0]["used"], "big breasts");
+    assert_eq!(body["terms"][0]["translated"], true);
+}
+
+#[tokio::test]
+async fn untranslatable_terms_are_reported_as_such() {
+    // 작가 이름은 사전에 거의 없다. 사용자가 그 사실을 알 수 있어야 한다.
+    let server = hitomi_stub().await;
+    let (status, body) =
+        get_json(app(&server), "/api/search?q=%EC%8B%9C%EC%99%80%EC%8A%A4%EB%85%B8%EC%98%A4%ED%82%A4%EB%82%98").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["terms"][0]["translated"], false);
+    assert_eq!(body["terms"][0]["used"], "시와스노오키나");
+}
+
+#[tokio::test]
+async fn english_search_still_reports_its_terms() {
+    let server = hitomi_stub().await;
+    let (status, body) = get_json(app(&server), "/api/search?q=naruto").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["terms"][0]["used"], "naruto");
+    assert_eq!(body["terms"][0]["translated"], false);
+    assert_eq!(body["ids"], serde_json::json!([300, 200, 100]));
 }

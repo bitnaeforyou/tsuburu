@@ -28,6 +28,8 @@ impl<T> Cached<T> {
 pub struct AppState {
     pub fetcher: Arc<HttpFetcher>,
     pub cfg: Config,
+    /// 라이브러리. 열지 못했으면 `None`이고, 그래도 검색은 동작한다.
+    pub store: Option<tsuburu_store::Store>,
     version: RwLock<Option<Cached<String>>>,
     gg: RwLock<Option<Cached<GgMap>>>,
     /// 갤러리 메타 JSON은 최대 200 KB를 넘기도 한다. 카드 한 장으로 줄여
@@ -37,9 +39,18 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(fetcher: Arc<HttpFetcher>, cfg: Config) -> Self {
+        Self::with_store(fetcher, cfg, None)
+    }
+
+    pub fn with_store(
+        fetcher: Arc<HttpFetcher>,
+        cfg: Config,
+        store: Option<tsuburu_store::Store>,
+    ) -> Self {
         Self {
             fetcher,
             cfg,
+            store,
             version: RwLock::new(None),
             gg: RwLock::new(None),
             cards: Cache::new(4096),

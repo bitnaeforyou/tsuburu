@@ -1,18 +1,61 @@
-// 해시 라우터. 라우팅 요구가 두 화면뿐이라 라이브러리를 쓰지 않는다.
+// 해시 라우터. 화면이 셋뿐이라 라이브러리를 쓰지 않는다.
+//
+// 정렬과 필터도 해시에 담는다. 그래야 뒤로가기와 새로고침, 링크 공유가
+// 사용자가 기대하는 대로 동작한다.
 
-export type Route = { name: 'search'; query: string } | { name: 'gallery'; id: number }
+export type Sort = 'date' | 'today' | 'week' | 'month' | 'year'
 
-export function parse(hash: string): Route {
-  const path = hash.replace(/^#/, '')
-  const gallery = /^\/g\/(\d+)$/.exec(path)
-  if (gallery) return { name: 'gallery', id: Number(gallery[1]) }
-
-  const search = /^\/(?:\?q=(.*))?$/.exec(path)
-  return { name: 'search', query: search?.[1] ? decodeURIComponent(search[1]) : '' }
+export type SearchState = {
+  query: string
+  sort: Sort
+  language: string
+  kind: string
 }
 
-export function toSearch(query: string): string {
-  return query ? `#/?q=${encodeURIComponent(query)}` : '#/'
+export type Route =
+  | ({ name: 'search' } & SearchState)
+  | { name: 'gallery'; id: number }
+  | { name: 'favorites' }
+  | { name: 'history' }
+
+const SORTS: Sort[] = ['date', 'today', 'week', 'month', 'year']
+
+export const defaultSearch: SearchState = {
+  query: '',
+  sort: 'date',
+  language: 'all',
+  kind: 'all',
+}
+
+export function parse(hash: string): Route {
+  const path = hash.replace(/^#/, '') || '/'
+  const [head, rawParams] = path.split('?', 2)
+
+  const gallery = /^\/g\/(\d+)$/.exec(head)
+  if (gallery) return { name: 'gallery', id: Number(gallery[1]) }
+  if (head === '/favorites') return { name: 'favorites' }
+  if (head === '/history') return { name: 'history' }
+
+  const params = new URLSearchParams(rawParams ?? '')
+  const sort = params.get('sort') as Sort | null
+  return {
+    name: 'search',
+    query: params.get('q') ?? '',
+    sort: sort && SORTS.includes(sort) ? sort : 'date',
+    language: params.get('language') || 'all',
+    kind: params.get('kind') || 'all',
+  }
+}
+
+export function toSearch(state: Partial<SearchState> = {}): string {
+  const merged = { ...defaultSearch, ...state }
+  const params = new URLSearchParams()
+  if (merged.query) params.set('q', merged.query)
+  if (merged.sort !== 'date') params.set('sort', merged.sort)
+  if (merged.language !== 'all') params.set('language', merged.language)
+  if (merged.kind !== 'all') params.set('kind', merged.kind)
+  const query = params.toString()
+  return query ? `#/?${query}` : '#/'
 }
 
 export function toGallery(id: number): string {

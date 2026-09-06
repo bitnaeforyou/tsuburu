@@ -138,7 +138,23 @@ async fn serve(
 ) -> Result<()> {
     use std::sync::Arc;
 
-    let state = Arc::new(tsuburu_server::AppState::new(Arc::new(fetcher), cfg));
+    // 라이브러리를 열지 못해도 검색은 계속 동작해야 한다(스펙 7절).
+    let store = match tsuburu_store::Store::open_default() {
+        Ok(store) => {
+            tracing::info!(path = %store.path().display(), "opened the library");
+            Some(store)
+        }
+        Err(err) => {
+            eprintln!("favorites and history are disabled: {err}");
+            None
+        }
+    };
+
+    let state = Arc::new(tsuburu_server::AppState::with_store(
+        Arc::new(fetcher),
+        cfg,
+        store,
+    ));
     let app = tsuburu_server::router(Arc::clone(&state));
 
     // 상위 노드 예열은 배경에서 돌린다. 서버 기동을 막지 않는다.

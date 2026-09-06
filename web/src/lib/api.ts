@@ -1,4 +1,4 @@
-export type ApiErrorKind = 'format_changed' | 'network' | 'bad_request'
+export type ApiErrorKind = 'format_changed' | 'network' | 'bad_request' | 'storage'
 
 export class ApiError extends Error {
   constructor(
@@ -9,10 +9,10 @@ export class ApiError extends Error {
   }
 }
 
-async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
   try {
-    response = await fetch(path, { signal })
+    response = await fetch(path, init)
   } catch (cause) {
     if ((cause as Error).name === 'AbortError') throw cause
     throw new ApiError('network', 'could not reach the tsuburu server')
@@ -28,7 +28,23 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export type SearchResponse = { total: number; ids: number[] }
+function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+
+export type Term = {
+  input: string
+  used: string
+  alternatives: string[]
+  translated: boolean
+  excluded: boolean
+}
+
+export type SearchResponse = { total: number; ids: number[]; terms: Term[] }
 
 export type Card = {
   id: number
@@ -53,20 +69,73 @@ export type Gallery = {
   pages: Page[]
 }
 
-export function search(
-  q: string,
-  offset: number,
-  limit: number,
-  signal?: AbortSignal,
-): Promise<SearchResponse> {
-  const params = new URLSearchParams({ q, offset: String(offset), limit: String(limit) })
-  return get(`/api/search?${params}`, signal)
+export type Summary = {
+  id: number
+  title: string | null
+  language: string | null
+  kind: string | null
+  pages: number
+  thumbnail_hash: string | null
+}
+
+export type Favorite = Summary & { added_at: number }
+export type HistoryEntry = Summary & { last_seen_at: number; last_page: number }
+
+export type SearchParams = {
+  q: string
+  offset: number
+  limit: number
+  sort?: string
+  language?: string
+  kind?: string
+}
+
+export function search(params: SearchParams, signal?: AbortSignal): Promise<SearchResponse> {
+  const search = new URLSearchParams({
+    q: params.q,
+    offset: String(params.offset),
+    limit: String(params.limit),
+  })
+  if (params.sort && params.sort !== 'date') search.set('sort', params.sort)
+  if (params.language && params.language !== 'all') search.set('language', params.language)
+  if (params.kind && params.kind !== 'all') search.set('kind', params.kind)
+  return request(`/api/search?${search}`, { signal })
 }
 
 export function cards(ids: number[], signal?: AbortSignal): Promise<Card[]> {
-  return get(`/api/cards?ids=${ids.join(',')}`, signal)
+  return request(`/api/cards?ids=${ids.join(',')}`, { signal })
 }
 
 export function gallery(id: number, signal?: AbortSignal): Promise<Gallery> {
-  return get(`/api/gallery/${id}`, signal)
+  return request(`/api/gallery/${id}`, { signal })
+}
+
+// --- 라이브러리 ---
+
+export function favorites(): Promise<{ items: Favorite[] }> {
+  return request('/api/favorites')
+}
+
+export function addFavorite(id: number, summary: Omit<Summary, 'id'>): Promise<Favorite> {
+  return send('PUT', `/api/favorites/${id}`, summary)
+}
+
+export function removeFavorite(id: number): Promise<{ removed: boolean }> {
+  return send('DELETE', `/api/favorites/${id}`)
+}
+
+export function history(): Promise<{ items: HistoryEntry[] }> {
+  return request('/api/history')
+}
+
+export function recordProgress(
+  id: number,
+  page: number,
+  summary: Omit<Summary, 'id'>,
+): Promise<HistoryEntry> {
+  return send('PUT', `/api/history/${id}`, { page, ...summary })
+}
+
+export function clearHistory(): Promise<{ removed: boolean }> {
+  return send('DELETE', '/api/history')
 }

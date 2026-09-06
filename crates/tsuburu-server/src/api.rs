@@ -24,6 +24,15 @@ pub struct SearchParams {
     pub offset: usize,
     #[serde(default = "default_limit")]
     pub limit: usize,
+    /// `date`(기본), `today`, `week`, `month`, `year`.
+    #[serde(default)]
+    pub sort: Option<String>,
+    /// `korean`, `japanese`, `english` 등. 없으면 전체.
+    #[serde(default)]
+    pub language: Option<String>,
+    /// `doujinshi`, `manga`, `artistcg` 등. 없으면 전체.
+    #[serde(default)]
+    pub kind: Option<String>,
 }
 
 fn default_limit() -> usize {
@@ -34,32 +43,68 @@ fn default_limit() -> usize {
 pub struct SearchResponse {
     pub total: usize,
     pub ids: Vec<i32>,
+    /// 입력의 각 낱말이 무엇으로 바뀌었는지. 화면이 이것을 그대로 보여준다.
+    ///
+    /// 한국어 사전은 태그를 잘 덮지만 작가 이름은 거의 덮지 못한다. 조용히
+    /// 치환하면 작가 검색이 빈손으로 돌아올 때 "안 되는 기능"이 아니라
+    /// "고장난 앱"으로 보인다(스펙 4.2절).
+    pub terms: Vec<tsuburu_korean::Term>,
 }
 
 pub async fn search(
     State(state): State<Arc<AppState>>,
     Query(params): Query<SearchParams>,
 ) -> Result<Json<SearchResponse>, ApiError> {
-    let query = tsuburu_hitomi::parse_query(&params.q);
-    if query.include.is_empty() {
+    // 한국어를 hitomi가 아는 영어로 보정한다. 사전에 없으면 입력 그대로 쓴다.
+    let terms = tsuburu_korean::translate(tsuburu_korean::Dictionary::embedded(), &params.q);
+    let query = tsuburu_hitomi::Query {
+        include: terms
+            .iter()
+            .filter(|t| !t.excluded)
+            .map(|t| t.used.to_lowercase())
+            .collect(),
+        exclude: terms
+            .iter()
+            .filter(|t| t.excluded)
+            .map(|t| t.used.to_lowercase())
+            .collect(),
+    };
+
+    let sort = match params.sort.as_deref() {
+        None | Some("") => tsuburu_hitomi::Sort::Date,
+        Some(name) => tsuburu_hitomi::Sort::parse(name)
+            .ok_or_else(|| ApiError::bad_request(format!("unknown sort `{name}`")))?,
+    };
+    let filters = tsuburu_hitomi::Filters {
+        language: params.language.filter(|s| !s.is_empty() && s != "all"),
+        kind: params.kind.filter(|s| !s.is_empty() && s != "all"),
+    };
+
+    // 검색어가 없어도 필터나 정렬만으로 둘러볼 수 있다. 다만 제외어만 준 것은
+    // 무엇을 빼야 할 대상인지가 없으므로 요청이 성립하지 않는다.
+    if query.include.is_empty() && !query.exclude.is_empty() {
         return Err(ApiError::bad_request(
-            "give at least one search term that is not an exclusion",
+            "exclusions need at least one term to exclude from",
         ));
     }
-    let limit = params.limit.clamp(1, MAX_LIMIT);
 
+    let limit = params.limit.clamp(1, MAX_LIMIT);
     let version = state.version().await?;
     let page = tsuburu_hitomi::search_page(
         state.fetcher.as_ref(),
         &state.cfg,
         &version,
-        &query,
-        params.offset,
-        limit,
+        &tsuburu_hitomi::SearchRequest {
+            query: &query,
+            filters: &filters,
+            sort,
+            offset: params.offset,
+            limit,
+        },
     )
     .await?;
 
-    Ok(Json(SearchResponse { total: page.total, ids: page.ids }))
+    Ok(Json(SearchResponse { total: page.total, ids: page.ids, terms }))
 }
 
 /// 결과 그리드에 그릴 최소 정보.

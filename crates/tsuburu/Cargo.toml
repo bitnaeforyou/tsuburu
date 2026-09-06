@@ -13,6 +13,7 @@ path = "src/main.rs"
 tsuburu-hitomi = { path = "../tsuburu-hitomi" }
 tsuburu-fetch = { path = "../tsuburu-fetch" }
 tsuburu-server = { path = "../tsuburu-server" }
+tsuburu-store = { path = "../tsuburu-store" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 open = "5"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "net"] }

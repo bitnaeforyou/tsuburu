@@ -1,15 +1,35 @@
 <script lang="ts">
   import * as api from './api'
+  import { library } from './library.svelte'
+  import { toGallery } from './router'
 
-  let { id }: { id: number } = $props()
+  let {
+    id,
+    preset = null,
+    progress = null,
+  }: {
+    id: number
+    /** 라이브러리 목록은 요약을 이미 갖고 있어 네트워크를 탈 이유가 없다. */
+    preset?: api.Summary | null
+    progress?: { page: number; pages: number } | null
+  } = $props()
 
   let card = $state<api.Card | null>(null)
   let failed = $state(false)
   let element = $state<HTMLElement | null>(null)
 
+  const thumbnail = $derived(
+    card?.thumbnail ??
+      (preset?.thumbnail_hash ? `/tn/${preset.thumbnail_hash}.avif` : null),
+  )
+  const title = $derived(card?.title ?? preset?.title ?? `#${id}`)
+  const pages = $derived(card?.pages ?? preset?.pages ?? 0)
+  const language = $derived(card?.language ?? preset?.language ?? null)
+  const favorited = $derived(library.has(id))
+
   // 갤러리 메타데이터는 한 건에 수십~수백 KB다. 화면에 들어온 카드만 받는다.
   $effect(() => {
-    if (!element) return
+    if (preset || !element) return
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((e) => e.isIntersecting)) return
@@ -31,28 +51,73 @@
       failed = true
     }
   }
+
+  function summary(): Omit<api.Summary, 'id'> {
+    return {
+      title,
+      language,
+      kind: card?.kind ?? preset?.kind ?? null,
+      pages,
+      thumbnail_hash: thumbnail?.replace(/^\/tn\/|\.avif$/g, '') ?? null,
+    }
+  }
+
+  async function toggleFavorite(event: MouseEvent) {
+    // 카드 전체가 링크이므로 별을 눌렀을 때 갤러리로 넘어가면 안 된다.
+    event.preventDefault()
+    event.stopPropagation()
+    await library.toggle(id, summary())
+  }
 </script>
 
 <article bind:this={element}>
-  <div class="thumb">
-    {#if card?.thumbnail}
-      <img src={card.thumbnail} alt="" loading="lazy" decoding="async" />
-    {:else if failed}
-      <span class="placeholder">unavailable</span>
-    {/if}
-  </div>
-  <h3>{card?.title ?? `#${id}`}</h3>
-  {#if card}
+  <a href={toGallery(id)} class="link">
+    <div class="thumb">
+      {#if thumbnail}
+        <img src={thumbnail} alt="" loading="lazy" decoding="async" />
+      {:else if failed}
+        <span class="placeholder">unavailable</span>
+      {/if}
+      {#if progress && progress.pages > 0}
+        <div class="progress" style:--read={`${((progress.page + 1) / progress.pages) * 100}%`}>
+          <span>{progress.page + 1} / {progress.pages}</span>
+        </div>
+      {/if}
+    </div>
+    <h3>{title}</h3>
     <p class="meta">
-      {card.pages} pages{card.language ? ` · ${card.language}` : ''}
+      {pages} pages{language ? ` · ${language}` : ''}
     </p>
+  </a>
+
+  {#if !library.unavailable}
+    <button
+      class="star"
+      class:on={favorited}
+      onclick={toggleFavorite}
+      aria-pressed={favorited}
+      aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'}
+      title={favorited ? 'Remove from favorites' : 'Add to favorites'}
+    >
+      {favorited ? '★' : '☆'}
+    </button>
   {/if}
 </article>
 
 <style>
-  article { color: var(--text); }
+  article {
+    position: relative;
+    color: var(--text);
+  }
+
+  .link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
 
   .thumb {
+    position: relative;
     aspect-ratio: 3 / 4;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -72,6 +137,34 @@
     color: var(--muted);
     font-size: 0.8rem;
   }
+
+  .progress {
+    position: absolute;
+    inset: auto 0 0 0;
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    font-size: 0.7rem;
+    padding: 0.15rem 0.35rem;
+  }
+  .progress::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--read);
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .progress span { position: relative; }
+
+  .star {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.3rem;
+    padding: 0.1rem 0.35rem;
+    line-height: 1.2;
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    border-color: transparent;
+    color: var(--muted);
+  }
+  .star.on { color: var(--accent); }
 
   h3 {
     margin: 0.5rem 0 0.15rem;

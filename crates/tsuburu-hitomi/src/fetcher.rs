@@ -28,6 +28,12 @@ pub trait Fetcher: Send + Sync {
     ) -> BoxFuture<'a, Result<Vec<u8>, FetchError>>;
 
     fn get<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<Vec<u8>, FetchError>>;
+
+    /// 본문을 받지 않고 길이만 묻는다.
+    ///
+    /// `.nozomi` 목록은 최대 4.8 MB지만 전체 개수를 알아야 페이지를 매길 수
+    /// 있다. 길이를 4로 나누면 갤러리 수다.
+    fn length<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<u64, FetchError>>;
 }
 
 #[cfg(any(test, feature = "mock"))]
@@ -77,6 +83,15 @@ pub mod mock {
         fn get<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<Vec<u8>, FetchError>> {
             Box::pin(async move {
                 self.bodies.get(url).cloned().ok_or(FetchError::Status(404))
+            })
+        }
+
+        fn length<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<u64, FetchError>> {
+            Box::pin(async move {
+                self.bodies
+                    .get(url)
+                    .map(|b| b.len() as u64)
+                    .ok_or(FetchError::Status(404))
             })
         }
     }

@@ -54,6 +54,8 @@ struct Counters {
 pub struct HttpFetcher {
     client: reqwest::Client,
     cache: Cache<(String, u64, u64), Arc<Vec<u8>>>,
+    /// `.nozomi` 목록의 길이. 목록마다 한 번만 물으면 된다.
+    lengths: Cache<String, u64>,
     limiter: Semaphore,
     counters: Counters,
     referer: String,
@@ -71,6 +73,7 @@ impl HttpFetcher {
         Ok(Self {
             client,
             cache: Cache::new(cfg.cache_entries),
+            lengths: Cache::new(256),
             limiter: Semaphore::new(cfg.max_concurrent),
             counters: Counters::default(),
             referer: cfg.referer,
@@ -135,6 +138,11 @@ impl HttpFetcher {
     }
 }
 
+/// `bytes 0-0/12345` 에서 `12345`를 꺼낸다. 총 길이를 모르는 `*`는 무시한다.
+fn total_from_content_range(value: &str) -> Option<u64> {
+    value.rsplit_once('/').and_then(|(_, total)| total.trim().parse().ok())
+}
+
 /// 206은 Range 응답, 200은 서버가 Range를 무시하고 전체를 준 경우다.
 fn check_status(status: u16) -> Result<(), FetchError> {
     if status == 200 || status == 206 {
@@ -165,6 +173,45 @@ impl Fetcher for HttpFetcher {
 
     fn get<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<Vec<u8>, FetchError>> {
         Box::pin(async move { self.send(url, None).await })
+    }
+
+    fn length<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<u64, FetchError>> {
+        Box::pin(async move {
+            if let Some(cached) = self.lengths.get(&url.to_string()) {
+                return Ok(cached);
+            }
+
+            // HEAD 대신 첫 1바이트를 Range로 요청한다. 206 응답의
+            // `Content-Range: bytes 0-0/12345` 마지막 숫자가 전체 길이다.
+            // Range를 무시하고 200으로 전부 주는 서버에서는 Content-Length가
+            // 곧 전체 길이이므로 양쪽 모두 처리된다.
+            let _permit = self
+                .limiter
+                .acquire()
+                .await
+                .map_err(|e| FetchError::Network(e.to_string()))?;
+            let response = self
+                .client
+                .get(url)
+                .header(reqwest::header::REFERER, &self.referer)
+                .header(reqwest::header::RANGE, "bytes=0-0")
+                .send()
+                .await
+                .map_err(|e| FetchError::Network(e.to_string()))?;
+            check_status(response.status().as_u16())?;
+            self.counters.requests.fetch_add(1, Ordering::Relaxed);
+
+            let length = response
+                .headers()
+                .get(reqwest::header::CONTENT_RANGE)
+                .and_then(|v| v.to_str().ok())
+                .and_then(total_from_content_range)
+                .or_else(|| response.content_length())
+                .ok_or_else(|| FetchError::Network("server did not report a length".into()))?;
+
+            self.lengths.insert(url.to_string(), length);
+            Ok(length)
+        })
     }
 }
 
@@ -230,6 +277,50 @@ mod tests {
             .get_range(&format!("{}/idx", server.uri()), 0..464)
             .await
             .unwrap();
+    }
+
+    #[test]
+    fn parses_the_total_from_content_range() {
+        assert_eq!(total_from_content_range("bytes 0-0/397352"), Some(397352));
+        assert_eq!(total_from_content_range("bytes 0-0/*"), None);
+        assert_eq!(total_from_content_range("nonsense"), None);
+    }
+
+    #[tokio::test]
+    async fn length_reads_the_total_from_a_range_response() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/list"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("content-range", "bytes 0-0/4815272")
+                    .set_body_bytes(vec![0u8]),
+            )
+            .mount(&server)
+            .await;
+
+        let fetcher = HttpFetcher::new(FetchConfig::default()).unwrap();
+        let url = format!("{}/list", server.uri());
+        assert_eq!(fetcher.length(&url).await.unwrap(), 4815272);
+        // 두 번째 호출은 캐시에서 온다
+        assert_eq!(fetcher.length(&url).await.unwrap(), 4815272);
+        assert_eq!(fetcher.stats().requests, 1);
+    }
+
+    #[tokio::test]
+    async fn length_falls_back_to_content_length_when_range_is_ignored() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/list"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(vec![7u8; 40]))
+            .mount(&server)
+            .await;
+
+        let fetcher = HttpFetcher::new(FetchConfig::default()).unwrap();
+        assert_eq!(
+            fetcher.length(&format!("{}/list", server.uri())).await.unwrap(),
+            40
+        );
     }
 
     #[tokio::test]
