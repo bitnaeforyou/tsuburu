@@ -3,9 +3,8 @@
   import { library } from '../lib/library.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
-  import Nav from '../lib/Nav.svelte'
+  import AppHeader from '../lib/AppHeader.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
-  import { toSearch } from '../lib/router'
 
   let items = $state<api.Favorite[]>([])
   let error = $state<unknown>(null)
@@ -32,11 +31,7 @@
   const visible = $derived(items.filter((item) => library.has(item.id)))
 </script>
 
-<header>
-  <a class="brand" href={toSearch()}>tsuburu</a>
-  <h1>Favorites</h1>
-  <Nav active="favorites" />
-</header>
+<AppHeader active="favorites" />
 
 <main>
   {#if error}
@@ -58,27 +53,6 @@
 </main>
 
 <style>
-  header {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-  }
-  .brand {
-    font-weight: 600;
-    text-decoration: none;
-  }
-  h1 {
-    flex: 1;
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 500;
-  }
   main {
     padding: 1rem;
   }
