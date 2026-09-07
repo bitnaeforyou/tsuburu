@@ -349,3 +349,25 @@ async fn english_search_still_reports_its_terms() {
     assert_eq!(body["terms"][0]["translated"], false);
     assert_eq!(body["ids"], serde_json::json!([300, 200, 100]));
 }
+
+#[tokio::test]
+async fn image_proxy_refreshes_gg_after_a_404() {
+    // gg.js의 경로 접두사는 주기적으로 회전한다. 낡은 값으로 만든 URL은 404가
+    // 나므로, 한 번 다시 받아 재시도해야 한다. 그러지 않으면 TTL이 만료될
+    // 때까지 모든 이미지가 깨진 것처럼 보인다.
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path_matcher("/gg.js"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(gg_js()))
+        .expect(2..)
+        .mount(&server)
+        .await;
+
+    let (status, body) = get_json(app(&server), &format!("/img/{HASH}.avif")).await;
+
+    // 목에는 실제 이미지가 없으므로 최종적으로는 실패한다. 확인하려는 것은
+    // gg.js를 두 번 이상 받았는지, 즉 재시도가 일어났는지다.
+    assert_ne!(status, StatusCode::OK);
+    assert_eq!(body["error"], "network");
+}

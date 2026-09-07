@@ -22,7 +22,7 @@ pub enum ErrorKind {
     Storage,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct ApiError {
     pub error: ErrorKind,
     pub message: String,

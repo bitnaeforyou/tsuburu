@@ -23,23 +23,29 @@ pub async fn image(
     Path(file): Path<String>,
 ) -> Result<Response, ApiError> {
     let (hash, ext) = split_hash(&file)?;
-    let gg = state.gg().await?;
-
-    let url = match ext {
-        "avif" | "webp" => {
-            let dummy = tsuburu_hitomi::GalleryFile {
-                hash: hash.to_string(),
-                name: String::new(),
-                width: 0,
-                height: 0,
-                hasavif: u8::from(ext == "avif"),
-            };
-            tsuburu_hitomi::image_url(&state.cfg, &gg, &dummy)?
-        }
-        _ => return Err(ApiError::bad_request("only avif and webp are proxied")),
+    if ext != "avif" && ext != "webp" {
+        return Err(ApiError::bad_request("only avif and webp are proxied"));
+    }
+    let file = tsuburu_hitomi::GalleryFile {
+        hash: hash.to_string(),
+        name: String::new(),
+        width: 0,
+        height: 0,
+        hasavif: u8::from(ext == "avif"),
     };
 
-    stream(&state, &url, ext).await
+    let gg = state.gg().await?;
+    let url = tsuburu_hitomi::image_url(&state.cfg, &gg, &file)?;
+    match stream(&state, &url, ext).await {
+        Err(err) if err.error == ErrorKind::Network && err.message.contains("404") => {
+            // 경로 접두사가 회전했을 가능성이 크다. 한 번만 새로 받아 재시도한다.
+            tracing::debug!("image 404; refreshing gg.js and retrying once");
+            let gg = state.refresh_gg().await?;
+            let url = tsuburu_hitomi::image_url(&state.cfg, &gg, &file)?;
+            stream(&state, &url, ext).await
+        }
+        other => other,
+    }
 }
 
 pub async fn thumbnail(
@@ -50,6 +56,7 @@ pub async fn thumbnail(
     if ext != "avif" {
         return Err(ApiError::bad_request("thumbnails are avif only"));
     }
+    // 썸네일 경로는 `gg.b`를 쓰지 않으므로 회전의 영향을 받지 않는다.
     let gg = state.gg().await?;
     let url = tsuburu_hitomi::thumbnail_url(&state.cfg, &gg, hash)?;
     stream(&state, &url, ext).await

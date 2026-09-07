@@ -93,6 +93,16 @@ impl AppState {
         {
             return Ok(cached.value.clone());
         }
+        self.refresh_gg().await
+    }
+
+    /// `gg.js`를 다시 받아 캐시를 갈아끼운다.
+    ///
+    /// 이미지 경로 접두사(`gg.b`)는 주기적으로 바뀐다. 낡은 값으로 만든 URL은
+    /// 404가 나므로, 이미지 프록시가 404를 만나면 이것을 호출해 한 번 다시
+    /// 시도한다. TTL만 믿으면 회전과 만료 사이의 구간에서 이미지가 전부
+    /// 깨진 것처럼 보인다.
+    pub async fn refresh_gg(&self) -> Result<GgMap, tsuburu_hitomi::GalleryFetchError> {
         let fresh = tsuburu_hitomi::fetch_gg(self.fetcher.as_ref(), &self.cfg).await?;
         *self.gg.write().await =
             Some(Cached { value: fresh.clone(), fetched_at: Instant::now() });
