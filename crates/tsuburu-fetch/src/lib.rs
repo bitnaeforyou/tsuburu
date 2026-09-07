@@ -23,6 +23,12 @@ pub struct FetchConfig {
     pub user_agent: String,
     pub referer: String,
     pub timeout: Duration,
+    /// Attempts per request, including the first.
+    ///
+    /// A long-lived client can keep a pooled connection that has gone bad,
+    /// and every request routed onto it fails the same way. Retrying moves
+    /// the request to another connection.
+    pub attempts: usize,
 }
 
 impl Default for FetchConfig {
@@ -33,6 +39,7 @@ impl Default for FetchConfig {
             user_agent: concat!("tsuburu/", env!("CARGO_PKG_VERSION")).into(),
             referer: "https://hitomi.la/".into(),
             timeout: Duration::from_secs(20),
+            attempts: 3,
         }
     }
 }
@@ -59,6 +66,7 @@ pub struct HttpFetcher {
     limiter: Semaphore,
     counters: Counters,
     referer: String,
+    attempts: usize,
 }
 
 impl HttpFetcher {
@@ -77,6 +85,7 @@ impl HttpFetcher {
             limiter: Semaphore::new(cfg.max_concurrent),
             counters: Counters::default(),
             referer: cfg.referer,
+            attempts: cfg.attempts.max(1),
         })
     }
 
@@ -102,6 +111,8 @@ impl HttpFetcher {
         Ok(response)
     }
 
+    /// Retries transient failures. A refusal from the server is final; a
+    /// broken connection is not.
     async fn send(&self, url: &str, range: Option<Range<u64>>) -> Result<Vec<u8>, FetchError> {
         let _permit = self
             .limiter
@@ -109,6 +120,22 @@ impl HttpFetcher {
             .await
             .map_err(|e| FetchError::Network(e.to_string()))?;
 
+        let mut last = None;
+        for attempt in 0..self.attempts {
+            match self.attempt(url, range.clone()).await {
+                Ok(body) => return Ok(body),
+                Err(err) if !is_retryable(&err) => return Err(err),
+                Err(err) => {
+                    tracing::debug!(%err, attempt, url, "retrying");
+                    last = Some(err);
+                    tokio::time::sleep(backoff(attempt)).await;
+                }
+            }
+        }
+        Err(last.unwrap_or_else(|| FetchError::Network("no attempts were made".into())))
+    }
+
+    async fn attempt(&self, url: &str, range: Option<Range<u64>>) -> Result<Vec<u8>, FetchError> {
         let mut request = self
             .client
             .get(url)
@@ -138,7 +165,19 @@ impl HttpFetcher {
     }
 }
 
-/// `bytes 0-0/12345` 에서 `12345`를 꺼낸다. 총 길이를 모르는 `*`는 무시한다.
+/// Server refusals are final; transport failures are worth another try.
+fn is_retryable(err: &FetchError) -> bool {
+    match err {
+        FetchError::Network(_) => true,
+        FetchError::Status(code) => (500..600).contains(code),
+    }
+}
+
+fn backoff(attempt: usize) -> Duration {
+    Duration::from_millis(100 << attempt.min(4))
+}
+
+/// Extracts `12345` from `bytes 0-0/12345`. An unknown total (`*`) is ignored.
 fn total_from_content_range(value: &str) -> Option<u64> {
     value.rsplit_once('/').and_then(|(_, total)| total.trim().parse().ok())
 }
@@ -321,6 +360,52 @@ mod tests {
             fetcher.length(&format!("{}/list", server.uri())).await.unwrap(),
             40
         );
+    }
+
+    #[test]
+    fn only_transport_failures_are_retried() {
+        assert!(is_retryable(&FetchError::Network("reset".into())));
+        assert!(is_retryable(&FetchError::Status(503)));
+        assert!(!is_retryable(&FetchError::Status(404)));
+        assert!(!is_retryable(&FetchError::Status(206)));
+    }
+
+    #[tokio::test]
+    async fn a_failed_attempt_is_retried() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/flaky"))
+            .respond_with(ResponseTemplate::new(500))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/flaky"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(vec![9u8; 4]))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let fetcher = HttpFetcher::new(FetchConfig::default()).unwrap();
+        let body = fetcher.get(&format!("{}/flaky", server.uri())).await.unwrap();
+        assert_eq!(body, vec![9u8; 4]);
+    }
+
+    #[tokio::test]
+    async fn a_refusal_is_not_retried() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/gone"))
+            .respond_with(ResponseTemplate::new(404))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let fetcher = HttpFetcher::new(FetchConfig::default()).unwrap();
+        let err = fetcher.get(&format!("{}/gone", server.uri())).await.unwrap_err();
+        assert!(matches!(err, FetchError::Status(404)));
+        // expect(1) fails on drop if we retried a refusal.
     }
 
     #[tokio::test]
