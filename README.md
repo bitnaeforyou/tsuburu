@@ -55,6 +55,31 @@ tsuburu gallery 4170351          # inspect one gallery
 Search terms are combined with AND. Prefix a term with `-` to exclude it; quote
 the whole query so your shell does not read it as a flag.
 
+## Dialogue search
+
+hitomi's index only knows titles and tags. To find a work by a line you
+remember, tsuburu has to read the pages itself: download them, run the
+operating system's text recognition, and keep the text. Images are discarded
+as soon as they are read.
+
+This is **off by default**. Turn it on from the Dialogue tab and it indexes in
+the background while the app is open, most popular Korean galleries first, so
+the works you are most likely to have read are covered soonest. The tab always
+shows how much is covered; a miss means "not indexed yet" as often as it means
+"not there".
+
+Measured on an M4 Pro: recognition runs at about 11 pages/s, but the CDN
+delivers roughly 1.2 MB/s, so a gallery of 32 pages takes about 7 s. The whole
+Korean doujinshi corpus is around 583 GB and a week of nights. Two shortcuts
+cut that down:
+
+- **Import history.** Paste hitomi URLs or ids from your browser history or an
+  old artifact database; they are indexed before anything else.
+- **Hunt.** Narrow with tags, language and type, and queue only those.
+
+Recognition uses Vision on macOS. Other platforms report the feature as
+unavailable rather than pretending.
+
 ## Building
 
 Requires Rust 1.90+ and Node 20+.

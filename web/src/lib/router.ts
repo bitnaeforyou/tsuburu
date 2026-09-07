@@ -14,9 +14,10 @@ export type SearchState = {
 
 export type Route =
   | ({ name: 'search' } & SearchState)
-  | { name: 'gallery'; id: number }
+  | { name: 'gallery'; id: number; page: number | null }
   | { name: 'favorites' }
   | { name: 'history' }
+  | { name: 'dialogue'; query: string }
 
 const SORTS: Sort[] = ['date', 'today', 'week', 'month', 'year']
 
@@ -31,12 +32,16 @@ export function parse(hash: string): Route {
   const path = hash.replace(/^#/, '') || '/'
   const [head, rawParams] = path.split('?', 2)
 
+  const params = new URLSearchParams(rawParams ?? '')
   const gallery = /^\/g\/(\d+)$/.exec(head)
-  if (gallery) return { name: 'gallery', id: Number(gallery[1]) }
+  if (gallery) {
+    const page = params.get('p')
+    return { name: 'gallery', id: Number(gallery[1]), page: page ? Number(page) : null }
+  }
   if (head === '/favorites') return { name: 'favorites' }
   if (head === '/history') return { name: 'history' }
+  if (head === '/dialogue') return { name: 'dialogue', query: params.get('q') ?? '' }
 
-  const params = new URLSearchParams(rawParams ?? '')
   const sort = params.get('sort') as Sort | null
   return {
     name: 'search',
@@ -58,6 +63,10 @@ export function toSearch(state: Partial<SearchState> = {}): string {
   return query ? `#/?${query}` : '#/'
 }
 
-export function toGallery(id: number): string {
-  return `#/g/${id}`
+export function toGallery(id: number, page?: number): string {
+  return page !== undefined ? `#/g/${id}?p=${page}` : `#/g/${id}`
+}
+
+export function toDialogue(query = ''): string {
+  return query ? `#/dialogue?q=${encodeURIComponent(query)}` : '#/dialogue'
 }

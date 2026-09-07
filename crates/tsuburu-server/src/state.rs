@@ -30,6 +30,8 @@ pub struct AppState {
     pub cfg: Config,
     /// 라이브러리. 열지 못했으면 `None`이고, 그래도 검색은 동작한다.
     pub store: Option<tsuburu_store::Store>,
+    /// Dialogue indexing. `None` where the platform has no OCR.
+    pub grinder: Option<Arc<crate::grinder::Grinder>>,
     version: RwLock<Option<Cached<String>>>,
     gg: RwLock<Option<Cached<GgMap>>>,
     /// 갤러리 메타 JSON은 최대 200 KB를 넘기도 한다. 카드 한 장으로 줄여
@@ -47,10 +49,20 @@ impl AppState {
         cfg: Config,
         store: Option<tsuburu_store::Store>,
     ) -> Self {
+        Self::full(fetcher, cfg, store, None)
+    }
+
+    pub fn full(
+        fetcher: Arc<HttpFetcher>,
+        cfg: Config,
+        store: Option<tsuburu_store::Store>,
+        grinder: Option<Arc<crate::grinder::Grinder>>,
+    ) -> Self {
         Self {
             fetcher,
             cfg,
             store,
+            grinder,
             version: RwLock::new(None),
             gg: RwLock::new(None),
             cards: Cache::new(4096),

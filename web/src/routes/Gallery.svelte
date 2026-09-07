@@ -4,7 +4,7 @@
   import { library } from '../lib/library.svelte'
   import { toSearch } from '../lib/router'
 
-  let { id }: { id: number } = $props()
+  let { id, startPage = null }: { id: number; startPage?: number | null } = $props()
 
   /** 미리 디코드해둘 다음 장 수. 넘길 때 흰 화면이 보이지 않을 만큼만. */
   const PREFETCH = 2
@@ -31,6 +31,10 @@
     } catch (cause) {
       error = cause
       return
+    }
+    // A dialogue hit links straight to its page.
+    if (startPage !== null) {
+      requestAnimationFrame(() => go(startPage))
     }
     // 마지막으로 본 위치를 알린다. 자동으로 뛰지는 않는다. 처음부터 보려는
     // 경우를 빼앗지 않기 위해서다.

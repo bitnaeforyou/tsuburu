@@ -150,11 +150,47 @@ async fn serve(
         }
     };
 
-    let state = Arc::new(tsuburu_server::AppState::with_store(
-        Arc::new(fetcher),
-        cfg,
-        store,
-    ));
+    let fetcher = Arc::new(fetcher);
+
+    // Dialogue indexing needs the platform's OCR. Where there is none the
+    // feature is reported as unsupported rather than silently missing.
+    let grinder = match tsuburu_ocr::platform_ocr(tsuburu_ocr::OcrOptions::default()) {
+        None => {
+            tracing::info!("no text recognition on this platform; dialogue search disabled");
+            None
+        }
+        Some(ocr) => match tsuburu_store::data_dir()
+            .map_err(|e| e.to_string())
+            .and_then(|dir| tsuburu_dialogue::DialogueStore::open(dir.join("dialogue.redb")).map_err(|e| e.to_string()))
+        {
+            Ok(dialogue) => {
+                tracing::info!(path = %dialogue.path().display(), "opened the dialogue index");
+                // Its own connection pool: a page burst must not queue behind
+                // the index warm-up, and must never slow down browsing.
+                let grinder_fetcher = HttpFetcher::new(FetchConfig {
+                    max_concurrent: 8,
+                    cache_entries: 256,
+                    ..FetchConfig::default()
+                })
+                .context("failed to build the indexing HTTP client")?;
+                Some(Arc::new(tsuburu_server::grinder::Grinder::new(
+                    Arc::new(grinder_fetcher),
+                    cfg.clone(),
+                    Arc::new(dialogue),
+                    Arc::from(ocr),
+                )))
+            }
+            Err(err) => {
+                eprintln!("dialogue search is disabled: {err}");
+                None
+            }
+        },
+    };
+    if let Some(grinder) = &grinder {
+        tokio::spawn(Arc::clone(grinder).run());
+    }
+
+    let state = Arc::new(tsuburu_server::AppState::full(fetcher, cfg, store, grinder));
     let app = tsuburu_server::router(Arc::clone(&state));
 
     // 상위 노드 예열은 배경에서 돌린다. 서버 기동을 막지 않는다.
@@ -182,6 +218,9 @@ async fn serve(
         .await
         .context("the server stopped unexpectedly")?;
 
+    if let Some(grinder) = &state.grinder {
+        grinder.shutdown();
+    }
     Ok(())
 }
 

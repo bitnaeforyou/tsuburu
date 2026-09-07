@@ -2,13 +2,15 @@
 
 pub mod api;
 pub mod assets;
+pub mod dialogue;
+pub mod grinder;
 pub mod error;
 pub mod library;
 pub mod proxy;
 pub mod state;
 
 use axum::Router;
-use axum::routing::{get, put};
+use axum::routing::{get, post, put};
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
@@ -23,6 +25,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/favorites/{id}", put(library::add_favorite).delete(library::remove_favorite))
         .route("/api/history", get(library::list_history).delete(library::clear_history))
         .route("/api/history/{id}", put(library::record_progress))
+        .route("/api/dialogue/status", get(dialogue::status))
+        .route("/api/dialogue/settings", put(dialogue::update_settings))
+        .route("/api/dialogue/search", get(dialogue::search))
+        .route("/api/dialogue/enqueue", post(dialogue::enqueue))
+        .route("/api/dialogue/hunt", post(dialogue::hunt))
         .route("/img/{file}", get(proxy::image))
         .route("/tn/{file}", get(proxy::thumbnail))
         .fallback(assets::serve)

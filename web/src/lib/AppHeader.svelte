@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
-  import { toSearch } from './router'
+  import { toDialogue, toSearch } from './router'
 
   // 화면 이동은 전부 여기 모은다. 예전에는 검색 실행 버튼과 Search 탭이 나란히
   // 붙어 있어서, 생김새가 같은 두 개가 서로 다른 일을 했다. 위 줄은 이동만,
@@ -9,12 +9,13 @@
     active,
     actions,
   }: {
-    active: 'search' | 'favorites' | 'history'
+    active: 'search' | 'dialogue' | 'favorites' | 'history'
     actions?: Snippet
   } = $props()
 
   const TABS = [
     { id: 'search', label: 'Search', href: toSearch() },
+    { id: 'dialogue', label: 'Dialogue', href: toDialogue() },
     { id: 'favorites', label: 'Favorites', href: '#/favorites' },
     { id: 'history', label: 'History', href: '#/history' },
   ] as const

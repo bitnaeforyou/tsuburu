@@ -20,6 +20,8 @@ pub enum ErrorKind {
     BadRequest,
     /// 로컬 라이브러리를 읽거나 쓰지 못했다. 검색은 계속 동작한다.
     Storage,
+    /// 이 플랫폼에는 없는 기능이다.
+    Unsupported,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -39,6 +41,7 @@ impl ApiError {
             ErrorKind::Network => StatusCode::SERVICE_UNAVAILABLE,
             ErrorKind::BadRequest => StatusCode::BAD_REQUEST,
             ErrorKind::Storage => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorKind::Unsupported => StatusCode::NOT_IMPLEMENTED,
         }
     }
 }
@@ -88,6 +91,13 @@ fn describe(kind: ErrorKind, detail: &str) -> String {
         ErrorKind::Network => format!("could not reach hitomi ({detail})"),
         ErrorKind::BadRequest => detail.to_string(),
         ErrorKind::Storage => format!("the local library could not be used ({detail})"),
+        ErrorKind::Unsupported => detail.to_string(),
+    }
+}
+
+impl From<tsuburu_dialogue::DialogueError> for ApiError {
+    fn from(err: tsuburu_dialogue::DialogueError) -> Self {
+        Self { error: ErrorKind::Storage, message: describe(ErrorKind::Storage, &err.to_string()) }
     }
 }
 

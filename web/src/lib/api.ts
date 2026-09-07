@@ -1,4 +1,4 @@
-export type ApiErrorKind = 'format_changed' | 'network' | 'bad_request' | 'storage'
+export type ApiErrorKind = 'format_changed' | 'network' | 'bad_request' | 'storage' | 'unsupported'
 
 export class ApiError extends Error {
   constructor(
@@ -138,4 +138,79 @@ export function recordProgress(
 
 export function clearHistory(): Promise<{ removed: boolean }> {
   return send('DELETE', '/api/history')
+}
+
+// --- dialogue ---
+
+export type GrinderSettings = {
+  enabled: boolean
+  language: string
+  kinds: string[]
+  bytes_per_second: number
+}
+
+export type GrinderStatus = {
+  running: boolean
+  current: number | null
+  current_title: string | null
+  pages_per_second: number
+  last_error: string | null
+  galleries_this_session: number
+  pages_this_session: number
+}
+
+export type Counts = { pending: number; done: number; failed: number }
+
+export type Coverage = {
+  top_1k: number
+  top_10k: number
+  top_10k_total: number
+  done: number
+  total: number
+}
+
+export type DialogueStatus = {
+  supported: boolean
+  settings?: GrinderSettings
+  status?: GrinderStatus
+  counts?: Counts
+  coverage?: Coverage
+}
+
+export type DialogueHit = {
+  gallery_id: number
+  page: number
+  score: number
+  exact: boolean
+  snippet: string[]
+}
+
+export function dialogueStatus(): Promise<DialogueStatus> {
+  return request('/api/dialogue/status')
+}
+
+export function updateGrinder(settings: GrinderSettings): Promise<GrinderSettings> {
+  return send('PUT', '/api/dialogue/settings', settings)
+}
+
+export function dialogueSearch(
+  q: string,
+  limit = 25,
+  signal?: AbortSignal,
+): Promise<{ hits: DialogueHit[]; counts: Counts }> {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  return request(`/api/dialogue/search?${params}`, { signal })
+}
+
+export function enqueueDialogue(text: string): Promise<{ found: number; added: number }> {
+  return send('POST', '/api/dialogue/enqueue', { text, priority: 'imported' })
+}
+
+export function huntDialogue(body: {
+  q: string
+  language?: string
+  kind?: string
+  limit?: number
+}): Promise<{ found: number; added: number }> {
+  return send('POST', '/api/dialogue/hunt', body)
 }

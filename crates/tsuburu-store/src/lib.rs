@@ -75,14 +75,19 @@ pub struct Store {
     path: PathBuf,
 }
 
+/// The per-user directory every tsuburu database lives in.
+pub fn data_dir() -> Result<PathBuf, StoreError> {
+    let dirs =
+        directories::ProjectDirs::from("la", "tsuburu", "tsuburu").ok_or(StoreError::NoDataDir)?;
+    let dir = dirs.data_dir().to_path_buf();
+    std::fs::create_dir_all(&dir).map_err(|e| StoreError::Open(e.to_string()))?;
+    Ok(dir)
+}
+
 impl Store {
     /// OS 표준 애플리케이션 데이터 디렉터리에 연다.
     pub fn open_default() -> Result<Self, StoreError> {
-        let dirs = directories::ProjectDirs::from("la", "tsuburu", "tsuburu")
-            .ok_or(StoreError::NoDataDir)?;
-        let dir = dirs.data_dir();
-        std::fs::create_dir_all(dir).map_err(|e| StoreError::Open(e.to_string()))?;
-        Self::open(dir.join("library.redb"))
+        Self::open(data_dir()?.join("library.redb"))
     }
 
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {

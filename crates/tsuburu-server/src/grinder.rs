@@ -1,0 +1,452 @@
+//! The background worker that turns pages into searchable text.
+//!
+//! One gallery at a time: fetch its metadata, stream the pages down under a
+//! bandwidth cap, recognise each one on a blocking thread, and commit the
+//! text. Images never touch the disk. When the queue runs dry it refills
+//! itself from the popularity list, so the galleries most likely to have
+//! been read are indexed first (spec, section 3).
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+use tokio::sync::{RwLock, Semaphore, mpsc};
+use tsuburu_dialogue::{DialogueStore, PageText, Priority};
+use tsuburu_fetch::HttpFetcher;
+use tsuburu_hitomi::Fetcher;
+use tsuburu_hitomi::{Config, Sort, nozomi};
+use tsuburu_ocr::{Ocr, reading_order};
+
+/// Vision saturates the Neural Engine; more than this just queues.
+const OCR_WORKERS: usize = 3;
+/// Pages buffered between the downloader and recognition.
+const PIPELINE_DEPTH: usize = 4;
+/// Page fetches in flight. The CDN throttles each connection to roughly
+/// 150 KB/s, so parallel connections are the only way to keep recognition
+/// fed; measured aggregate is about 1.2 MB/s at four and rises slowly.
+const DOWNLOAD_WORKERS: usize = 6;
+/// How many galleries to pull from the popularity list per refill.
+const REFILL_BATCH: usize = 200;
+const SETTINGS_KEY: &str = "grinder";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GrinderSettings {
+    /// Off by default. An app must not start hammering someone else's
+    /// server the moment it is opened.
+    pub enabled: bool,
+    pub language: String,
+    /// Gallery types to sweep, in order.
+    pub kinds: Vec<String>,
+    /// Download cap. Recognition only consumes about 2.8 MB/s, so a higher
+    /// cap would just pile pages up.
+    pub bytes_per_second: u64,
+}
+
+impl Default for GrinderSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            language: "korean".into(),
+            kinds: vec!["doujinshi".into(), "manga".into()],
+            bytes_per_second: 3 * 1024 * 1024,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct GrinderStatus {
+    pub running: bool,
+    pub current: Option<i32>,
+    pub current_title: Option<String>,
+    pub pages_per_second: f32,
+    pub last_error: Option<String>,
+    pub galleries_this_session: u64,
+    pub pages_this_session: u64,
+}
+
+pub struct Grinder {
+    fetcher: Arc<HttpFetcher>,
+    cfg: Config,
+    store: Arc<DialogueStore>,
+    ocr: Arc<dyn Ocr>,
+    settings: RwLock<GrinderSettings>,
+    status: RwLock<GrinderStatus>,
+    stop: AtomicBool,
+    pages_done: AtomicU64,
+    galleries_done: AtomicU64,
+    /// Where the background sweep is in the popularity list.
+    refill_cursor: RwLock<usize>,
+}
+
+impl Grinder {
+    pub fn new(
+        fetcher: Arc<HttpFetcher>,
+        cfg: Config,
+        store: Arc<DialogueStore>,
+        ocr: Arc<dyn Ocr>,
+    ) -> Self {
+        let settings = store
+            .setting(SETTINGS_KEY)
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+        Self {
+            fetcher,
+            cfg,
+            store,
+            ocr,
+            settings: RwLock::new(settings),
+            status: RwLock::new(GrinderStatus::default()),
+            stop: AtomicBool::new(false),
+            pages_done: AtomicU64::new(0),
+            galleries_done: AtomicU64::new(0),
+            refill_cursor: RwLock::new(0),
+        }
+    }
+
+    pub async fn settings(&self) -> GrinderSettings {
+        self.settings.read().await.clone()
+    }
+
+    pub async fn update_settings(&self, next: GrinderSettings) {
+        if let Ok(json) = serde_json::to_string(&next)
+            && let Err(err) = self.store.set_setting(SETTINGS_KEY, &json)
+        {
+            tracing::warn!(%err, "could not persist grinder settings");
+        }
+        *self.settings.write().await = next;
+    }
+
+    pub async fn status(&self) -> GrinderStatus {
+        let mut status = self.status.read().await.clone();
+        status.galleries_this_session = self.galleries_done.load(Ordering::Relaxed);
+        status.pages_this_session = self.pages_done.load(Ordering::Relaxed);
+        status
+    }
+
+    pub fn store(&self) -> &DialogueStore {
+        &self.store
+    }
+
+    pub fn shutdown(&self) {
+        self.stop.store(true, Ordering::Relaxed);
+    }
+
+    /// Runs until shutdown. Idles cheaply while disabled.
+    pub async fn run(self: Arc<Self>) {
+        while !self.stop.load(Ordering::Relaxed) {
+            if !self.settings.read().await.enabled {
+                self.status.write().await.running = false;
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                continue;
+            }
+            self.status.write().await.running = true;
+
+            let next = match self.store.next_pending() {
+                Ok(next) => next,
+                Err(err) => {
+                    self.note_error(format!("queue unavailable: {err}")).await;
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                    continue;
+                }
+            };
+
+            match next {
+                Some(id) => self.process(id).await,
+                None => {
+                    match self.refill().await {
+                        Ok(0) => tokio::time::sleep(Duration::from_secs(30)).await,
+                        Ok(_) => {}
+                        Err(err) => {
+                            self.note_error(format!("could not refill the queue: {err}")).await;
+                            tokio::time::sleep(Duration::from_secs(30)).await;
+                        }
+                    }
+                }
+            }
+        }
+        self.status.write().await.running = false;
+    }
+
+    /// Pulls the next slice of the popularity list that matches the
+    /// configured types and is not already done.
+    async fn refill(&self) -> Result<usize, String> {
+        let settings = self.settings.read().await.clone();
+        let language = settings.language.as_str();
+        let popular = self.cfg.sort_list_url(Sort::PopularYear, language);
+        let total = nozomi::count(self.fetcher.as_ref(), &popular).await.map_err(|e| e.to_string())?;
+
+        let done = self.store.done_ids().map_err(|e| e.to_string())?;
+        let mut allowed: HashSet<i32> = HashSet::new();
+        for kind in &settings.kinds {
+            let url = self.cfg.type_list_url(kind, language);
+            match nozomi::id_set(self.fetcher.as_ref(), &url).await {
+                Ok(set) => allowed.extend(set),
+                Err(err) => tracing::warn!(kind, %err, "type list unavailable"),
+            }
+        }
+
+        let mut cursor = self.refill_cursor.write().await;
+        let mut batch = Vec::new();
+        while batch.len() < REFILL_BATCH && *cursor < total {
+            let ids = nozomi::page(self.fetcher.as_ref(), &popular, *cursor, REFILL_BATCH)
+                .await
+                .map_err(|e| e.to_string())?;
+            if ids.is_empty() {
+                break;
+            }
+            *cursor += ids.len();
+            batch.extend(ids.into_iter().filter(|id| allowed.contains(id) && !done.contains(id)));
+        }
+        if batch.is_empty() {
+            return Ok(0);
+        }
+        self.store.enqueue(&batch, Priority::Background).map_err(|e| e.to_string())
+    }
+
+    async fn note_error(&self, message: String) {
+        tracing::warn!("{message}");
+        self.status.write().await.last_error = Some(message);
+    }
+
+    /// Downloads and recognises one gallery, then commits it.
+    pub async fn process(&self, id: i32) {
+        let started = Instant::now();
+        {
+            let mut status = self.status.write().await;
+            status.current = Some(id);
+            status.current_title = None;
+        }
+
+        let result = self.process_inner(id).await;
+        let elapsed = started.elapsed().as_secs_f32().max(0.001);
+
+        match result {
+            Ok(pages) => {
+                let count = pages.len() as u64;
+                if let Err(err) = self.store.complete(id, &pages) {
+                    self.note_error(format!("could not store gallery {id}: {err}")).await;
+                } else {
+                    self.pages_done.fetch_add(count, Ordering::Relaxed);
+                    self.galleries_done.fetch_add(1, Ordering::Relaxed);
+                    let mut status = self.status.write().await;
+                    let rate = count as f32 / elapsed;
+                    status.pages_per_second = if status.pages_per_second == 0.0 {
+                        rate
+                    } else {
+                        status.pages_per_second * 0.8 + rate * 0.2
+                    };
+                    status.last_error = None;
+                }
+            }
+            Err(err) => {
+                tracing::warn!(id, %err, "gallery failed");
+                if let Err(store_err) = self.store.fail(id, &err) {
+                    self.note_error(format!("could not record failure for {id}: {store_err}")).await;
+                }
+                self.status.write().await.last_error = Some(format!("gallery {id}: {err}"));
+            }
+        }
+
+        self.status.write().await.current = None;
+    }
+
+    async fn process_inner(&self, id: i32) -> Result<Vec<PageText>, String> {
+        let started = Instant::now();
+        let gallery = tsuburu_hitomi::fetch_gallery(self.fetcher.as_ref(), &self.cfg, id)
+            .await
+            .map_err(|e| e.to_string())?;
+        self.status.write().await.current_title = gallery.title.clone();
+        let gg = tsuburu_hitomi::fetch_gg(self.fetcher.as_ref(), &self.cfg)
+            .await
+            .map_err(|e| e.to_string())?;
+        tracing::debug!(id, ms = started.elapsed().as_millis() as u64, pages = gallery.files.len(), "metadata ready");
+
+        let urls: Vec<(u16, String)> = gallery
+            .files
+            .iter()
+            .enumerate()
+            .filter_map(|(i, file)| {
+                tsuburu_hitomi::image_url(&self.cfg, &gg, file).ok().map(|u| (i as u16, u))
+            })
+            .collect();
+
+        // Downloader feeds a bounded channel; recognition drains it on
+        // blocking threads. Both sides overlap, like artifact's pipeline.
+        let (tx, mut rx) = mpsc::channel::<(u16, Vec<u8>)>(PIPELINE_DEPTH);
+        let fetcher = Arc::clone(&self.fetcher);
+        let cap = self.settings.read().await.bytes_per_second.max(64 * 1024);
+        let downloader = tokio::spawn(async move {
+            let started = Instant::now();
+            let mut bytes_total = 0u64;
+            let mut inflight = tokio::task::JoinSet::new();
+            let mut remaining = urls.into_iter();
+            loop {
+                while inflight.len() < DOWNLOAD_WORKERS {
+                    let Some((page, url)) = remaining.next() else { break };
+                    let fetcher = Arc::clone(&fetcher);
+                    inflight.spawn(async move { (page, fetcher.get(&url).await) });
+                }
+                let Some(joined) = inflight.join_next().await else {
+                    tracing::debug!(
+                        ms = started.elapsed().as_millis() as u64,
+                        bytes = bytes_total,
+                        "downloads finished"
+                    );
+                    break;
+                };
+                let body = match joined {
+                    Ok((page, Ok(body))) => (page, body),
+                    Ok((page, Err(err))) => {
+                        tracing::debug!(page, %err, "page download failed; skipping");
+                        continue;
+                    }
+                    Err(err) => {
+                        tracing::debug!(%err, "download task panicked");
+                        continue;
+                    }
+                };
+                bytes_total += body.1.len() as u64;
+                if tx.send(body).await.is_err() {
+                    break;
+                }
+                // Stay under the cap by holding back the next dispatch.
+                let budget = Duration::from_secs_f64(bytes_total as f64 / cap as f64);
+                if let Some(wait) = budget.checked_sub(started.elapsed()) {
+                    tokio::time::sleep(wait).await;
+                }
+            }
+        });
+
+        let pages = self.recognise(&mut rx).await;
+        downloader.await.map_err(|e| e.to_string())?;
+        tracing::debug!(id, ms = started.elapsed().as_millis() as u64, "gallery recognised");
+        pages
+    }
+
+    /// Recognises pages as they arrive. Public so the pipeline can be
+    /// exercised with in-memory bytes and a mock OCR.
+    pub async fn recognise(
+        &self,
+        rx: &mut mpsc::Receiver<(u16, Vec<u8>)>,
+    ) -> Result<Vec<PageText>, String> {
+        let limiter = Arc::new(Semaphore::new(OCR_WORKERS));
+        let mut tasks = tokio::task::JoinSet::new();
+        while let Some((page, bytes)) = rx.recv().await {
+            let permit = Arc::clone(&limiter).acquire_owned().await.map_err(|e| e.to_string())?;
+            let ocr = Arc::clone(&self.ocr);
+            tasks.spawn_blocking(move || {
+                let _permit = permit;
+                let text = ocr.recognize(&bytes).map(|mut lines| {
+                    reading_order(&mut lines);
+                    lines.into_iter().map(|l| l.text).collect::<Vec<_>>()
+                });
+                (page, text)
+            });
+        }
+
+        let ocr_started = Instant::now();
+        let mut pages = Vec::new();
+        let mut failures = 0usize;
+        while let Some(joined) = tasks.join_next().await {
+            match joined {
+                Ok((page, Ok(lines))) => pages.push(PageText { page, lines }),
+                Ok((page, Err(err))) => {
+                    failures += 1;
+                    tracing::debug!(page, %err, "page recognition failed");
+                }
+                Err(err) => {
+                    failures += 1;
+                    tracing::debug!(%err, "recognition task panicked");
+                }
+            }
+        }
+        tracing::debug!(
+            ms = ocr_started.elapsed().as_millis() as u64,
+            pages = pages.len(),
+            failures,
+            "recognition drained"
+        );
+        if pages.is_empty() {
+            return Err(format!("no page could be recognised ({failures} failures)"));
+        }
+        pages.sort_by_key(|p| p.page);
+        Ok(pages)
+    }
+
+    /// Fraction of the most popular galleries that are indexed, so the
+    /// UI can say "top 12% covered" rather than a raw count.
+    pub async fn coverage(&self) -> Result<Coverage, String> {
+        let settings = self.settings.read().await.clone();
+        let language = settings.language.as_str();
+        let popular = self.cfg.sort_list_url(Sort::PopularYear, language);
+        let done = self.store.done_ids().map_err(|e| e.to_string())?;
+        let top = nozomi::page(self.fetcher.as_ref(), &popular, 0, 10_000)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let covered = |n: usize| top.iter().take(n).filter(|id| done.contains(id)).count();
+        let mut total = 0usize;
+        for kind in &settings.kinds {
+            let url = self.cfg.type_list_url(kind, language);
+            total += nozomi::count(self.fetcher.as_ref(), &url).await.unwrap_or(0);
+        }
+        Ok(Coverage {
+            top_1k: covered(1_000),
+            top_10k: covered(10_000.min(top.len())),
+            top_10k_total: 10_000.min(top.len()),
+            done: done.len(),
+            total,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Coverage {
+    pub top_1k: usize,
+    pub top_10k: usize,
+    pub top_10k_total: usize,
+    pub done: usize,
+    pub total: usize,
+}
+
+/// Pulls gallery ids out of pasted text: bare numbers or hitomi URLs
+/// such as `https://hitomi.la/doujinshi/title-korean-1234567.html`.
+pub fn ids_from_text(text: &str) -> Vec<i32> {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    for token in text.split(|c: char| c.is_whitespace() || c == ',' || c == ';') {
+        let candidate = token
+            .trim()
+            .trim_end_matches(".html")
+            .rsplit(['-', '/'])
+            .next()
+            .unwrap_or("");
+        if let Ok(id) = candidate.parse::<i32>()
+            && id > 0
+            && seen.insert(id)
+        {
+            out.push(id);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_ids_from_urls_and_numbers() {
+        let text = "https://hitomi.la/doujinshi/some-title-korean-1234567.html\n\
+                    hitomi.la/reader/2222222.html, 3333333 ; 3333333 junk";
+        assert_eq!(ids_from_text(text), vec![1234567, 2222222, 3333333]);
+    }
+
+    #[test]
+    fn default_settings_are_off() {
+        assert!(!GrinderSettings::default().enabled);
+    }
+}
