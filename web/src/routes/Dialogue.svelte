@@ -27,6 +27,11 @@
   let hunt = $state({ q: '', language: 'korean', kind: 'doujinshi', limit: 500 })
   let huntResult = $state<string | null>(null)
 
+  let backgroundOnly = $state(true)
+  let shards = $state<api.ShardListing | null>(null)
+  let exchangeResult = $state<string | null>(null)
+  let exchanging = $state(false)
+
   let controller: AbortController | null = null
 
   $effect(() => {
@@ -130,6 +135,43 @@
       huntResult = cause instanceof Error ? cause.message : String(cause)
     }
   }
+
+  async function exportShards() {
+    exchanging = true
+    exchangeResult = null
+    try {
+      shards = await api.exportShards(backgroundOnly)
+      exchangeResult = `${shards.files.length} file(s) written to ${shards.directory}`
+    } catch (cause) {
+      exchangeResult = cause instanceof Error ? cause.message : String(cause)
+    } finally {
+      exchanging = false
+    }
+  }
+
+  async function importFiles(event: Event) {
+    const input = event.currentTarget as HTMLInputElement
+    const files = Array.from(input.files ?? [])
+    if (files.length === 0) return
+    exchanging = true
+    exchangeResult = null
+    const lines: string[] = []
+    for (const file of files) {
+      try {
+        const r = await api.importShard(file)
+        lines.push(`${file.name}: ${r.added} added, ${r.skipped} already here`)
+      } catch (cause) {
+        lines.push(`${file.name}: ${cause instanceof Error ? cause.message : String(cause)}`)
+      }
+    }
+    exchangeResult = lines.join(' · ')
+    exchanging = false
+    input.value = ''
+    await refreshStatus()
+  }
+
+  const formatBytes = (n: number) =>
+    n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`
 
   const percent = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0)
   const coverage = $derived(status?.coverage ?? null)
@@ -297,6 +339,39 @@
         </div>
         {#if huntResult}<p class="muted small">{huntResult}</p>{/if}
       </form>
+
+      <div class="exchange">
+        <strong>Share the index</strong>
+        <p class="muted small">
+          Recognised text is small; the images are not. Export what this machine has read
+          as shard files and hand them to someone else, or import theirs. Files are
+          verified against the hash in their name.
+        </p>
+        <div class="row">
+          <label class="check">
+            <input type="checkbox" bind:checked={backgroundOnly} />
+            Only background-indexed galleries (keeps what you chose to read out of the file)
+          </label>
+          <button onclick={exportShards} disabled={exchanging}>Export</button>
+          <label class="upload">
+            <input type="file" accept=".tsd" multiple onchange={importFiles} disabled={exchanging} />
+            Import .tsd files
+          </label>
+        </div>
+        {#if exchangeResult}<p class="muted small">{exchangeResult}</p>{/if}
+        {#if shards && shards.files.length}
+          <ul class="files">
+            {#each shards.files as file (file.name)}
+              <li>
+                <a href={api.shardUrl(file.name)} download={file.name}>{file.name}</a>
+                <span class="muted small">
+                  {formatBytes(file.bytes)}{file.galleries ? ` · ${file.galleries} galleries` : ''}
+                </span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
     </section>
   {/if}
 </main>
@@ -407,5 +482,29 @@
   }
   input[type='number'] {
     width: 6rem;
+  }
+  .exchange {
+    display: grid;
+    gap: 0.4rem;
+  }
+  .upload {
+    cursor: pointer;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.45rem 0.8rem;
+    background: var(--surface);
+  }
+  .upload input {
+    display: none;
+  }
+  .files {
+    list-style: none;
+    margin: 0.4rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.25rem;
+  }
+  .files a {
+    margin-right: 0.5rem;
   }
 </style>

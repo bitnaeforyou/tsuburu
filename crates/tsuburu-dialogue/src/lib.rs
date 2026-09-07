@@ -11,4 +11,6 @@ pub mod store;
 
 pub use matcher::{Match, Query};
 pub use shard::{Shard, ShardEntry, ShardError};
-pub use store::{Counts, DialogueError, DialogueStore, Hit, JobRecord, PageText, Priority, Status};
+pub use store::{
+    Counts, DialogueError, DialogueStore, Hit, ImportSummary, JobRecord, PageText, Priority, Status,
+};

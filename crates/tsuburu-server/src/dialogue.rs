@@ -5,10 +5,14 @@
 //! cannot trust the feature.
 
 use axum::Json;
-use axum::extract::{Query, State};
+use axum::body::Bytes;
+use axum::extract::{Path, Query, State};
+use axum::http::header;
+use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
-use tsuburu_dialogue::{Counts, Hit, Priority};
+use tsuburu_dialogue::{Counts, Hit, ImportSummary, Priority, Shard};
 
 use crate::error::{ApiError, ErrorKind};
 use crate::grinder::{Coverage, Grinder, GrinderSettings, GrinderStatus, ids_from_text};
@@ -191,4 +195,141 @@ pub async fn hunt(
     .await?;
     let added = grinder.store().enqueue(&page.ids, Priority::Hunt)?;
     Ok(Json(EnqueueResponse { found: page.ids.len(), added }))
+}
+
+// --- exchange ---
+//
+// The expensive artefact is the text, not the images. Shards let one
+// machine's work travel to another as a file; how the file travels is the
+// user's business.
+
+/// Galleries per shard file. Ids run past four million, so this keeps the
+/// file count in the tens.
+const SHARD_RANGE: i32 = 100_000;
+
+fn shards_dir(state: &AppState) -> Result<&PathBuf, ApiError> {
+    state.shards_dir.as_ref().ok_or_else(|| ApiError {
+        error: ErrorKind::Storage,
+        message: "no directory is configured for dialogue shards".into(),
+    })
+}
+
+fn is_shard_name(name: &str) -> bool {
+    // dialogue-<first>-<last>-<16 hex>.tsd ; nothing that could walk the filesystem.
+    let Some(stem) = name.strip_suffix(".tsd") else { return false };
+    let mut parts = stem.split('-');
+    parts.next() == Some("dialogue")
+        && parts.next().is_some_and(|p| p.chars().all(|c| c.is_ascii_digit()))
+        && parts.next().is_some_and(|p| p.chars().all(|c| c.is_ascii_digit()))
+        && parts.next().is_some_and(|p| p.len() == 16 && p.chars().all(|c| c.is_ascii_hexdigit()))
+        && parts.next().is_none()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExportBody {
+    /// Leave out galleries indexed on request (history, hunts): they say
+    /// what the user read.
+    #[serde(default)]
+    pub background_only: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ShardFile {
+    pub name: String,
+    pub bytes: u64,
+    pub galleries: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExportResponse {
+    pub directory: String,
+    pub files: Vec<ShardFile>,
+}
+
+pub async fn export(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ExportBody>,
+) -> Result<Json<ExportResponse>, ApiError> {
+    let grinder = Arc::clone(grinder(&state)?);
+    let dir = shards_dir(&state)?.clone();
+    std::fs::create_dir_all(&dir).map_err(|e| storage_error(&e))?;
+
+    let shards = tokio::task::spawn_blocking(move || {
+        grinder.store().export_shards(SHARD_RANGE, body.background_only)
+    })
+    .await
+    .map_err(|e| storage_error(&e))??;
+
+    let mut files = Vec::with_capacity(shards.len());
+    for shard in &shards {
+        let encoded = shard.encode().map_err(|e| storage_error(&e))?;
+        let name = shard.file_name(&encoded);
+        std::fs::write(dir.join(&name), &encoded).map_err(|e| storage_error(&e))?;
+        files.push(ShardFile { name, bytes: encoded.len() as u64, galleries: shard.entries.len() });
+    }
+    Ok(Json(ExportResponse { directory: dir.display().to_string(), files }))
+}
+
+pub async fn list_shards(State(state): State<Arc<AppState>>) -> Result<Json<ExportResponse>, ApiError> {
+    let dir = shards_dir(&state)?.clone();
+    let mut files = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !is_shard_name(&name) {
+                continue;
+            }
+            let bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            // Gallery count needs the file decoded; the name and size are enough here.
+            files.push(ShardFile { name, bytes, galleries: 0 });
+        }
+    }
+    files.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(Json(ExportResponse { directory: dir.display().to_string(), files }))
+}
+
+pub async fn download_shard(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<Response, ApiError> {
+    if !is_shard_name(&name) {
+        return Err(ApiError::bad_request("not a shard file name"));
+    }
+    let path = shards_dir(&state)?.join(&name);
+    let bytes = tokio::fs::read(&path).await.map_err(|_| ApiError::bad_request("no such shard"))?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/octet-stream".to_string()),
+            (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{name}\"")),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImportParams {
+    /// The file's original name, so its hash can be checked.
+    pub name: String,
+}
+
+pub async fn import(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ImportParams>,
+    body: Bytes,
+) -> Result<Json<ImportSummary>, ApiError> {
+    let grinder = Arc::clone(grinder(&state)?);
+    if !is_shard_name(&params.name) {
+        return Err(ApiError::bad_request("not a shard file name"));
+    }
+    let shard = Shard::decode_named(&params.name, &body)
+        .map_err(|e| ApiError::bad_request(format!("could not read the shard: {e}")))?;
+    let summary = tokio::task::spawn_blocking(move || grinder.store().import_shard(&shard))
+        .await
+        .map_err(|e| storage_error(&e))??;
+    Ok(Json(summary))
+}
+
+fn storage_error(err: &dyn std::fmt::Display) -> ApiError {
+    ApiError { error: ErrorKind::Storage, message: err.to_string() }
 }

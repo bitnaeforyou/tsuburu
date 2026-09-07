@@ -21,9 +21,17 @@ fn grinder(dir: &tempfile::TempDir, ocr: MockOcr) -> Arc<Grinder> {
 }
 
 fn app(grinder: Option<Arc<Grinder>>) -> axum::Router {
+    app_with_shards(grinder, None)
+}
+
+fn app_with_shards(grinder: Option<Arc<Grinder>>, shards: Option<std::path::PathBuf>) -> axum::Router {
     let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
     let cfg = Config { scheme: "http".into(), ltn_domain: "127.0.0.1:9".into(), ..Config::default() };
-    router(Arc::new(AppState::full(fetcher, cfg, None, grinder)))
+    let mut state = AppState::full(fetcher, cfg, None, grinder);
+    if let Some(dir) = shards {
+        state = state.with_shards_dir(dir);
+    }
+    router(Arc::new(state))
 }
 
 async fn call(app: axum::Router, method: &str, uri: &str, body: Option<serde_json::Value>) -> (StatusCode, serde_json::Value) {
@@ -134,4 +142,90 @@ async fn search_api_returns_hits_with_counts() {
     assert_eq!(body["hits"][0]["gallery_id"], 5);
     assert_eq!(body["hits"][0]["page"], 3);
     assert_eq!(body["counts"]["done"], 1);
+}
+
+#[tokio::test]
+async fn shards_round_trip_between_two_machines_through_the_api() {
+    let dir_a = tempfile::tempdir().unwrap();
+    let a = grinder(&dir_a, MockOcr::default());
+    a.store().enqueue(&[10, 20], Priority::Background).unwrap();
+    a.store().complete(10, &[tsuburu_dialogue::PageText { page: 0, lines: vec!["공유되는 대사".into()] }]).unwrap();
+    a.store().complete(20, &[tsuburu_dialogue::PageText { page: 0, lines: vec!["또 하나".into()] }]).unwrap();
+
+    // Machine A exports.
+    let shards_a = dir_a.path().join("shards");
+    let (status, body) = call(
+        app_with_shards(Some(Arc::clone(&a)), Some(shards_a.clone())),
+        "POST",
+        "/api/dialogue/export",
+        Some(serde_json::json!({ "background_only": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let name = body["files"][0]["name"].as_str().unwrap().to_string();
+    assert!(name.starts_with("dialogue-0-99999-"), "{name}");
+    assert_eq!(body["files"][0]["galleries"], 2);
+
+    // The file can be downloaded...
+    let response = app_with_shards(Some(Arc::clone(&a)), Some(shards_a.clone()))
+        .oneshot(Request::builder().uri(format!("/api/dialogue/shards/{name}")).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+
+    // ...and imported on machine B, which already had one of the two.
+    let dir_b = tempfile::tempdir().unwrap();
+    let b = grinder(&dir_b, MockOcr::default());
+    b.store().enqueue(&[20], Priority::Background).unwrap();
+    b.store().complete(20, &[tsuburu_dialogue::PageText { page: 0, lines: vec!["B의 것".into()] }]).unwrap();
+
+    let response = app(Some(Arc::clone(&b)))
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/dialogue/import?name={name}"))
+                .header(header::CONTENT_TYPE, "application/octet-stream")
+                .body(Body::from(bytes.clone()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let summary: serde_json::Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(summary["added"], 1);
+    assert_eq!(summary["skipped"], 1);
+    assert!(b.store().search("공유되는 대사", 5).unwrap().iter().any(|h| h.gallery_id == 10));
+    assert_eq!(b.store().text(20).unwrap().unwrap()[0].lines, vec!["B의 것"]);
+
+    // A tampered file is refused by its name's hash.
+    let mut tampered = bytes.to_vec();
+    let last = tampered.len() - 1;
+    tampered[last] ^= 1;
+    let response = app(Some(b))
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/dialogue/import?name={name}"))
+                .body(Body::from(tampered))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn shard_download_rejects_names_that_are_not_shards() {
+    let dir = tempfile::tempdir().unwrap();
+    let g = grinder(&dir, MockOcr::default());
+    let (status, _) = call(
+        app_with_shards(Some(g), Some(dir.path().join("shards"))),
+        "GET",
+        "/api/dialogue/shards/..%2F..%2Fetc%2Fpasswd",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }

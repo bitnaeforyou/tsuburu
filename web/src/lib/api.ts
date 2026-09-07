@@ -214,3 +214,29 @@ export function huntDialogue(body: {
 }): Promise<{ found: number; added: number }> {
   return send('POST', '/api/dialogue/hunt', body)
 }
+
+// --- shard exchange ---
+
+export type ShardFile = { name: string; bytes: number; galleries: number }
+export type ShardListing = { directory: string; files: ShardFile[] }
+export type ImportSummary = { galleries: number; added: number; skipped: number }
+
+export function exportShards(backgroundOnly: boolean): Promise<ShardListing> {
+  return send('POST', '/api/dialogue/export', { background_only: backgroundOnly })
+}
+
+export function listShards(): Promise<ShardListing> {
+  return request('/api/dialogue/shards')
+}
+
+export function shardUrl(name: string): string {
+  return `/api/dialogue/shards/${encodeURIComponent(name)}`
+}
+
+export async function importShard(file: File): Promise<ImportSummary> {
+  return request(`/api/dialogue/import?name=${encodeURIComponent(file.name)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/octet-stream' },
+    body: file,
+  })
+}

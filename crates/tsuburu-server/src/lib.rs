@@ -16,6 +16,9 @@ use tower_http::trace::TraceLayer;
 
 pub use state::AppState;
 
+/// A shard of a whole language is a few hundred megabytes at most.
+const SHARD_UPLOAD_LIMIT: usize = 1024 * 1024 * 1024;
+
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/search", get(api::search))
@@ -30,6 +33,13 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/dialogue/search", get(dialogue::search))
         .route("/api/dialogue/enqueue", post(dialogue::enqueue))
         .route("/api/dialogue/hunt", post(dialogue::hunt))
+        .route("/api/dialogue/export", post(dialogue::export))
+        .route("/api/dialogue/shards", get(dialogue::list_shards))
+        .route("/api/dialogue/shards/{name}", get(dialogue::download_shard))
+        .route(
+            "/api/dialogue/import",
+            post(dialogue::import).layer(axum::extract::DefaultBodyLimit::max(SHARD_UPLOAD_LIMIT)),
+        )
         .route("/img/{file}", get(proxy::image))
         .route("/tn/{file}", get(proxy::thumbnail))
         .fallback(assets::serve)

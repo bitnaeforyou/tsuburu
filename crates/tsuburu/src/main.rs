@@ -190,7 +190,11 @@ async fn serve(
         tokio::spawn(Arc::clone(grinder).run());
     }
 
-    let state = Arc::new(tsuburu_server::AppState::full(fetcher, cfg, store, grinder));
+    let mut app_state = tsuburu_server::AppState::full(fetcher, cfg, store, grinder);
+    if let Ok(dir) = tsuburu_store::data_dir() {
+        app_state = app_state.with_shards_dir(dir.join("shards"));
+    }
+    let state = Arc::new(app_state);
     let app = tsuburu_server::router(Arc::clone(&state));
 
     // 상위 노드 예열은 배경에서 돌린다. 서버 기동을 막지 않는다.

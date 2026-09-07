@@ -14,8 +14,9 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::matcher::Query;
 use crate::jamo::normalize;
+use crate::matcher::Query;
+use crate::shard::{Shard, ShardEntry};
 
 /// gallery id -> JobRecord JSON
 const JOBS: TableDefinition<i32, &str> = TableDefinition::new("jobs");
@@ -89,6 +90,9 @@ pub struct JobRecord {
     pub lines: u32,
     #[serde(default)]
     pub error: Option<String>,
+    /// `None` for text this machine recognised, otherwise where it came from.
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +106,23 @@ pub struct Counts {
     pub pending: usize,
     pub done: usize,
     pub failed: usize,
+}
+
+/// What a job ended with; written with its queue removal in one commit.
+struct Outcome<'a> {
+    status: Status,
+    text: Option<&'a [u8]>,
+    pages: u32,
+    lines: u32,
+    error: Option<&'a str>,
+    source: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ImportSummary {
+    pub galleries: usize,
+    pub added: usize,
+    pub skipped: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -204,6 +225,7 @@ impl DialogueStore {
                     pages: 0,
                     lines: 0,
                     error: None,
+                    source: None,
                 };
                 jobs.insert(id, serde_json::to_string(&record)?.as_str()).map_err(db_err)?;
                 queue.insert((priority.key(), now, id), ()).map_err(db_err)?;
@@ -236,22 +258,21 @@ impl DialogueStore {
     pub fn complete(&self, id: i32, pages: &[PageText]) -> Result<(), DialogueError> {
         let encoded = compress(&serde_json::to_vec(pages)?)?;
         let lines: usize = pages.iter().map(|p| p.lines.len()).sum();
-        self.finish(id, Status::Done, Some(&encoded), pages.len() as u32, lines as u32, None)
+        self.finish(
+            id,
+            Outcome { status: Status::Done, text: Some(&encoded), pages: pages.len() as u32, lines: lines as u32, error: None, source: None },
+        )
     }
 
     pub fn fail(&self, id: i32, error: &str) -> Result<(), DialogueError> {
-        self.finish(id, Status::Failed, None, 0, 0, Some(error))
+        self.finish(
+            id,
+            Outcome { status: Status::Failed, text: None, pages: 0, lines: 0, error: Some(error), source: None },
+        )
     }
 
-    fn finish(
-        &self,
-        id: i32,
-        status: Status,
-        text: Option<&[u8]>,
-        pages: u32,
-        lines: u32,
-        error: Option<&str>,
-    ) -> Result<(), DialogueError> {
+    fn finish(&self, id: i32, outcome: Outcome<'_>) -> Result<(), DialogueError> {
+        let Outcome { status, text, pages, lines, error, source } = outcome;
         let tx = self.db.begin_write().map_err(db_err)?;
         {
             let mut jobs = tx.open_table(JOBS).map_err(db_err)?;
@@ -277,6 +298,7 @@ impl DialogueStore {
                 pages,
                 lines,
                 error: error.map(str::to_string),
+                source: source.map(str::to_string),
             };
             jobs.insert(id, serde_json::to_string(&record)?.as_str()).map_err(db_err)?;
             if let Some(bytes) = text {
@@ -323,6 +345,83 @@ impl DialogueStore {
             Some(v) => Ok(Some(serde_json::from_slice(&decompress(v.value())?)?)),
             None => Ok(None),
         }
+    }
+
+    // --- exchange ---
+
+    /// Packs every stored gallery into shards of `range_size` ids.
+    ///
+    /// `background_only` leaves out galleries that were indexed because the
+    /// user asked for them (imported history, hunts): those reveal what the
+    /// user read, and a shared file must not.
+    pub fn export_shards(
+        &self,
+        range_size: i32,
+        background_only: bool,
+    ) -> Result<Vec<Shard>, DialogueError> {
+        let range_size = range_size.max(1);
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let texts = tx.open_table(TEXT).map_err(db_err)?;
+        let jobs = tx.open_table(JOBS).map_err(db_err)?;
+
+        let mut shards: Vec<Shard> = Vec::new();
+        for row in texts.iter().map_err(db_err)? {
+            let (key, value) = row.map_err(db_err)?;
+            let id = key.value();
+            if background_only {
+                let job: Option<JobRecord> = jobs
+                    .get(id)
+                    .map_err(db_err)?
+                    .map(|v| serde_json::from_str(v.value()))
+                    .transpose()?;
+                let personal = job.is_some_and(|j| j.priority != Priority::Background);
+                if personal {
+                    continue;
+                }
+            }
+            let pages: Vec<PageText> = serde_json::from_slice(&decompress(value.value())?)?;
+            let first_id = (id / range_size) * range_size;
+            let shard = match shards.last_mut() {
+                Some(last) if last.first_id == first_id => last,
+                _ => {
+                    shards.push(Shard {
+                        first_id,
+                        last_id: first_id + range_size - 1,
+                        entries: Vec::new(),
+                    });
+                    shards.last_mut().expect("just pushed")
+                }
+            };
+            shard.entries.push(ShardEntry { gallery_id: id, pages });
+        }
+        Ok(shards)
+    }
+
+    /// Merges a shard. Galleries already indexed here are left alone.
+    pub fn import_shard(&self, shard: &Shard) -> Result<ImportSummary, DialogueError> {
+        let existing = self.done_ids()?;
+        let mut summary = ImportSummary { galleries: shard.entries.len(), added: 0, skipped: 0 };
+        for entry in &shard.entries {
+            if existing.contains(&entry.gallery_id) || entry.pages.is_empty() {
+                summary.skipped += 1;
+                continue;
+            }
+            let encoded = compress(&serde_json::to_vec(&entry.pages)?)?;
+            let lines: usize = entry.pages.iter().map(|p| p.lines.len()).sum();
+            self.finish(
+                entry.gallery_id,
+                Outcome {
+                    status: Status::Done,
+                    text: Some(&encoded),
+                    pages: entry.pages.len() as u32,
+                    lines: lines as u32,
+                    error: None,
+                    source: Some("import"),
+                },
+            )?;
+            summary.added += 1;
+        }
+        Ok(summary)
     }
 
     // --- search ---
@@ -535,6 +634,55 @@ mod tests {
         let c = store.counts().unwrap();
         assert_eq!((c.pending, c.done, c.failed), (1, 1, 1));
         assert_eq!(store.done_ids().unwrap(), [1].into_iter().collect());
+    }
+
+    #[test]
+    fn export_groups_by_id_range_and_import_merges_without_overwriting() {
+        let (a, _da) = store();
+        a.enqueue(&[5, 150_007, 150_008], Priority::Background).unwrap();
+        a.complete(5, &pages(&[&["첫째"]])).unwrap();
+        a.complete(150_007, &pages(&[&["둘째"]])).unwrap();
+        a.complete(150_008, &pages(&[&["셋째"]])).unwrap();
+
+        let shards = a.export_shards(100_000, false).unwrap();
+        assert_eq!(shards.len(), 2);
+        assert_eq!((shards[0].first_id, shards[0].last_id), (0, 99_999));
+        assert_eq!((shards[1].first_id, shards[1].last_id), (100_000, 199_999));
+        assert_eq!(shards[1].entries.len(), 2);
+
+        let (b, _db) = store();
+        b.enqueue(&[150_007], Priority::Background).unwrap();
+        b.complete(150_007, &pages(&[&["내 것"]])).unwrap();
+        b.enqueue(&[150_008], Priority::Hunt).unwrap();
+
+        let summary = b.import_shard(&shards[1]).unwrap();
+        assert_eq!((summary.galleries, summary.added, summary.skipped), (2, 1, 1));
+        // Local text wins; the imported one fills the gap and clears its queue entry.
+        assert_eq!(b.text(150_007).unwrap().unwrap()[0].lines, vec!["내 것"]);
+        assert_eq!(b.text(150_008).unwrap().unwrap()[0].lines, vec!["셋째"]);
+        assert_eq!(b.next_pending().unwrap(), None);
+        assert_eq!(b.job(150_008).unwrap().unwrap().source.as_deref(), Some("import"));
+        assert!(b.search("셋째", 5).unwrap().iter().any(|h| h.gallery_id == 150_008));
+    }
+
+    #[test]
+    fn background_only_export_keeps_personal_galleries_out() {
+        let (store, _d) = store();
+        store.enqueue(&[1], Priority::Background).unwrap();
+        store.enqueue(&[2], Priority::Imported).unwrap();
+        store.enqueue(&[3], Priority::Hunt).unwrap();
+        for id in [1, 2, 3] {
+            store.complete(id, &pages(&[&["x"]])).unwrap();
+        }
+        let all: usize = store.export_shards(1_000, false).unwrap().iter().map(|s| s.entries.len()).sum();
+        let public: Vec<i32> = store
+            .export_shards(1_000, true)
+            .unwrap()
+            .iter()
+            .flat_map(|s| s.entries.iter().map(|e| e.gallery_id))
+            .collect();
+        assert_eq!(all, 3);
+        assert_eq!(public, vec![1]);
     }
 
     #[test]

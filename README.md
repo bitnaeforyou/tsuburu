@@ -77,6 +77,11 @@ cut that down:
   old artifact database; they are indexed before anything else.
 - **Hunt.** Narrow with tags, language and type, and queue only those.
 
+The text is the expensive part and it is small, so it can travel. The
+Dialogue tab exports what a machine has read as `.tsd` shard files and imports
+other people's; files are checked against the hash in their name, and an
+export can leave out the galleries you chose to read yourself.
+
 Recognition uses Vision on macOS. Other platforms report the feature as
 unavailable rather than pretending.
 

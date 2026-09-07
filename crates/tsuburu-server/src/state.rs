@@ -32,6 +32,8 @@ pub struct AppState {
     pub store: Option<tsuburu_store::Store>,
     /// Dialogue indexing. `None` where the platform has no OCR.
     pub grinder: Option<Arc<crate::grinder::Grinder>>,
+    /// Where exported dialogue shards are written.
+    pub shards_dir: Option<std::path::PathBuf>,
     version: RwLock<Option<Cached<String>>>,
     gg: RwLock<Option<Cached<GgMap>>>,
     /// 갤러리 메타 JSON은 최대 200 KB를 넘기도 한다. 카드 한 장으로 줄여
@@ -63,10 +65,16 @@ impl AppState {
             cfg,
             store,
             grinder,
+            shards_dir: None,
             version: RwLock::new(None),
             gg: RwLock::new(None),
             cards: Cache::new(4096),
         }
+    }
+
+    pub fn with_shards_dir(mut self, dir: std::path::PathBuf) -> Self {
+        self.shards_dir = Some(dir);
+        self
     }
 
     pub async fn version(&self) -> Result<String, tsuburu_hitomi::SearchError> {
