@@ -10,8 +10,8 @@ pub mod fetcher;
 pub mod gallery;
 pub mod image;
 pub mod index;
-pub mod nozomi;
 pub mod node;
+pub mod nozomi;
 pub mod search;
 
 pub use fetcher::{FetchError, Fetcher};
@@ -365,11 +365,8 @@ mod tests {
         let cfg = Config { ltn_domain: "example.test".into(), ..Config::default() };
         assert!(cfg.gg_url().starts_with("https://example.test/"));
 
-        let local = Config {
-            scheme: "http".into(),
-            ltn_domain: "127.0.0.1:9".into(),
-            ..Config::default()
-        };
+        let local =
+            Config { scheme: "http".into(), ltn_domain: "127.0.0.1:9".into(), ..Config::default() };
         assert!(local.gg_url().starts_with("http://127.0.0.1:9/"));
     }
 }

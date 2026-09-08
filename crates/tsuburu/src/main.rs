@@ -43,9 +43,7 @@ enum Command {
     },
     /// artifact의 `llm-search-index` 디렉터리에서 대사 텍스트를 가져온다.
     /// 서버가 떠 있으면 저장소가 잠겨 있으므로 먼저 끄거나 UI에서 실행한다.
-    ImportArtifact {
-        dir: std::path::PathBuf,
-    },
+    ImportArtifact { dir: std::path::PathBuf },
     /// artifact의 `data.db`(SQLite)에서 갤러리 메타데이터 스냅샷을 가져온다.
     /// `sqlite3` 명령으로 읽으므로 그 명령이 있어야 한다. 서버를 먼저 끈다.
     ImportMeta {
@@ -71,12 +69,14 @@ async fn main() -> Result<()> {
     init_tracing(cli.verbose);
 
     // 인자 없이 실행하는 것이 일반 사용자의 경로다. 더블클릭하면 서버가 뜬다.
-    let command = cli
-        .command
-        .unwrap_or(Command::Serve { port: 8420, no_open: false, warm_levels: WARM_LEVELS });
+    let command = cli.command.unwrap_or(Command::Serve {
+        port: 8420,
+        no_open: false,
+        warm_levels: WARM_LEVELS,
+    });
 
-    let fetcher = HttpFetcher::new(FetchConfig::default())
-        .context("failed to build the HTTP client")?;
+    let fetcher =
+        HttpFetcher::new(FetchConfig::default()).context("failed to build the HTTP client")?;
     let cfg = Config::default();
 
     match command {
@@ -123,13 +123,14 @@ async fn main() -> Result<()> {
             let total = reader.len();
             eprintln!("importing {total} chunks from {}", dir.display());
             let started = Instant::now();
-            let works = tsuburu_dialogue::artifact::WorkGrouper::new(reader).filter_map(|w| match w {
-                Ok(w) => Some(w),
-                Err(err) => {
-                    eprintln!("skipping: {err}");
-                    None
-                }
-            });
+            let works =
+                tsuburu_dialogue::artifact::WorkGrouper::new(reader).filter_map(|w| match w {
+                    Ok(w) => Some(w),
+                    Err(err) => {
+                        eprintln!("skipping: {err}");
+                        None
+                    }
+                });
             let summary = store.import_works(works, "artifact", 500, |seen| {
                 if seen % 5000 == 0 {
                     eprintln!("  {seen} works, {:?}", started.elapsed());
@@ -162,9 +163,7 @@ async fn main() -> Result<()> {
             let gallery = tsuburu_hitomi::fetch_gallery(&fetcher, &cfg, id)
                 .await
                 .map_err(describe_gallery)?;
-            let gg = tsuburu_hitomi::fetch_gg(&fetcher, &cfg)
-                .await
-                .map_err(describe_gallery)?;
+            let gg = tsuburu_hitomi::fetch_gg(&fetcher, &cfg).await.map_err(describe_gallery)?;
 
             println!("title: {}", gallery.title.as_deref().unwrap_or("(none)"));
             println!("type:  {}", gallery.kind.as_deref().unwrap_or("(none)"));
@@ -216,10 +215,10 @@ async fn serve(
             tracing::info!("no text recognition on this platform; dialogue search disabled");
             None
         }
-        Some(ocr) => match tsuburu_store::data_dir()
-            .map_err(|e| e.to_string())
-            .and_then(|dir| tsuburu_dialogue::DialogueStore::open(dir.join("dialogue.redb")).map_err(|e| e.to_string()))
-        {
+        Some(ocr) => match tsuburu_store::data_dir().map_err(|e| e.to_string()).and_then(|dir| {
+            tsuburu_dialogue::DialogueStore::open(dir.join("dialogue.redb"))
+                .map_err(|e| e.to_string())
+        }) {
             Ok(dialogue) => {
                 tracing::info!(path = %dialogue.path().display(), "opened the dialogue index");
                 // Its own connection pool: a page burst must not queue behind
@@ -304,9 +303,7 @@ async fn bind(port: u16) -> Result<tokio::net::TcpListener> {
             Err(err) => eprintln!("port {port} is not available ({err}); picking another"),
         }
     }
-    tokio::net::TcpListener::bind(("127.0.0.1", 0))
-        .await
-        .context("could not bind a local port")
+    tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.context("could not bind a local port")
 }
 
 /// 포맷 변경과 네트워크 오류를 구분해 안내한다(스펙 7절).
@@ -334,10 +331,7 @@ fn init_tracing(verbose: bool) {
     let default = if verbose { "tsuburu=debug,tsuburu_fetch=debug" } else { "warn" };
     let filter = tracing_subscriber::EnvFilter::try_from_env("TSUBURU_LOG")
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default));
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_writer(std::io::stderr)
-        .init();
+    tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).init();
 }
 
 /// Reading artifact's `data.db` through the `sqlite3` command.
@@ -375,7 +369,10 @@ mod artifact_meta {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()
-            .context("could not run `sqlite3`; install it to import artifact's data.db")?;
+            .context(
+                "could not run `sqlite3`. macOS ships it; on Linux install the sqlite3 \
+                 package, and on Windows put sqlite3.exe from sqlite.org on PATH",
+            )?;
         let stdout = child.stdout.take().context("no stdout from sqlite3")?;
         let reader = BufReader::with_capacity(4 << 20, stdout);
         Ok(reader
@@ -473,8 +470,18 @@ mod artifact_meta {
         #[test]
         fn parses_a_row() {
             let fields = [
-                "4031231", "Drip Coffee | 드립 커피", "manga", "korean", "|borusiti|", "", "", "",
-                "|female:big breasts|digital|", "2026-07-04 15:47:00", "40", "1",
+                "4031231",
+                "Drip Coffee | 드립 커피",
+                "manga",
+                "korean",
+                "|borusiti|",
+                "",
+                "",
+                "",
+                "|female:big breasts|digital|",
+                "2026-07-04 15:47:00",
+                "40",
+                "1",
                 "//tn.gold-usergeneratedcontent.net/webpbigtn/a/30/753fff08a7c5c60af802a94e56128c4c3cd40791e719ae1c4fa3e89f5526e30a.webp",
             ];
             let record = fields.join(std::str::from_utf8(&[FIELD]).unwrap());

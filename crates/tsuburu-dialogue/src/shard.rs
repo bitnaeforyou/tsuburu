@@ -104,7 +104,9 @@ mod tests {
             last_id: 1999,
             entries: vec![ShardEntry {
                 gallery_id: 1234,
-                pages: vec![PageText { page: 0, lines: vec!["일단".into(), "구급차라도".into()] }],
+                pages: vec![PageText {
+                    page: 0, lines: vec!["일단".into(), "구급차라도".into()]
+                }],
             }],
         }
     }

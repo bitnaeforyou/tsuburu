@@ -196,10 +196,7 @@ mod tests {
             terms.iter().map(|t| t.used.as_str()).collect::<Vec<_>>(),
             vec!["big breasts", "glasses", "zzz"]
         );
-        assert_eq!(
-            terms.iter().map(|t| t.translated).collect::<Vec<_>>(),
-            vec![true, true, false]
-        );
+        assert_eq!(terms.iter().map(|t| t.translated).collect::<Vec<_>>(), vec![true, true, false]);
     }
 
     #[test]

@@ -15,9 +15,9 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tsuburu_text::codes_into;
 use crate::matcher::{Match, Query};
 use crate::shard::{Shard, ShardEntry};
+use tsuburu_text::codes_into;
 
 /// gallery id -> JobRecord JSON
 const JOBS: TableDefinition<i32, &str> = TableDefinition::new("jobs");
@@ -42,7 +42,9 @@ pub enum DialogueError {
     Database(String),
     #[error("stored record could not be read: {0}")]
     Corrupt(String),
-    #[error("this dialogue index was written by a newer tsuburu (schema {found}, expected {expected})")]
+    #[error(
+        "this dialogue index was written by a newer tsuburu (schema {found}, expected {expected})"
+    )]
     NewerSchema { found: String, expected: String },
     #[error("this dialogue index uses an old layout (schema {found}); delete it and index again")]
     OlderSchema { found: String },
@@ -53,7 +55,6 @@ impl From<serde_json::Error> for DialogueError {
         DialogueError::Corrupt(err.to_string())
     }
 }
-
 
 /// Higher runs first. Imported history outranks a hunt, which outranks the
 /// background sweep.
@@ -187,7 +188,10 @@ impl DialogueStore {
                     return Err(DialogueError::OlderSchema { found });
                 }
                 Some(found) => {
-                    return Err(DialogueError::NewerSchema { found, expected: SCHEMA_VERSION.into() });
+                    return Err(DialogueError::NewerSchema {
+                        found,
+                        expected: SCHEMA_VERSION.into(),
+                    });
                 }
             }
         }
@@ -246,7 +250,9 @@ impl DialogueStore {
                         // Done jobs hold no queue key; nothing to remove.
                         let _ = job;
                     }
-                    Some(job) if job.status == Status::Pending && job.priority >= priority => continue,
+                    Some(job) if job.status == Status::Pending && job.priority >= priority => {
+                        continue;
+                    }
                     Some(job) => {
                         // Promote (or retry a failure) by replacing the queue key.
                         queue.remove((job.priority.key(), job.added_at, id)).map_err(db_err)?;
@@ -296,14 +302,28 @@ impl DialogueStore {
         let lines: usize = pages.iter().map(|p| p.lines.len()).sum();
         self.finish(
             id,
-            Outcome { status: Status::Done, text: Some(&encoded), pages: pages.len() as u32, lines: lines as u32, error: None, source: None },
+            Outcome {
+                status: Status::Done,
+                text: Some(&encoded),
+                pages: pages.len() as u32,
+                lines: lines as u32,
+                error: None,
+                source: None,
+            },
         )
     }
 
     pub fn fail(&self, id: i32, error: &str) -> Result<(), DialogueError> {
         self.finish(
             id,
-            Outcome { status: Status::Failed, text: None, pages: 0, lines: 0, error: Some(error), source: None },
+            Outcome {
+                status: Status::Failed,
+                text: None,
+                pages: 0,
+                lines: 0,
+                error: Some(error),
+                source: None,
+            },
         )
     }
 
@@ -586,7 +606,8 @@ impl DialogueStore {
         if keys.is_empty() {
             return Ok(Vec::new());
         }
-        let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 16);
+        let threads =
+            std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 16);
         let per = keys.len().div_ceil(threads);
         let ranges: Vec<(i32, i32)> = keys.chunks(per).map(|c| (c[0], c[c.len() - 1])).collect();
 
@@ -613,7 +634,8 @@ impl DialogueStore {
         // they cannot fill the page.
         let mut hits = scan(false);
         if hits.len() < limit {
-            let exact_ids: std::collections::HashSet<i32> = hits.iter().map(|h| h.gallery_id).collect();
+            let exact_ids: std::collections::HashSet<i32> =
+                hits.iter().map(|h| h.gallery_id).collect();
             hits.extend(scan(true).into_iter().filter(|h| !exact_ids.contains(&h.gallery_id)));
         }
 
@@ -627,7 +649,13 @@ impl DialogueStore {
         Ok(hits)
     }
 
-    fn scan_range(&self, lo: i32, hi: i32, query: &Query, fuzzy: bool) -> Result<Vec<Hit>, DialogueError> {
+    fn scan_range(
+        &self,
+        lo: i32,
+        hi: i32,
+        query: &Query,
+        fuzzy: bool,
+    ) -> Result<Vec<Hit>, DialogueError> {
         let tx = self.db.begin_read().map_err(db_err)?;
         let codes = tx.open_table(CODES).map_err(db_err)?;
         let texts = tx.open_table(TEXT).map_err(db_err)?;
@@ -961,7 +989,9 @@ mod tests {
         store.enqueue(&[1, 2, 3], Priority::Background).unwrap();
         store.complete(1, &pages(&[&["오늘 날씨가", "참 좋네요"]])).unwrap();
         store.complete(2, &pages(&[&["일단", "구급차라도", "부르눈 게", "좋겠어요"]])).unwrap();
-        store.complete(3, &pages(&[&["뭐라고?"], &["일단 구급차라도", "부르는 게 좋겠어요."]])).unwrap();
+        store
+            .complete(3, &pages(&[&["뭐라고?"], &["일단 구급차라도", "부르는 게 좋겠어요."]]))
+            .unwrap();
 
         let hits = store.search("구급차라도 부르는 게 좋겠어요", 10).unwrap();
         assert_eq!(hits.iter().map(|h| h.gallery_id).collect::<Vec<_>>(), vec![3, 2]);
@@ -1030,7 +1060,8 @@ mod tests {
         for id in [1, 2, 3] {
             store.complete(id, &pages(&[&["x"]])).unwrap();
         }
-        let all: usize = store.export_shards(1_000, false).unwrap().iter().map(|s| s.entries.len()).sum();
+        let all: usize =
+            store.export_shards(1_000, false).unwrap().iter().map(|s| s.entries.len()).sum();
         let public: Vec<i32> = store
             .export_shards(1_000, true)
             .unwrap()
@@ -1049,7 +1080,8 @@ mod tests {
         assert!(decode_pages(&bytes[..3]).is_err());
 
         let codes = encode_codes(&p);
-        let views: Vec<(u16, usize)> = CodeIter::new(&codes).map(|c| (c.page, c.codes.len())).collect();
+        let views: Vec<(u16, usize)> =
+            CodeIter::new(&codes).map(|c| (c.page, c.codes.len())).collect();
         assert_eq!(views.len(), 2);
         assert_eq!(views[0].0, 0);
         assert!(views[0].1 > 0);

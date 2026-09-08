@@ -49,9 +49,19 @@ pub fn parse_record(bytes: &[u8]) -> Result<Chunk, String> {
     let text_len = u32::from_le_bytes(bytes[10..14].try_into().unwrap()) as usize;
     let pages_end = HEADER_LEN + page_count * 4;
     if bytes.len() != pages_end + text_len {
-        return Err(format!("length {} does not match header ({})", bytes.len(), pages_end + text_len));
+        return Err(format!(
+            "length {} does not match header ({})",
+            bytes.len(),
+            pages_end + text_len
+        ));
     }
-    let pages = bytes[HEADER_LEN..pages_end].as_chunks::<4>().0.iter().copied().map(u32::from_le_bytes).collect();
+    let pages = bytes[HEADER_LEN..pages_end]
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .copied()
+        .map(u32::from_le_bytes)
+        .collect();
     let text = String::from_utf8_lossy(&bytes[pages_end..]).into_owned();
     Ok(Chunk { work_id, pages, text })
 }
@@ -73,9 +83,12 @@ impl ChunkReader {
                 return Err(ArtifactError::Missing(path.clone()));
             }
         }
-        let raw = std::fs::read(&offsets_path).map_err(|e| ArtifactError::Io(offsets_path.clone(), e))?;
-        let offsets: Vec<u64> = raw.as_chunks::<8>().0.iter().copied().map(u64::from_le_bytes).collect();
-        let file = File::open(&records_path).map_err(|e| ArtifactError::Io(records_path.clone(), e))?;
+        let raw =
+            std::fs::read(&offsets_path).map_err(|e| ArtifactError::Io(offsets_path.clone(), e))?;
+        let offsets: Vec<u64> =
+            raw.as_chunks::<8>().0.iter().copied().map(u64::from_le_bytes).collect();
+        let file =
+            File::open(&records_path).map_err(|e| ArtifactError::Io(records_path.clone(), e))?;
         Ok(Self {
             records: BufReader::with_capacity(4 << 20, file),
             offsets,
@@ -150,14 +163,20 @@ impl<I: Iterator<Item = Result<Chunk, ArtifactError>>> Iterator for WorkGrouper<
         }
         let id = match i32::try_from(work_id) {
             Ok(id) => id,
-            Err(_) => return Some(Err(ArtifactError::Corrupt(0, format!("work id {work_id} out of range")))),
+            Err(_) => {
+                return Some(Err(ArtifactError::Corrupt(
+                    0,
+                    format!("work id {work_id} out of range"),
+                )));
+            }
         };
         Some(Ok((id, pages)))
     }
 }
 
 fn to_page(chunk: &Chunk) -> PageText {
-    let page = chunk.pages.first().copied().unwrap_or(1).saturating_sub(1).min(u16::MAX as u32) as u16;
+    let page =
+        chunk.pages.first().copied().unwrap_or(1).saturating_sub(1).min(u16::MAX as u32) as u16;
     PageText {
         page,
         lines: chunk.text.split('\n').filter(|l| !l.is_empty()).map(str::to_string).collect(),

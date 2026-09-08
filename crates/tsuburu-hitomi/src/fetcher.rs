@@ -81,17 +81,12 @@ pub mod mock {
         }
 
         fn get<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<Vec<u8>, FetchError>> {
-            Box::pin(async move {
-                self.bodies.get(url).cloned().ok_or(FetchError::Status(404))
-            })
+            Box::pin(async move { self.bodies.get(url).cloned().ok_or(FetchError::Status(404)) })
         }
 
         fn length<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<u64, FetchError>> {
             Box::pin(async move {
-                self.bodies
-                    .get(url)
-                    .map(|b| b.len() as u64)
-                    .ok_or(FetchError::Status(404))
+                self.bodies.get(url).map(|b| b.len() as u64).ok_or(FetchError::Status(404))
             })
         }
     }

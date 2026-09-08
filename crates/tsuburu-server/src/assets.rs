@@ -22,10 +22,7 @@ pub async fn serve(uri: Uri) -> Response {
     // 앱 껍데기로 돌려보낸다.
     match Assets::get("index.html") {
         Some(file) => respond("index.html", file),
-        None => (
-            StatusCode::NOT_FOUND,
-            "frontend assets are missing; run `npm run build` in web/",
-        )
+        None => (StatusCode::NOT_FOUND, "frontend assets are missing; run `npm run build` in web/")
             .into_response(),
     }
 }

@@ -14,6 +14,6 @@ pub mod artifact;
 pub use matcher::{Match, Query};
 pub use shard::{Shard, ShardEntry, ShardError};
 pub use store::{
-    Counts, DialogueError, DialogueStore, Hit, ImportSummary, JobRecord, PageText, Priority, Status,
-    decode_pages, encode_pages,
+    Counts, DialogueError, DialogueStore, Hit, ImportSummary, JobRecord, PageText, Priority,
+    Status, decode_pages, encode_pages,
 };

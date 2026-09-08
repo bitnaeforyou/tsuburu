@@ -7,11 +7,14 @@
 use crate::{Line, Ocr, OcrError, OcrOptions};
 use objc2::AnyThread;
 use objc2::rc::Retained;
-use objc2_core_foundation::{CFBoolean, CFData, CFDictionary, CFNumber, CFRetained, CFString, CFType};
+use objc2_core_foundation::{
+    CFBoolean, CFData, CFDictionary, CFNumber, CFRetained, CFString, CFType,
+};
 use objc2_core_graphics::CGImage;
 use objc2_foundation::{NSArray, NSDictionary, NSString};
 use objc2_image_io::{
-    CGImageSource, kCGImageSourceCreateThumbnailFromImageAlways, kCGImageSourceThumbnailMaxPixelSize,
+    CGImageSource, kCGImageSourceCreateThumbnailFromImageAlways,
+    kCGImageSourceThumbnailMaxPixelSize,
 };
 use objc2_vision::{
     VNImageRequestHandler, VNRecognizeTextRequest, VNRequest, VNRequestTextRecognitionLevel,
@@ -39,7 +42,8 @@ impl VisionOcr {
         let values: [&CFType; 2] = [&size, always.as_ref()];
         let dictionary = CFDictionary::from_slices(&keys, &values);
 
-        unsafe { source.thumbnail_at_index(0, Some(dictionary.as_opaque())) }.ok_or(OcrError::Decode)
+        unsafe { source.thumbnail_at_index(0, Some(dictionary.as_opaque())) }
+            .ok_or(OcrError::Decode)
     }
 }
 

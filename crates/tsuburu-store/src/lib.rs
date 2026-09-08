@@ -119,10 +119,7 @@ impl Store {
                 }
                 Some(found) if found == SCHEMA_VERSION => {}
                 Some(found) => {
-                    return Err(StoreError::NewerSchema {
-                        found,
-                        expected: SCHEMA_VERSION.into(),
-                    });
+                    return Err(StoreError::NewerSchema { found, expected: SCHEMA_VERSION.into() });
                 }
             }
         }
@@ -167,11 +164,7 @@ impl Store {
         summary: Summary,
         last_page: usize,
     ) -> Result<HistoryEntry, StoreError> {
-        let entry = HistoryEntry {
-            summary,
-            last_seen_at: now_millis(),
-            last_page,
-        };
+        let entry = HistoryEntry { summary, last_seen_at: now_millis(), last_page };
         self.put(HISTORY, entry.summary.id, &entry)?;
         Ok(entry)
     }
@@ -267,10 +260,7 @@ fn db_err(err: impl std::fmt::Display) -> StoreError {
 }
 
 fn now_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -396,9 +386,6 @@ mod tests {
             }
             tx.commit().unwrap();
         }
-        assert!(matches!(
-            Store::open(&path),
-            Err(StoreError::NewerSchema { .. })
-        ));
+        assert!(matches!(Store::open(&path), Err(StoreError::NewerSchema { .. })));
     }
 }

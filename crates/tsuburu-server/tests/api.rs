@@ -131,10 +131,8 @@ fn app(server: &MockServer) -> axum::Router {
 }
 
 async fn get_json(app: axum::Router, uri: &str) -> (StatusCode, serde_json::Value) {
-    let response = app
-        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
-        .await
-        .unwrap();
+    let response =
+        app.oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap()).await.unwrap();
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
@@ -331,8 +329,11 @@ async fn korean_terms_are_translated_and_reported() {
 async fn untranslatable_terms_are_reported_as_such() {
     // 작가 이름은 사전에 거의 없다. 사용자가 그 사실을 알 수 있어야 한다.
     let server = hitomi_stub().await;
-    let (status, body) =
-        get_json(app(&server), "/api/search?q=%EC%8B%9C%EC%99%80%EC%8A%A4%EB%85%B8%EC%98%A4%ED%82%A4%EB%82%98").await;
+    let (status, body) = get_json(
+        app(&server),
+        "/api/search?q=%EC%8B%9C%EC%99%80%EC%8A%A4%EB%85%B8%EC%98%A4%ED%82%A4%EB%82%98",
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["terms"][0]["translated"], false);

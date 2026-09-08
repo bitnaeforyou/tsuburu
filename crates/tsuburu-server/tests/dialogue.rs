@@ -16,7 +16,8 @@ fn grinder(dir: &tempfile::TempDir, ocr: MockOcr) -> Arc<Grinder> {
     let store = DialogueStore::open(dir.path().join("dialogue.redb")).unwrap();
     let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
     // Point at a dead address: nothing here should need the network.
-    let cfg = Config { scheme: "http".into(), ltn_domain: "127.0.0.1:9".into(), ..Config::default() };
+    let cfg =
+        Config { scheme: "http".into(), ltn_domain: "127.0.0.1:9".into(), ..Config::default() };
     Arc::new(Grinder::new(fetcher, cfg, Arc::new(store), Arc::new(ocr)))
 }
 
@@ -24,9 +25,13 @@ fn app(grinder: Option<Arc<Grinder>>) -> axum::Router {
     app_with_shards(grinder, None)
 }
 
-fn app_with_shards(grinder: Option<Arc<Grinder>>, shards: Option<std::path::PathBuf>) -> axum::Router {
+fn app_with_shards(
+    grinder: Option<Arc<Grinder>>,
+    shards: Option<std::path::PathBuf>,
+) -> axum::Router {
     let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
-    let cfg = Config { scheme: "http".into(), ltn_domain: "127.0.0.1:9".into(), ..Config::default() };
+    let cfg =
+        Config { scheme: "http".into(), ltn_domain: "127.0.0.1:9".into(), ..Config::default() };
     let mut state = AppState::full(fetcher, cfg, None, grinder);
     if let Some(dir) = shards {
         state = state.with_shards_dir(dir);
@@ -34,8 +39,14 @@ fn app_with_shards(grinder: Option<Arc<Grinder>>, shards: Option<std::path::Path
     router(Arc::new(state))
 }
 
-async fn call(app: axum::Router, method: &str, uri: &str, body: Option<serde_json::Value>) -> (StatusCode, serde_json::Value) {
-    let builder = Request::builder().method(method).uri(uri).header(header::CONTENT_TYPE, "application/json");
+async fn call(
+    app: axum::Router,
+    method: &str,
+    uri: &str,
+    body: Option<serde_json::Value>,
+) -> (StatusCode, serde_json::Value) {
+    let builder =
+        Request::builder().method(method).uri(uri).header(header::CONTENT_TYPE, "application/json");
     let request = match body {
         Some(json) => builder.body(Body::from(json.to_string())).unwrap(),
         None => builder.body(Body::empty()).unwrap(),
@@ -97,7 +108,8 @@ async fn pasted_history_is_queued_ahead_of_everything() {
     let body = serde_json::json!({
         "text": "https://hitomi.la/doujinshi/x-korean-777.html\n888",
     });
-    let (status, response) = call(app(Some(Arc::clone(&g))), "POST", "/api/dialogue/enqueue", Some(body)).await;
+    let (status, response) =
+        call(app(Some(Arc::clone(&g))), "POST", "/api/dialogue/enqueue", Some(body)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(response["found"], 2);
     assert_eq!(response["added"], 2);
@@ -114,7 +126,8 @@ async fn settings_round_trip_and_default_off() {
         let body = serde_json::json!({
             "enabled": true, "language": "korean", "kinds": ["doujinshi"], "bytes_per_second": 1048576
         });
-        let (status, _) = call(app(Some(Arc::clone(&g))), "PUT", "/api/dialogue/settings", Some(body)).await;
+        let (status, _) =
+            call(app(Some(Arc::clone(&g))), "PUT", "/api/dialogue/settings", Some(body)).await;
         assert_eq!(status, StatusCode::OK);
         assert!(g.settings().await.enabled);
         assert_eq!(g.settings().await.kinds, vec!["doujinshi"]);
@@ -124,7 +137,8 @@ async fn settings_round_trip_and_default_off() {
     // Persisted: a fresh grinder over the same store starts enabled.
     let store = DialogueStore::open(dir.path().join("dialogue.redb")).unwrap();
     let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
-    let again = Grinder::new(fetcher, Config::default(), Arc::new(store), Arc::new(MockOcr::default()));
+    let again =
+        Grinder::new(fetcher, Config::default(), Arc::new(store), Arc::new(MockOcr::default()));
     assert!(again.settings().await.enabled);
 }
 
@@ -134,10 +148,22 @@ async fn search_api_returns_hits_with_counts() {
     let g = grinder(&dir, MockOcr::default());
     g.store().enqueue(&[5], Priority::Background).unwrap();
     g.store()
-        .complete(5, &[tsuburu_dialogue::PageText { page: 3, lines: vec!["뭐라고".into(), "안녕하세요".into()] }])
+        .complete(
+            5,
+            &[tsuburu_dialogue::PageText {
+                page: 3,
+                lines: vec!["뭐라고".into(), "안녕하세요".into()],
+            }],
+        )
         .unwrap();
 
-    let (status, body) = call(app(Some(g)), "GET", "/api/dialogue/search?q=%EC%95%88%EB%85%95%ED%95%98%EC%84%B8%EC%9A%94", None).await;
+    let (status, body) = call(
+        app(Some(g)),
+        "GET",
+        "/api/dialogue/search?q=%EC%95%88%EB%85%95%ED%95%98%EC%84%B8%EC%9A%94",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["hits"][0]["gallery_id"], 5);
     assert_eq!(body["hits"][0]["page"], 3);
@@ -149,8 +175,15 @@ async fn shards_round_trip_between_two_machines_through_the_api() {
     let dir_a = tempfile::tempdir().unwrap();
     let a = grinder(&dir_a, MockOcr::default());
     a.store().enqueue(&[10, 20], Priority::Background).unwrap();
-    a.store().complete(10, &[tsuburu_dialogue::PageText { page: 0, lines: vec!["공유되는 대사".into()] }]).unwrap();
-    a.store().complete(20, &[tsuburu_dialogue::PageText { page: 0, lines: vec!["또 하나".into()] }]).unwrap();
+    a.store()
+        .complete(
+            10,
+            &[tsuburu_dialogue::PageText { page: 0, lines: vec!["공유되는 대사".into()] }],
+        )
+        .unwrap();
+    a.store()
+        .complete(20, &[tsuburu_dialogue::PageText { page: 0, lines: vec!["또 하나".into()] }])
+        .unwrap();
 
     // Machine A exports.
     let shards_a = dir_a.path().join("shards");
@@ -168,7 +201,12 @@ async fn shards_round_trip_between_two_machines_through_the_api() {
 
     // The file can be downloaded...
     let response = app_with_shards(Some(Arc::clone(&a)), Some(shards_a.clone()))
-        .oneshot(Request::builder().uri(format!("/api/dialogue/shards/{name}")).body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/dialogue/shards/{name}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -178,7 +216,9 @@ async fn shards_round_trip_between_two_machines_through_the_api() {
     let dir_b = tempfile::tempdir().unwrap();
     let b = grinder(&dir_b, MockOcr::default());
     b.store().enqueue(&[20], Priority::Background).unwrap();
-    b.store().complete(20, &[tsuburu_dialogue::PageText { page: 0, lines: vec!["B의 것".into()] }]).unwrap();
+    b.store()
+        .complete(20, &[tsuburu_dialogue::PageText { page: 0, lines: vec!["B의 것".into()] }])
+        .unwrap();
 
     let response = app(Some(Arc::clone(&b)))
         .oneshot(

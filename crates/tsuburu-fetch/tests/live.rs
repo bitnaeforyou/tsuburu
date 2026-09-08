@@ -9,23 +9,17 @@ use tsuburu_fetch::{FetchConfig, HttpFetcher};
 use tsuburu_hitomi::{Config, parse_query};
 
 fn setup() -> (HttpFetcher, Config) {
-    (
-        HttpFetcher::new(FetchConfig::default()).unwrap(),
-        Config::default(),
-    )
+    (HttpFetcher::new(FetchConfig::default()).unwrap(), Config::default())
 }
 
 #[tokio::test]
 #[ignore = "requires network access to hitomi"]
 async fn searches_real_index() {
     let (fetcher, cfg) = setup();
-    let version = tsuburu_hitomi::galleries_index_version(&fetcher, &cfg)
-        .await
-        .unwrap();
+    let version = tsuburu_hitomi::galleries_index_version(&fetcher, &cfg).await.unwrap();
 
-    let ids = tsuburu_hitomi::search_term(&fetcher, &cfg, &version, "naruto", Some(10))
-        .await
-        .unwrap();
+    let ids =
+        tsuburu_hitomi::search_term(&fetcher, &cfg, &version, "naruto", Some(10)).await.unwrap();
 
     assert!(!ids.is_empty(), "naruto must match galleries");
     assert!(ids.len() <= 10);
@@ -39,17 +33,12 @@ async fn searches_real_index() {
 #[ignore = "requires network access to hitomi"]
 async fn intersects_two_terms() {
     let (fetcher, cfg) = setup();
-    let version = tsuburu_hitomi::galleries_index_version(&fetcher, &cfg)
-        .await
-        .unwrap();
+    let version = tsuburu_hitomi::galleries_index_version(&fetcher, &cfg).await.unwrap();
 
     let query = parse_query("glasses school");
-    let both = tsuburu_hitomi::search(&fetcher, &cfg, &version, &query, None)
-        .await
-        .unwrap();
-    let single = tsuburu_hitomi::search_term(&fetcher, &cfg, &version, "glasses", None)
-        .await
-        .unwrap();
+    let both = tsuburu_hitomi::search(&fetcher, &cfg, &version, &query, None).await.unwrap();
+    let single =
+        tsuburu_hitomi::search_term(&fetcher, &cfg, &version, "glasses", None).await.unwrap();
 
     assert!(!both.is_empty(), "these common tags must overlap");
     assert!(both.len() < single.len(), "AND must narrow the result");
@@ -67,18 +56,12 @@ async fn intersects_two_terms() {
 #[ignore = "requires network access to hitomi"]
 async fn cache_removes_roundtrips_on_repeat() {
     let (fetcher, cfg) = setup();
-    let version = tsuburu_hitomi::galleries_index_version(&fetcher, &cfg)
-        .await
-        .unwrap();
+    let version = tsuburu_hitomi::galleries_index_version(&fetcher, &cfg).await.unwrap();
 
-    tsuburu_hitomi::search_term(&fetcher, &cfg, &version, "naruto", Some(5))
-        .await
-        .unwrap();
+    tsuburu_hitomi::search_term(&fetcher, &cfg, &version, "naruto", Some(5)).await.unwrap();
     let after_first = fetcher.stats().requests;
 
-    tsuburu_hitomi::search_term(&fetcher, &cfg, &version, "naruto", Some(5))
-        .await
-        .unwrap();
+    tsuburu_hitomi::search_term(&fetcher, &cfg, &version, "naruto", Some(5)).await.unwrap();
     let after_second = fetcher.stats().requests;
 
     assert_eq!(
@@ -91,16 +74,11 @@ async fn cache_removes_roundtrips_on_repeat() {
 #[ignore = "requires network access to hitomi"]
 async fn fetches_gallery_and_builds_image_url() {
     let (fetcher, cfg) = setup();
-    let version = tsuburu_hitomi::galleries_index_version(&fetcher, &cfg)
-        .await
-        .unwrap();
-    let ids = tsuburu_hitomi::search_term(&fetcher, &cfg, &version, "naruto", Some(1))
-        .await
-        .unwrap();
+    let version = tsuburu_hitomi::galleries_index_version(&fetcher, &cfg).await.unwrap();
+    let ids =
+        tsuburu_hitomi::search_term(&fetcher, &cfg, &version, "naruto", Some(1)).await.unwrap();
 
-    let gallery = tsuburu_hitomi::fetch_gallery(&fetcher, &cfg, ids[0])
-        .await
-        .unwrap();
+    let gallery = tsuburu_hitomi::fetch_gallery(&fetcher, &cfg, ids[0]).await.unwrap();
     assert!(!gallery.files.is_empty());
 
     let gg = tsuburu_hitomi::fetch_gg(&fetcher, &cfg).await.unwrap();

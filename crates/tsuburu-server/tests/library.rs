@@ -57,7 +57,8 @@ fn summary() -> serde_json::Value {
 async fn favorites_can_be_added_listed_and_removed() {
     let dir = tempfile::tempdir().unwrap();
 
-    let (status, body) = call(app_with_library(&dir), "PUT", "/api/favorites/42", Some(summary())).await;
+    let (status, body) =
+        call(app_with_library(&dir), "PUT", "/api/favorites/42", Some(summary())).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["id"], 42);
     assert_eq!(body["title"], "Test Gallery");

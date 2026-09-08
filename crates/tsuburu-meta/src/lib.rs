@@ -9,7 +9,9 @@
 //! Anything newer than the snapshot still goes to the network; callers
 //! check [`MetaStore::latest_id`].
 
-use redb::{Database, MultimapTableDefinition, ReadableTable, ReadableTableMetadata, TableDefinition};
+use redb::{
+    Database, MultimapTableDefinition, ReadableTable, ReadableTableMetadata, TableDefinition,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -277,7 +279,11 @@ impl MetaStore {
     /// A bare term is looked up in every namespace and the results merged.
     /// Tags carry a `female:`/`male:` prefix in the source, so a bare
     /// `glasses` also tries both, the way hitomi's own search reads it.
-    fn ids_for_term(&self, tx: &redb::ReadTransaction, term: &str) -> Result<HashSet<i32>, MetaError> {
+    fn ids_for_term(
+        &self,
+        tx: &redb::ReadTransaction,
+        term: &str,
+    ) -> Result<HashSet<i32>, MetaError> {
         let term = term.trim().to_lowercase();
         if let Some(tag) = term.strip_prefix("tag:") {
             let mut out = self.ids_for(tx, &term)?;
@@ -304,7 +310,12 @@ impl MetaStore {
     /// Evaluates a query. Terms and filters intersect; the title, when
     /// given, is matched as a jamo-normalised substring so Korean titles
     /// match regardless of spacing.
-    pub fn search(&self, query: &MetaQuery, offset: usize, limit: usize) -> Result<Page, MetaError> {
+    pub fn search(
+        &self,
+        query: &MetaQuery,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Page, MetaError> {
         if query.is_empty() {
             return Ok(Page::default());
         }
@@ -376,7 +387,8 @@ impl MetaStore {
         if keys.is_empty() {
             return Ok(Vec::new());
         }
-        let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 16);
+        let threads =
+            std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 16);
         let per = keys.len().div_ceil(threads);
         let ranges: Vec<(i32, i32)> = keys.chunks(per).map(|c| (c[0], c[c.len() - 1])).collect();
 
@@ -437,7 +449,8 @@ impl MetaStore {
 }
 
 fn decode_work(bytes: &[u8]) -> Result<Work, MetaError> {
-    let raw = lz4_flex::decompress_size_prepended(bytes).map_err(|e| MetaError::Corrupt(e.to_string()))?;
+    let raw = lz4_flex::decompress_size_prepended(bytes)
+        .map_err(|e| MetaError::Corrupt(e.to_string()))?;
     Ok(serde_json::from_slice(&raw)?)
 }
 
@@ -473,9 +486,23 @@ mod tests {
         store
             .import_works(
                 vec![
-                    work(1, "Drip Coffee | 드립 커피→프롬♡유", "borusiti", &["female:big breasts"], "korean", "manga"),
+                    work(
+                        1,
+                        "Drip Coffee | 드립 커피→프롬♡유",
+                        "borusiti",
+                        &["female:big breasts"],
+                        "korean",
+                        "manga",
+                    ),
                     work(2, "Emma Chuui", "keso", &["female:glasses"], "japanese", "doujinshi"),
-                    work(3, "Maison Inkaku | 메종음핵", "keso", &["female:glasses", "female:big breasts"], "korean", "manga"),
+                    work(
+                        3,
+                        "Maison Inkaku | 메종음핵",
+                        "keso",
+                        &["female:glasses", "female:big breasts"],
+                        "korean",
+                        "manga",
+                    ),
                 ],
                 2,
                 |_| {},
@@ -506,14 +533,21 @@ mod tests {
         };
         assert_eq!(store.search(&q, 0, 10).unwrap().ids, vec![3]);
 
-        let q = MetaQuery { terms: vec!["glasses".into()], language: Some("korean".into()), ..MetaQuery::default() };
+        let q = MetaQuery {
+            terms: vec!["glasses".into()],
+            language: Some("korean".into()),
+            ..MetaQuery::default()
+        };
         assert_eq!(store.search(&q, 0, 10).unwrap().ids, vec![3]);
     }
 
     #[test]
     fn explicit_tag_terms_also_cover_gendered_variants() {
         let (store, _d) = seeded();
-        let q = MetaQuery { terms: vec!["tag:glasses".into(), "artist:keso".into()], ..MetaQuery::default() };
+        let q = MetaQuery {
+            terms: vec!["tag:glasses".into(), "artist:keso".into()],
+            ..MetaQuery::default()
+        };
         assert_eq!(store.search(&q, 0, 10).unwrap().ids, vec![3, 2]);
     }
 
@@ -529,7 +563,11 @@ mod tests {
         let (store, _d) = seeded();
         let q = MetaQuery { title: Some("메종 음핵".into()), ..MetaQuery::default() };
         assert_eq!(store.search(&q, 0, 10).unwrap().ids, vec![3]);
-        let q = MetaQuery { title: Some("드립커피".into()), kind: Some("manga".into()), ..MetaQuery::default() };
+        let q = MetaQuery {
+            title: Some("드립커피".into()),
+            kind: Some("manga".into()),
+            ..MetaQuery::default()
+        };
         assert_eq!(store.search(&q, 0, 10).unwrap().ids, vec![1]);
     }
 
@@ -547,7 +585,13 @@ mod tests {
         let (store, _d) = seeded();
         let s = store.suggest("artist:ke", 5).unwrap();
         assert_eq!(s, vec![("artist:keso".to_string(), 2)]);
-        assert!(store.suggest("tag:female:g", 5).unwrap().iter().any(|(k, _)| k == "tag:female:glasses"));
+        assert!(
+            store
+                .suggest("tag:female:g", 5)
+                .unwrap()
+                .iter()
+                .any(|(k, _)| k == "tag:female:glasses")
+        );
     }
 
     #[test]

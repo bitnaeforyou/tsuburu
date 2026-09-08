@@ -132,10 +132,7 @@ mod tests {
 
     #[test]
     fn rejects_body_without_prefix() {
-        assert!(matches!(
-            parse_gallery_info(r#"{"files":[]}"#),
-            Err(GalleryError::MissingPrefix)
-        ));
+        assert!(matches!(parse_gallery_info(r#"{"files":[]}"#), Err(GalleryError::MissingPrefix)));
     }
 
     #[test]

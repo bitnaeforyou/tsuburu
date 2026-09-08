@@ -94,20 +94,33 @@ pub async fn search(
     }
     let limit = params.limit.clamp(1, MAX_LIMIT);
     let offset = params.offset;
-    let page = tokio::task::spawn_blocking(move || -> Result<tsuburu_meta::Page, tsuburu_meta::MetaError> {
-        if free.is_empty() {
-            return meta.search(&base, offset, limit);
-        }
-        // Free text: title substring, or the whole text as one term.
-        let by_title = meta.search(&MetaQuery { title: Some(free.clone()), ..base.clone() }, 0, usize::MAX)?;
-        let by_term = meta.search(&MetaQuery { terms: vec![free.clone()], ..base.clone() }, 0, usize::MAX)?;
-        let mut ids: Vec<i32> = by_title.ids;
-        let seen: std::collections::HashSet<i32> = ids.iter().copied().collect();
-        ids.extend(by_term.ids.into_iter().filter(|id| !seen.contains(id)));
-        ids.sort_unstable_by(|a, b| b.cmp(a));
-        let total = ids.len();
-        Ok(tsuburu_meta::Page { total, ids: ids.into_iter().skip(offset).take(limit).collect() })
-    })
+    let page = tokio::task::spawn_blocking(
+        move || -> Result<tsuburu_meta::Page, tsuburu_meta::MetaError> {
+            if free.is_empty() {
+                return meta.search(&base, offset, limit);
+            }
+            // Free text: title substring, or the whole text as one term.
+            let by_title = meta.search(
+                &MetaQuery { title: Some(free.clone()), ..base.clone() },
+                0,
+                usize::MAX,
+            )?;
+            let by_term = meta.search(
+                &MetaQuery { terms: vec![free.clone()], ..base.clone() },
+                0,
+                usize::MAX,
+            )?;
+            let mut ids: Vec<i32> = by_title.ids;
+            let seen: std::collections::HashSet<i32> = ids.iter().copied().collect();
+            ids.extend(by_term.ids.into_iter().filter(|id| !seen.contains(id)));
+            ids.sort_unstable_by(|a, b| b.cmp(a));
+            let total = ids.len();
+            Ok(tsuburu_meta::Page {
+                total,
+                ids: ids.into_iter().skip(offset).take(limit).collect(),
+            })
+        },
+    )
     .await
     .map_err(|e| storage(&e))?
     .map_err(storage)?;

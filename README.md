@@ -66,7 +66,9 @@ tsuburu import-meta   /path/to/artifact/data.db   # metadata for 1.46M galleries
 ```
 
 Stop the server first; each database is opened by one process at a time.
-`import-meta` reads the SQLite file through the local `sqlite3` command.
+`import-meta` reads the SQLite file through the local `sqlite3` command: macOS
+ships it, Linux has it in a package, and on Windows `sqlite3.exe` from
+sqlite.org needs to be on `PATH`.
 
 With the metadata snapshot loaded, cards for galleries it covers never touch
 the network, and the search bar gains a **local titles & artists** scope that
@@ -111,6 +113,14 @@ export can leave out the galleries you chose to read yourself.
 
 Recognition uses Vision on macOS. Other platforms report the feature as
 unavailable rather than pretending.
+
+## Platforms
+
+Searching, reading, favorites, history and the imports work everywhere. Text
+recognition is the exception: it calls the operating system's own OCR, which
+so far means Vision on macOS. Elsewhere the Dialogue tab reports itself as
+unavailable rather than pretending, though an imported corpus is still
+searchable.
 
 ## Building
 

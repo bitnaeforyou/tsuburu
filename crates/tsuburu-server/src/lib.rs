@@ -3,8 +3,8 @@
 pub mod api;
 pub mod assets;
 pub mod dialogue;
-pub mod grinder;
 pub mod error;
+pub mod grinder;
 pub mod library;
 pub mod meta;
 pub mod proxy;

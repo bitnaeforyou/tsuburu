@@ -15,7 +15,9 @@ use std::sync::Arc;
 use tsuburu_dialogue::{Counts, Hit, ImportSummary, Priority, Shard};
 
 use crate::error::{ApiError, ErrorKind};
-use crate::grinder::{Coverage, Grinder, GrinderSettings, GrinderStatus, ImportProgress, ids_from_text};
+use crate::grinder::{
+    Coverage, Grinder, GrinderSettings, GrinderStatus, ImportProgress, ids_from_text,
+};
 use crate::state::AppState;
 
 const MAX_RESULTS: usize = 100;
@@ -301,7 +303,9 @@ pub async fn export(
     Ok(Json(ExportResponse { directory: dir.display().to_string(), files }))
 }
 
-pub async fn list_shards(State(state): State<Arc<AppState>>) -> Result<Json<ExportResponse>, ApiError> {
+pub async fn list_shards(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ExportResponse>, ApiError> {
     let dir = shards_dir(&state)?.clone();
     let mut files = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&dir) {

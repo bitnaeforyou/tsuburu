@@ -46,7 +46,12 @@ pub struct GgMap {
 }
 
 impl GgMap {
-    pub fn new(prefix: String, listed: HashSet<u32>, default_value: u32, listed_value: u32) -> Self {
+    pub fn new(
+        prefix: String,
+        listed: HashSet<u32>,
+        default_value: u32,
+        listed_value: u32,
+    ) -> Self {
         Self { prefix, listed, default_value, listed_value }
     }
 
@@ -64,8 +69,8 @@ pub fn parse_gg(body: &str) -> Result<GgMap, ImageError> {
     let default_value = extract_number_after(body, "var o =").ok_or(ImageError::MissingDefault)?;
     // switch 안의 대입은 `var o =` 뒤에 나온다. 그 지점 이후에서 찾는다.
     let switch_at = body.find("switch").unwrap_or(0);
-    let listed_value = extract_number_after(&body[switch_at..], "o =")
-        .ok_or(ImageError::MissingCaseValue)?;
+    let listed_value =
+        extract_number_after(&body[switch_at..], "o =").ok_or(ImageError::MissingCaseValue)?;
 
     Ok(GgMap { prefix, listed, default_value, listed_value })
 }
@@ -166,13 +171,7 @@ mod tests {
     use super::*;
 
     fn file(hash: &str, hasavif: u8) -> GalleryFile {
-        GalleryFile {
-            hash: hash.into(),
-            name: "001.jpg".into(),
-            width: 1,
-            height: 1,
-            hasavif,
-        }
+        GalleryFile { hash: hash.into(), name: "001.jpg".into(), width: 1, height: 1, hasavif }
     }
 
     const HASH: &str = "637a35d9d5a892a8b86b97fe9b42e5cf49b8edd6685f7e1baf8f3b361f6cd3e2";
@@ -214,10 +213,10 @@ mod tests {
     fn the_same_hash_flips_subdomain_when_the_polarity_flips() {
         // 해시 끝이 3e2 -> 세그먼트 574. 두 파일 모두 574를 나열하고 있으므로
         // 극성만으로 서브도메인이 갈린다.
-        let current = image_url(&Config::default(), &parse_gg(CURRENT).unwrap(), &file(HASH, 1))
-            .unwrap();
-        let legacy = image_url(&Config::default(), &parse_gg(LEGACY).unwrap(), &file(HASH, 1))
-            .unwrap();
+        let current =
+            image_url(&Config::default(), &parse_gg(CURRENT).unwrap(), &file(HASH, 1)).unwrap();
+        let legacy =
+            image_url(&Config::default(), &parse_gg(LEGACY).unwrap(), &file(HASH, 1)).unwrap();
         assert!(current.starts_with("https://a2."), "{current}");
         assert!(legacy.starts_with("https://a1."), "{legacy}");
     }
@@ -238,10 +237,7 @@ mod tests {
     fn derives_subdomain_and_path_from_hash() {
         let gg = GgMap::new("999/".into(), [574u32].into_iter().collect(), 1, 0);
         let url = image_url(&Config::default(), &gg, &file(HASH, 1)).unwrap();
-        assert_eq!(
-            url,
-            format!("https://a1.gold-usergeneratedcontent.net/999/574/{HASH}.avif")
-        );
+        assert_eq!(url, format!("https://a1.gold-usergeneratedcontent.net/999/574/{HASH}.avif"));
     }
 
     #[test]

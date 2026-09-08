@@ -243,16 +243,14 @@ impl Grinder {
 
             match next {
                 Some(id) => self.process(id).await,
-                None => {
-                    match self.refill().await {
-                        Ok(0) => tokio::time::sleep(Duration::from_secs(30)).await,
-                        Ok(_) => {}
-                        Err(err) => {
-                            self.note_error(format!("could not refill the queue: {err}")).await;
-                            tokio::time::sleep(Duration::from_secs(30)).await;
-                        }
+                None => match self.refill().await {
+                    Ok(0) => tokio::time::sleep(Duration::from_secs(30)).await,
+                    Ok(_) => {}
+                    Err(err) => {
+                        self.note_error(format!("could not refill the queue: {err}")).await;
+                        tokio::time::sleep(Duration::from_secs(30)).await;
                     }
-                }
+                },
             }
         }
         self.status.write().await.running = false;
@@ -264,7 +262,8 @@ impl Grinder {
         let settings = self.settings.read().await.clone();
         let language = settings.language.as_str();
         let popular = self.cfg.sort_list_url(Sort::PopularYear, language);
-        let total = nozomi::count(self.fetcher.as_ref(), &popular).await.map_err(|e| e.to_string())?;
+        let total =
+            nozomi::count(self.fetcher.as_ref(), &popular).await.map_err(|e| e.to_string())?;
 
         // With re-indexing on, only what this machine has read counts as done.
         let done = if settings.reindex_imported {
@@ -339,7 +338,8 @@ impl Grinder {
             Err(err) => {
                 tracing::warn!(id, %err, "gallery failed");
                 if let Err(store_err) = self.store.fail(id, &err) {
-                    self.note_error(format!("could not record failure for {id}: {store_err}")).await;
+                    self.note_error(format!("could not record failure for {id}: {store_err}"))
+                        .await;
                 }
                 self.status.write().await.last_error = Some(format!("gallery {id}: {err}"));
             }
@@ -357,7 +357,12 @@ impl Grinder {
         let gg = tsuburu_hitomi::fetch_gg(self.fetcher.as_ref(), &self.cfg)
             .await
             .map_err(|e| e.to_string())?;
-        tracing::debug!(id, ms = started.elapsed().as_millis() as u64, pages = gallery.files.len(), "metadata ready");
+        tracing::debug!(
+            id,
+            ms = started.elapsed().as_millis() as u64,
+            pages = gallery.files.len(),
+            "metadata ready"
+        );
 
         let urls: Vec<(u16, String)> = gallery
             .files
@@ -520,12 +525,8 @@ pub fn ids_from_text(text: &str) -> Vec<i32> {
     let mut out = Vec::new();
     let mut seen = HashSet::new();
     for token in text.split(|c: char| c.is_whitespace() || c == ',' || c == ';') {
-        let candidate = token
-            .trim()
-            .trim_end_matches(".html")
-            .rsplit(['-', '/'])
-            .next()
-            .unwrap_or("");
+        let candidate =
+            token.trim().trim_end_matches(".html").rsplit(['-', '/']).next().unwrap_or("");
         if let Ok(id) = candidate.parse::<i32>()
             && id > 0
             && seen.insert(id)

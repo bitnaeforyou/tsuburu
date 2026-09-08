@@ -114,11 +114,8 @@ impl HttpFetcher {
     /// Retries transient failures. A refusal from the server is final; a
     /// broken connection is not.
     async fn send(&self, url: &str, range: Option<Range<u64>>) -> Result<Vec<u8>, FetchError> {
-        let _permit = self
-            .limiter
-            .acquire()
-            .await
-            .map_err(|e| FetchError::Network(e.to_string()))?;
+        let _permit =
+            self.limiter.acquire().await.map_err(|e| FetchError::Network(e.to_string()))?;
 
         let mut last = None;
         for attempt in 0..self.attempts {
@@ -136,10 +133,7 @@ impl HttpFetcher {
     }
 
     async fn attempt(&self, url: &str, range: Option<Range<u64>>) -> Result<Vec<u8>, FetchError> {
-        let mut request = self
-            .client
-            .get(url)
-            .header(reqwest::header::REFERER, &self.referer);
+        let mut request = self.client.get(url).header(reqwest::header::REFERER, &self.referer);
         if let Some(r) = &range {
             // Range 헤더의 끝은 포함이다. 호출 쪽은 반열린 구간을 쓴다.
             request = request.header(
@@ -148,16 +142,10 @@ impl HttpFetcher {
             );
         }
 
-        let response = request
-            .send()
-            .await
-            .map_err(|e| FetchError::Network(e.to_string()))?;
+        let response = request.send().await.map_err(|e| FetchError::Network(e.to_string()))?;
         check_status(response.status().as_u16())?;
 
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|e| FetchError::Network(e.to_string()))?;
+        let bytes = response.bytes().await.map_err(|e| FetchError::Network(e.to_string()))?;
 
         self.counters.requests.fetch_add(1, Ordering::Relaxed);
         self.counters.bytes.fetch_add(bytes.len() as u64, Ordering::Relaxed);
@@ -184,11 +172,7 @@ fn total_from_content_range(value: &str) -> Option<u64> {
 
 /// 206은 Range 응답, 200은 서버가 Range를 무시하고 전체를 준 경우다.
 fn check_status(status: u16) -> Result<(), FetchError> {
-    if status == 200 || status == 206 {
-        Ok(())
-    } else {
-        Err(FetchError::Status(status))
-    }
+    if status == 200 || status == 206 { Ok(()) } else { Err(FetchError::Status(status)) }
 }
 
 impl Fetcher for HttpFetcher {
@@ -224,11 +208,8 @@ impl Fetcher for HttpFetcher {
             // `Content-Range: bytes 0-0/12345` 마지막 숫자가 전체 길이다.
             // Range를 무시하고 200으로 전부 주는 서버에서는 Content-Length가
             // 곧 전체 길이이므로 양쪽 모두 처리된다.
-            let _permit = self
-                .limiter
-                .acquire()
-                .await
-                .map_err(|e| FetchError::Network(e.to_string()))?;
+            let _permit =
+                self.limiter.acquire().await.map_err(|e| FetchError::Network(e.to_string()))?;
             let response = self
                 .client
                 .get(url)
@@ -312,10 +293,7 @@ mod tests {
             .await;
 
         let fetcher = HttpFetcher::new(FetchConfig::default()).unwrap();
-        fetcher
-            .get_range(&format!("{}/idx", server.uri()), 0..464)
-            .await
-            .unwrap();
+        fetcher.get_range(&format!("{}/idx", server.uri()), 0..464).await.unwrap();
     }
 
     #[test]
@@ -356,10 +334,7 @@ mod tests {
             .await;
 
         let fetcher = HttpFetcher::new(FetchConfig::default()).unwrap();
-        assert_eq!(
-            fetcher.length(&format!("{}/list", server.uri())).await.unwrap(),
-            40
-        );
+        assert_eq!(fetcher.length(&format!("{}/list", server.uri())).await.unwrap(), 40);
     }
 
     #[test]
@@ -418,10 +393,7 @@ mod tests {
             .await;
 
         let fetcher = HttpFetcher::new(FetchConfig::default()).unwrap();
-        let err = fetcher
-            .get(&format!("{}/missing", server.uri()))
-            .await
-            .unwrap_err();
+        let err = fetcher.get(&format!("{}/missing", server.uri())).await.unwrap_err();
         assert!(matches!(err, FetchError::Status(404)));
     }
 }

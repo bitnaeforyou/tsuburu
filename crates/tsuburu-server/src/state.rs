@@ -133,8 +133,7 @@ impl AppState {
     /// 깨진 것처럼 보인다.
     pub async fn refresh_gg(&self) -> Result<GgMap, tsuburu_hitomi::GalleryFetchError> {
         let fresh = tsuburu_hitomi::fetch_gg(self.fetcher.as_ref(), &self.cfg).await?;
-        *self.gg.write().await =
-            Some(Cached { value: fresh.clone(), fetched_at: Instant::now() });
+        *self.gg.write().await = Some(Cached { value: fresh.clone(), fetched_at: Instant::now() });
         Ok(fresh)
     }
 }

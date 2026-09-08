@@ -58,16 +58,8 @@ pub async fn search(
     // 한국어를 hitomi가 아는 영어로 보정한다. 사전에 없으면 입력 그대로 쓴다.
     let terms = tsuburu_korean::translate(tsuburu_korean::Dictionary::embedded(), &params.q);
     let query = tsuburu_hitomi::Query {
-        include: terms
-            .iter()
-            .filter(|t| !t.excluded)
-            .map(|t| t.used.to_lowercase())
-            .collect(),
-        exclude: terms
-            .iter()
-            .filter(|t| t.excluded)
-            .map(|t| t.used.to_lowercase())
-            .collect(),
+        include: terms.iter().filter(|t| !t.excluded).map(|t| t.used.to_lowercase()).collect(),
+        exclude: terms.iter().filter(|t| t.excluded).map(|t| t.used.to_lowercase()).collect(),
     };
 
     let sort = match params.sort.as_deref() {
@@ -83,9 +75,7 @@ pub async fn search(
     // 검색어가 없어도 필터나 정렬만으로 둘러볼 수 있다. 다만 제외어만 준 것은
     // 무엇을 빼야 할 대상인지가 없으므로 요청이 성립하지 않는다.
     if query.include.is_empty() && !query.exclude.is_empty() {
-        return Err(ApiError::bad_request(
-            "exclusions need at least one term to exclude from",
-        ));
+        return Err(ApiError::bad_request("exclusions need at least one term to exclude from"));
     }
 
     let limit = params.limit.clamp(1, MAX_LIMIT);

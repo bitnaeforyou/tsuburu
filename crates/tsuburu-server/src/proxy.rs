@@ -63,9 +63,8 @@ pub async fn thumbnail(
 }
 
 fn split_hash(file: &str) -> Result<(&str, &str), ApiError> {
-    let (hash, ext) = file
-        .rsplit_once('.')
-        .ok_or_else(|| ApiError::bad_request("expected <hash>.<ext>"))?;
+    let (hash, ext) =
+        file.rsplit_once('.').ok_or_else(|| ApiError::bad_request("expected <hash>.<ext>"))?;
     if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(ApiError::bad_request("hash must be 64 hex characters"));
     }

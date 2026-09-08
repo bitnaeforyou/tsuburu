@@ -50,11 +50,7 @@ pub struct OcrOptions {
 
 impl Default for OcrOptions {
     fn default() -> Self {
-        Self {
-            max_side: 1125,
-            languages: vec!["ko-KR".into()],
-            language_correction: false,
-        }
+        Self { max_side: 1125, languages: vec!["ko-KR".into()], language_correction: false }
     }
 }
 
@@ -154,10 +150,9 @@ pub fn reading_order(lines: &mut Vec<Line>) {
         let (ta, tb) = (a[0].y, b[0].y);
         let row_a = (ta / 0.12).floor();
         let row_b = (tb / 0.12).floor();
-        row_a
-            .partial_cmp(&row_b)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| centre_x(b).partial_cmp(&centre_x(a)).unwrap_or(std::cmp::Ordering::Equal))
+        row_a.partial_cmp(&row_b).unwrap_or(std::cmp::Ordering::Equal).then_with(|| {
+            centre_x(b).partial_cmp(&centre_x(a)).unwrap_or(std::cmp::Ordering::Equal)
+        })
     });
 
     for mut bubble in bubbles {

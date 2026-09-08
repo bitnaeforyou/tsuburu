@@ -197,9 +197,7 @@ pub async fn warm_index(
             break;
         }
         let fetched = futures_util::future::join_all(
-            frontier
-                .iter()
-                .map(|&addr| fetcher.get_range(index_url, addr..addr + MAX_NODE_SIZE)),
+            frontier.iter().map(|&addr| fetcher.get_range(index_url, addr..addr + MAX_NODE_SIZE)),
         )
         .await;
 

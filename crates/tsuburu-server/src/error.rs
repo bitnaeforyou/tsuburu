@@ -86,7 +86,9 @@ impl From<tsuburu_hitomi::ImageError> for ApiError {
 fn describe(kind: ErrorKind, detail: &str) -> String {
     match kind {
         ErrorKind::FormatChanged => {
-            format!("hitomi's format appears to have changed, so tsuburu needs an update ({detail})")
+            format!(
+                "hitomi's format appears to have changed, so tsuburu needs an update ({detail})"
+            )
         }
         ErrorKind::Network => format!("could not reach hitomi ({detail})"),
         ErrorKind::BadRequest => detail.to_string(),
@@ -103,9 +105,6 @@ impl From<tsuburu_dialogue::DialogueError> for ApiError {
 
 impl From<tsuburu_store::StoreError> for ApiError {
     fn from(err: tsuburu_store::StoreError) -> Self {
-        Self {
-            error: ErrorKind::Storage,
-            message: describe(ErrorKind::Storage, &err.to_string()),
-        }
+        Self { error: ErrorKind::Storage, message: describe(ErrorKind::Storage, &err.to_string()) }
     }
 }
