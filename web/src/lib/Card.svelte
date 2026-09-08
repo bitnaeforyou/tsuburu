@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from './api'
+  import * as cards from './cards.svelte'
   import { library } from './library.svelte'
   import { toGallery } from './router'
 
@@ -44,7 +45,7 @@
 
   async function fetchCard() {
     try {
-      const [found] = await api.cards([id])
+      const found = await cards.card(id)
       if (found) card = found
       else failed = true
     } catch {

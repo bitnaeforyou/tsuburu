@@ -305,7 +305,10 @@
 
     {#if query}
       {#if searching}
-        <p class="muted">Searching {status?.counts?.done.toLocaleString() ?? ''} indexed galleries…</p>
+        <p class="muted">
+          Searching{status?.counts?.done ? ` ${status.counts.done.toLocaleString()}` : ''} indexed
+          galleries…
+        </p>
       {:else if hits.length === 0}
         <p class="muted">
           Nothing indexed so far contains that. It may still be in a gallery that has not
