@@ -473,12 +473,14 @@ impl Grinder {
             let url = self.cfg.type_list_url(kind, language);
             total += nozomi::count(self.fetcher.as_ref(), &url).await.unwrap_or(0);
         }
+        // An imported corpus can cover types outside the sweep's own list,
+        // so the total is at least what is already done.
         Ok(Coverage {
             top_1k: covered(1_000),
             top_10k: covered(10_000.min(top.len())),
             top_10k_total: 10_000.min(top.len()),
             done: done.len(),
-            total,
+            total: total.max(done.len()),
         })
     }
 }
