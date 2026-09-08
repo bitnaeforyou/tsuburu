@@ -74,7 +74,8 @@ finds Korean titles, artists, series and characters offline. Galleries newer
 than the snapshot still come from hitomi.
 
 With the dialogue corpus loaded, every Korean gallery up to mid-2026 is
-searchable by a remembered line, with no downloading or recognition.
+searchable by a remembered line, with no downloading or recognition. A query
+over the 108,000 galleries takes about half a second.
 
 ## Dialogue search
 

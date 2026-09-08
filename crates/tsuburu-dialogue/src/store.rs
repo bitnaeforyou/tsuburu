@@ -25,10 +25,14 @@ const JOBS: TableDefinition<i32, &str> = TableDefinition::new("jobs");
 const QUEUE: TableDefinition<(u8, u64, i32), ()> = TableDefinition::new("queue");
 /// gallery id -> LZ4 of the binary page encoding (see `encode_pages`)
 const TEXT: TableDefinition<i32, &[u8]> = TableDefinition::new("text");
+/// gallery id -> LZ4 of the match codes alone (see `encode_codes`). A scan
+/// reads only this table; text is fetched for the few pages that hit.
+const CODES: TableDefinition<i32, &[u8]> = TableDefinition::new("codes");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 
-/// 2: LZ4 binary pages. 3: match codes stored beside the text.
-const SCHEMA_VERSION: &str = "3";
+/// 2: LZ4 binary pages. 3: match codes beside the text. 4: codes in their
+/// own table.
+const SCHEMA_VERSION: &str = "4";
 
 #[derive(Debug, thiserror::Error)]
 pub enum DialogueError {
@@ -107,10 +111,23 @@ pub struct Counts {
     pub failed: usize,
 }
 
+/// A gallery's pages, compressed twice over: text for display and codes
+/// for scanning, stored in separate tables.
+pub struct Encoded {
+    pub text: Vec<u8>,
+    pub codes: Vec<u8>,
+}
+
+impl Encoded {
+    pub fn from_pages(pages: &[PageText]) -> Self {
+        Self { text: compress(&encode_pages(pages)), codes: compress(&encode_codes(pages)) }
+    }
+}
+
 /// What a job ended with; written with its queue removal in one commit.
 struct Outcome<'a> {
     status: Status,
-    text: Option<&'a [u8]>,
+    text: Option<&'a Encoded>,
     pages: u32,
     lines: u32,
     error: Option<&'a str>,
@@ -158,6 +175,7 @@ impl DialogueStore {
             tx.open_table(JOBS).map_err(db_err)?;
             tx.open_table(QUEUE).map_err(db_err)?;
             tx.open_table(TEXT).map_err(db_err)?;
+            tx.open_table(CODES).map_err(db_err)?;
             let mut meta = tx.open_table(META).map_err(db_err)?;
             let existing = meta.get("schema").map_err(db_err)?.map(|v| v.value().to_string());
             match existing {
@@ -258,7 +276,7 @@ impl DialogueStore {
 
     /// Stores the recognised text and marks the job done in one commit.
     pub fn complete(&self, id: i32, pages: &[PageText]) -> Result<(), DialogueError> {
-        let encoded = compress(&encode_pages(pages));
+        let encoded = Encoded::from_pages(pages);
         let lines: usize = pages.iter().map(|p| p.lines.len()).sum();
         self.finish(
             id,
@@ -279,7 +297,8 @@ impl DialogueStore {
             let mut jobs = tx.open_table(JOBS).map_err(db_err)?;
             let mut queue = tx.open_table(QUEUE).map_err(db_err)?;
             let mut texts = tx.open_table(TEXT).map_err(db_err)?;
-            Self::finish_within(&mut jobs, &mut queue, &mut texts, id, outcome)?;
+            let mut codes = tx.open_table(CODES).map_err(db_err)?;
+            Self::finish_within(&mut jobs, &mut queue, &mut texts, &mut codes, id, outcome)?;
         }
         tx.commit().map_err(db_err)?;
         Ok(())
@@ -289,6 +308,7 @@ impl DialogueStore {
         jobs: &mut redb::Table<'_, i32, &'static str>,
         queue: &mut redb::Table<'_, (u8, u64, i32), ()>,
         texts: &mut redb::Table<'_, i32, &'static [u8]>,
+        codes: &mut redb::Table<'_, i32, &'static [u8]>,
         id: i32,
         outcome: Outcome<'_>,
     ) -> Result<(), DialogueError> {
@@ -316,8 +336,9 @@ impl DialogueStore {
                 source: source.map(str::to_string),
             };
             jobs.insert(id, serde_json::to_string(&record)?.as_str()).map_err(db_err)?;
-            if let Some(bytes) = text {
-                texts.insert(id, bytes).map_err(db_err)?;
+            if let Some(encoded) = text {
+                texts.insert(id, encoded.text.as_slice()).map_err(db_err)?;
+                codes.insert(id, encoded.codes.as_slice()).map_err(db_err)?;
             }
         }
         Ok(())
@@ -376,9 +397,9 @@ impl DialogueStore {
         let existing = self.done_ids()?;
         let mut summary = ImportSummary::default();
         let batch = batch.max(1);
-        let mut pending: Vec<(i32, Vec<u8>, u32, u32)> = Vec::with_capacity(batch);
+        let mut pending: Vec<(i32, Encoded, u32, u32)> = Vec::with_capacity(batch);
 
-        let flush = |pending: &mut Vec<(i32, Vec<u8>, u32, u32)>| -> Result<(), DialogueError> {
+        let flush = |pending: &mut Vec<(i32, Encoded, u32, u32)>| -> Result<(), DialogueError> {
             if pending.is_empty() {
                 return Ok(());
             }
@@ -387,11 +408,13 @@ impl DialogueStore {
                 let mut jobs = tx.open_table(JOBS).map_err(db_err)?;
                 let mut queue = tx.open_table(QUEUE).map_err(db_err)?;
                 let mut texts = tx.open_table(TEXT).map_err(db_err)?;
+                let mut codes = tx.open_table(CODES).map_err(db_err)?;
                 for (id, encoded, pages, lines) in pending.drain(..) {
                     Self::finish_within(
                         &mut jobs,
                         &mut queue,
                         &mut texts,
+                        &mut codes,
                         id,
                         Outcome {
                             status: Status::Done,
@@ -415,7 +438,7 @@ impl DialogueStore {
                 continue;
             }
             let lines: usize = pages.iter().map(|p| p.lines.len()).sum();
-            pending.push((id, compress(&encode_pages(&pages)), pages.len() as u32, lines as u32));
+            pending.push((id, Encoded::from_pages(&pages), pages.len() as u32, lines as u32));
             summary.added += 1;
             if pending.len() >= batch {
                 flush(&mut pending)?;
@@ -486,7 +509,7 @@ impl DialogueStore {
                 summary.skipped += 1;
                 continue;
             }
-            let encoded = compress(&encode_pages(&entry.pages));
+            let encoded = Encoded::from_pages(&entry.pages);
             let lines: usize = entry.pages.iter().map(|p| p.lines.len()).sum();
             self.finish(
                 entry.gallery_id,
@@ -514,32 +537,30 @@ impl DialogueStore {
             return Ok(Vec::new());
         }
 
-        // Split the id space into contiguous ranges, one read transaction each.
-        let bounds = {
+        // Galleries cluster in recent ids, so ranges are cut by count, not by
+        // id span; otherwise most threads finish early and one does the work.
+        let keys: Vec<i32> = {
             let tx = self.db.begin_read().map_err(db_err)?;
-            let texts = tx.open_table(TEXT).map_err(db_err)?;
-            let first = texts.first().map_err(db_err)?.map(|(k, _)| k.value());
-            let last = texts.last().map_err(db_err)?.map(|(k, _)| k.value());
-            match (first, last) {
-                (Some(a), Some(b)) => (a, b),
-                _ => return Ok(Vec::new()),
+            let codes = tx.open_table(CODES).map_err(db_err)?;
+            let mut keys = Vec::new();
+            for row in codes.iter().map_err(db_err)? {
+                keys.push(row.map_err(db_err)?.0.value());
             }
+            keys
         };
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
         let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 16);
-        let span = (bounds.1 as i64 - bounds.0 as i64 + 1).max(1);
-        let step = (span / threads as i64).max(1);
+        let per = keys.len().div_ceil(threads);
+        let ranges: Vec<(i32, i32)> = keys.chunks(per).map(|c| (c[0], c[c.len() - 1])).collect();
 
         let scan = |fuzzy: bool| -> Vec<Hit> {
             std::thread::scope(|scope| {
-                let mut handles = Vec::with_capacity(threads);
-                for t in 0..threads {
-                    let lo = bounds.0 as i64 + step * t as i64;
-                    let hi = if t + 1 == threads { bounds.1 as i64 } else { lo + step - 1 };
-                    if lo > bounds.1 as i64 {
-                        break;
-                    }
+                let mut handles = Vec::with_capacity(ranges.len());
+                for &(lo, hi) in &ranges {
                     let query = &query;
-                    handles.push(scope.spawn(move || self.scan_range(lo as i32, hi as i32, query, fuzzy)));
+                    handles.push(scope.spawn(move || self.scan_range(lo, hi, query, fuzzy)));
                 }
                 let mut all = Vec::new();
                 for handle in handles {
@@ -573,11 +594,12 @@ impl DialogueStore {
 
     fn scan_range(&self, lo: i32, hi: i32, query: &Query, fuzzy: bool) -> Result<Vec<Hit>, DialogueError> {
         let tx = self.db.begin_read().map_err(db_err)?;
+        let codes = tx.open_table(CODES).map_err(db_err)?;
         let texts = tx.open_table(TEXT).map_err(db_err)?;
         let mut hits = Vec::new();
         let mut raw = Vec::new();
 
-        for row in texts.range(lo..=hi).map_err(db_err)? {
+        for row in codes.range(lo..=hi).map_err(db_err)? {
             let (key, value) = row.map_err(db_err)?;
             let gallery_id = key.value();
             raw.clear();
@@ -586,8 +608,8 @@ impl DialogueStore {
                 continue;
             }
 
-            let mut best: Option<Hit> = None;
-            for page in PageIter::new(&raw) {
+            let mut best: Option<(u16, Match)> = None;
+            for page in CodeIter::new(&raw) {
                 let m = if fuzzy {
                     match query.fuzzy(page.codes) {
                         Some(m) => m,
@@ -598,43 +620,102 @@ impl DialogueStore {
                 } else {
                     continue;
                 };
-                if best.as_ref().is_none_or(|b| m.score > b.score) {
-                    let lines: Vec<String> = page.text.split('\n').map(str::to_string).collect();
-                    best = Some(Hit {
-                        gallery_id,
-                        page: page.page,
-                        score: m.score,
-                        exact: m.exact,
-                        snippet: snippet(&lines, query),
-                    });
+                if best.as_ref().is_none_or(|(_, b)| m.score > b.score) {
+                    best = Some((page.page, m));
                 }
                 if m.exact {
                     break;
                 }
             }
-            if let Some(hit) = best {
-                hits.push(hit);
+
+            // Only now touch the text: a hit is rare, a page is not.
+            if let Some((page_no, m)) = best {
+                let lines = texts
+                    .get(gallery_id)
+                    .map_err(db_err)?
+                    .and_then(|v| decompress(v.value()).ok())
+                    .and_then(|bytes| {
+                        PageIter::new(&bytes)
+                            .find(|p| p.page == page_no)
+                            .map(|p| p.text.split('\n').map(str::to_string).collect::<Vec<_>>())
+                    })
+                    .unwrap_or_default();
+                hits.push(Hit {
+                    gallery_id,
+                    page: page_no,
+                    score: m.score,
+                    exact: m.exact,
+                    snippet: snippet(&lines, query),
+                });
             }
         }
         Ok(hits)
     }
 }
 
-/// Binary page encoding: repeated `u16 page, u32 text_len, u32 code_len,
-/// text, codes`. The text is the page's lines joined with newlines; the codes
-/// are its match form, computed once here so a scan never normalises.
-pub fn encode_pages(pages: &[PageText]) -> Vec<u8> {
+/// Codes only: repeated `u16 page, u32 len, bytes`.
+pub fn encode_codes(pages: &[PageText]) -> Vec<u8> {
     let mut out = Vec::new();
     let mut codes = Vec::new();
     for page in pages {
-        let text = page.lines.join("\n");
         codes.clear();
-        codes_into(&text, &mut codes);
+        for (i, line) in page.lines.iter().enumerate() {
+            if i > 0 {
+                codes.push(b' ');
+            }
+            codes_into(line, &mut codes);
+        }
+        codes.retain(|&b| b != b' ');
+        out.extend_from_slice(&page.page.to_le_bytes());
+        out.extend_from_slice(&(codes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&codes);
+    }
+    out
+}
+
+struct CodeView<'a> {
+    page: u16,
+    codes: &'a [u8],
+}
+
+struct CodeIter<'a> {
+    bytes: &'a [u8],
+    at: usize,
+}
+
+impl<'a> CodeIter<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, at: 0 }
+    }
+}
+
+impl<'a> Iterator for CodeIter<'a> {
+    type Item = CodeView<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let b = self.bytes;
+        if self.at + 6 > b.len() {
+            return None;
+        }
+        let page = u16::from_le_bytes([b[self.at], b[self.at + 1]]);
+        let len = u32::from_le_bytes(b[self.at + 2..self.at + 6].try_into().ok()?) as usize;
+        let start = self.at + 6;
+        let end = start.checked_add(len)?;
+        let codes = b.get(start..end)?;
+        self.at = end;
+        Some(CodeView { page, codes })
+    }
+}
+
+/// Binary page encoding: repeated `u16 page, u32 len, bytes` where the bytes
+/// are the page's lines joined with newlines. No JSON on any path.
+pub fn encode_pages(pages: &[PageText]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for page in pages {
+        let text = page.lines.join("\n");
         out.extend_from_slice(&page.page.to_le_bytes());
         out.extend_from_slice(&(text.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(codes.len() as u32).to_le_bytes());
         out.extend_from_slice(text.as_bytes());
-        out.extend_from_slice(&codes);
     }
     out
 }
@@ -656,7 +737,6 @@ pub fn decode_pages(bytes: &[u8]) -> Result<Vec<PageText>, DialogueError> {
 struct PageView<'a> {
     page: u16,
     text: &'a str,
-    codes: &'a [u8],
 }
 
 /// Walks the binary page encoding without copying the text.
@@ -676,19 +756,16 @@ impl<'a> Iterator for PageIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let b = self.bytes;
-        if self.at + 10 > b.len() {
+        if self.at + 6 > b.len() {
             return None;
         }
         let page = u16::from_le_bytes([b[self.at], b[self.at + 1]]);
-        let text_len = u32::from_le_bytes(b[self.at + 2..self.at + 6].try_into().ok()?) as usize;
-        let code_len = u32::from_le_bytes(b[self.at + 6..self.at + 10].try_into().ok()?) as usize;
-        let text_start = self.at + 10;
-        let text_end = text_start.checked_add(text_len)?;
-        let code_end = text_end.checked_add(code_len)?;
-        let text = std::str::from_utf8(b.get(text_start..text_end)?).ok()?;
-        let codes = b.get(text_end..code_end)?;
-        self.at = code_end;
-        Some(PageView { page, text, codes })
+        let len = u32::from_le_bytes(b[self.at + 2..self.at + 6].try_into().ok()?) as usize;
+        let start = self.at + 6;
+        let end = start.checked_add(len)?;
+        let text = std::str::from_utf8(b.get(start..end)?).ok()?;
+        self.at = end;
+        Some(PageView { page, text })
     }
 }
 
@@ -910,6 +987,12 @@ mod tests {
         let bytes = encode_pages(&p);
         assert_eq!(decode_pages(&bytes).unwrap(), p);
         assert!(decode_pages(&bytes[..3]).is_err());
+
+        let codes = encode_codes(&p);
+        let views: Vec<(u16, usize)> = CodeIter::new(&codes).map(|c| (c.page, c.codes.len())).collect();
+        assert_eq!(views.len(), 2);
+        assert_eq!(views[0].0, 0);
+        assert!(views[0].1 > 0);
     }
 
     #[test]

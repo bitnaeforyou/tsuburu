@@ -268,6 +268,8 @@ impl MetaStore {
     }
 
     /// A bare term is looked up in every namespace and the results merged.
+    /// Tags carry a `female:`/`male:` prefix in the source, so a bare
+    /// `glasses` also tries both, the way hitomi's own search reads it.
     fn ids_for_term(&self, tx: &redb::ReadTransaction, term: &str) -> Result<HashSet<i32>, MetaError> {
         let term = term.trim().to_lowercase();
         if NAMESPACES.iter().any(|ns| term.starts_with(&format!("{ns}:"))) {
@@ -276,6 +278,10 @@ impl MetaStore {
         let mut out = HashSet::new();
         for ns in NAMESPACES {
             out.extend(self.ids_for(tx, &format!("{ns}:{term}"))?);
+        }
+        if !term.starts_with("female:") && !term.starts_with("male:") {
+            out.extend(self.ids_for(tx, &format!("tag:female:{term}"))?);
+            out.extend(self.ids_for(tx, &format!("tag:male:{term}"))?);
         }
         Ok(out)
     }

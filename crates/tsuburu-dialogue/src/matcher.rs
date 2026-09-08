@@ -26,7 +26,7 @@ const MIN_FRAGMENT: usize = 8;
 /// Distinct query n-grams tracked. Longer queries keep the first ones.
 const MAX_GRAMS: usize = 64;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Match {
     /// 1.0 for an exact hit, otherwise the n-gram overlap ratio.
     pub score: f32,
