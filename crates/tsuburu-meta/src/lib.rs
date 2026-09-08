@@ -331,19 +331,9 @@ impl MetaStore {
             (Some(title), candidates) if !title.trim().is_empty() => {
                 let mut needle = Vec::new();
                 codes_into(title, &mut needle);
-                let titles = tx.open_table(TITLES).map_err(db_err)?;
-                let mut out = Vec::new();
-                for row in titles.iter().map_err(db_err)? {
-                    let (key, value) = row.map_err(db_err)?;
-                    let id = key.value();
-                    if candidates.as_ref().is_some_and(|c| !c.contains(&id)) {
-                        continue;
-                    }
-                    if memchr::memmem::find(value.value(), &needle).is_some() {
-                        out.push(id);
-                    }
-                }
-                out
+                // The scan opens its own read transactions; redb allows
+                // several at once, so this one can stay open for the filter.
+                self.scan_titles(&needle, candidates.as_ref())?
             }
             (_, Some(candidates)) => candidates.into_iter().collect(),
             (_, None) => Vec::new(),
@@ -364,6 +354,62 @@ impl MetaStore {
         ids.sort_unstable_by(|a, b| b.cmp(a));
         let total = ids.len();
         Ok(Page { total, ids: ids.into_iter().skip(offset).take(limit).collect() })
+    }
+
+    /// Every title is a candidate, so the scan is split across cores. Ranges
+    /// are cut by count rather than id span because galleries cluster in
+    /// recent ids.
+    fn scan_titles(
+        &self,
+        needle: &[u8],
+        candidates: Option<&HashSet<i32>>,
+    ) -> Result<Vec<i32>, MetaError> {
+        let keys: Vec<i32> = {
+            let tx = self.db.begin_read().map_err(db_err)?;
+            let titles = tx.open_table(TITLES).map_err(db_err)?;
+            let mut keys = Vec::new();
+            for row in titles.iter().map_err(db_err)? {
+                keys.push(row.map_err(db_err)?.0.value());
+            }
+            keys
+        };
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+        let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 16);
+        let per = keys.len().div_ceil(threads);
+        let ranges: Vec<(i32, i32)> = keys.chunks(per).map(|c| (c[0], c[c.len() - 1])).collect();
+
+        Ok(std::thread::scope(|scope| {
+            let mut handles = Vec::with_capacity(ranges.len());
+            for (lo, hi) in ranges {
+                handles.push(scope.spawn(move || -> Result<Vec<i32>, MetaError> {
+                    let tx = self.db.begin_read().map_err(db_err)?;
+                    let titles = tx.open_table(TITLES).map_err(db_err)?;
+                    let mut out = Vec::new();
+                    for row in titles.range(lo..=hi).map_err(db_err)? {
+                        let (key, value) = row.map_err(db_err)?;
+                        let id = key.value();
+                        if candidates.is_some_and(|c| !c.contains(&id)) {
+                            continue;
+                        }
+                        if memchr::memmem::find(value.value(), needle).is_some() {
+                            out.push(id);
+                        }
+                    }
+                    Ok(out)
+                }));
+            }
+            let mut all = Vec::new();
+            for handle in handles {
+                match handle.join() {
+                    Ok(Ok(part)) => all.extend(part),
+                    Ok(Err(err)) => tracing::warn!(%err, "a title scan thread failed"),
+                    Err(_) => tracing::warn!("a title scan thread panicked"),
+                }
+            }
+            all
+        }))
     }
 
     /// Keys starting with `prefix`, for autocompletion: `artist:ke` -> `artist:keso`.
