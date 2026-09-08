@@ -15,7 +15,7 @@ use redb::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use tsuburu_text::{codes, codes_into};
+use tsuburu_text::{codes_bounded, codes_bounded_into};
 
 const WORKS: TableDefinition<i32, &[u8]> = TableDefinition::new("works");
 /// id -> the title's match codes. Scanning these avoids decoding a work and
@@ -24,8 +24,8 @@ const TITLES: TableDefinition<i32, &[u8]> = TableDefinition::new("titles");
 /// "tag:glasses" -> ids. Sorted keys make prefix suggestions a range scan.
 const TERMS: MultimapTableDefinition<&str, i32> = MultimapTableDefinition::new("terms");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
-/// 2: titles stored as match codes.
-const SCHEMA_VERSION: &str = "2";
+/// 2: titles stored as match codes. 3: those codes keep Latin word bounds.
+const SCHEMA_VERSION: &str = "3";
 
 #[derive(Debug, thiserror::Error)]
 pub enum MetaError {
@@ -221,7 +221,9 @@ impl MetaStore {
                 for work in pending.drain(..) {
                     let encoded = lz4_flex::compress_prepend_size(&serde_json::to_vec(&work)?);
                     table.insert(work.id, encoded.as_slice()).map_err(db_err)?;
-                    titles.insert(work.id, codes(&work.title).as_slice()).map_err(db_err)?;
+                    titles
+                        .insert(work.id, codes_bounded(&work.title).as_slice())
+                        .map_err(db_err)?;
                     for key in work.term_keys() {
                         terms.insert(key.as_str(), work.id).map_err(db_err)?;
                     }
@@ -341,7 +343,7 @@ impl MetaStore {
         let mut ids: Vec<i32> = match (&query.title, candidates) {
             (Some(title), candidates) if !title.trim().is_empty() => {
                 let mut needle = Vec::new();
-                codes_into(title, &mut needle);
+                codes_bounded_into(title, &mut needle);
                 // The scan opens its own read transactions; redb allows
                 // several at once, so this one can stay open for the filter.
                 self.scan_titles(&needle, candidates.as_ref())?
@@ -556,6 +558,26 @@ mod tests {
         let (store, _d) = seeded();
         let q = MetaQuery { terms: vec!["borusiti".into()], ..MetaQuery::default() };
         assert_eq!(store.search(&q, 0, 10).unwrap().ids, vec![1]);
+    }
+
+    #[test]
+    fn latin_words_do_not_run_together_in_titles() {
+        let (store, _d) = store();
+        store
+            .import_works(
+                vec![work(9, "wa Ore dake?! Sono 2", "someone", &[], "japanese", "manga")],
+                10,
+                |_| {},
+            )
+            .unwrap();
+        let hit = |t: &str| {
+            store
+                .search(&MetaQuery { title: Some(t.into()), ..MetaQuery::default() }, 0, 10)
+                .unwrap()
+                .ids
+        };
+        assert!(hit("keso").is_empty(), "a run of two words must not form a match");
+        assert_eq!(hit("dake"), vec![9]);
     }
 
     #[test]

@@ -73,14 +73,17 @@
         </select>
       </label>
     {/if}
-    <label>
-      <span>Sort</span>
-      <select value={params.sort} onchange={(e) => onchange({ sort: e.currentTarget.value as Sort })}>
-        {#each SORTS as option (option.value)}
-          <option value={option.value}>{option.label}</option>
-        {/each}
-      </select>
-    </label>
+    <!-- The snapshot has no popularity data, so sorting only applies to hitomi. -->
+    {#if params.scope !== 'local'}
+      <label>
+        <span>Sort</span>
+        <select value={params.sort} onchange={(e) => onchange({ sort: e.currentTarget.value as Sort })}>
+          {#each SORTS as option (option.value)}
+            <option value={option.value}>{option.label}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
     <label>
       <span>Language</span>
       <select value={params.language} onchange={(e) => onchange({ language: e.currentTarget.value })}>

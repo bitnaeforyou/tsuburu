@@ -37,9 +37,37 @@ pub fn codes(text: &str) -> Vec<u8> {
 }
 
 pub fn codes_into(text: &str, out: &mut Vec<u8>) {
+    encode(text, out, false)
+}
+
+/// Match codes that keep word boundaries around Latin text.
+///
+/// Dropping every space lets a Korean query match regardless of spacing,
+/// which is what Korean needs. Latin words are not so forgiving: with spaces
+/// gone, the title `...ore dake?! Sono 2` contains `kesono`, and a search for
+/// the artist `keso` matched it. A separator is emitted where a run of spaces
+/// touches ASCII on either side, so Latin words stay apart while Hangul keeps
+/// running together.
+pub fn codes_bounded(text: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(text.len());
+    encode(text, &mut out, true);
+    out
+}
+
+pub fn codes_bounded_into(text: &str, out: &mut Vec<u8>) {
+    encode(text, out, true)
+}
+
+/// Never produced by any character, so it cannot collide with a code.
+const BOUNDARY: u8 = 0x01;
+
+fn encode(text: &str, out: &mut Vec<u8>, boundaries: bool) {
+    let start = out.len();
+    let mut gap = false;
     for c in text.chars() {
         let code = c as u32;
         if (BASE..=LAST).contains(&code) {
+            emit_gap(out, &mut gap, boundaries, false, start);
             let index = code - BASE;
             let cho = index / (21 * 28);
             let jung = (index % (21 * 28)) / 28;
@@ -50,10 +78,26 @@ pub fn codes_into(text: &str, out: &mut Vec<u8>) {
                 out.push(CODE_BASE + 19 + 21 + (jong as u8 - 1));
             }
         } else if let Some(code) = compat_jamo_code(c) {
+            emit_gap(out, &mut gap, boundaries, false, start);
             out.push(code);
         } else if c.is_ascii_alphanumeric() {
+            emit_gap(out, &mut gap, boundaries, true, start);
             out.push(c.to_ascii_lowercase() as u8);
+        } else if c.is_whitespace() {
+            gap = true;
         }
+        // Punctuation carries nothing worth matching and does not separate.
+    }
+}
+
+/// A pending gap becomes a boundary only when ASCII is on one side of it.
+fn emit_gap(out: &mut Vec<u8>, gap: &mut bool, boundaries: bool, ascii_now: bool, start: usize) {
+    if !std::mem::take(gap) || !boundaries || out.len() == start {
+        return;
+    }
+    let previous_was_ascii = out.last().is_some_and(u8::is_ascii_alphanumeric);
+    if ascii_now || previous_was_ascii {
+        out.push(BOUNDARY);
     }
 }
 
@@ -115,6 +159,29 @@ mod tests {
         assert_eq!(normalize("한"), "ㅎㅏㄴ");
         assert_eq!(normalize("가"), "ㄱㅏ");
         assert_eq!(normalize("닭"), "ㄷㅏㄺ");
+    }
+
+    #[test]
+    fn bounded_codes_keep_latin_words_apart() {
+        // `ore dake?! Sono 2` used to read as `oredakesono2`, so searching
+        // for the artist `keso` matched it.
+        let title = codes_bounded("wa Ore dake?! Sono 2");
+        assert!(memchr(&title, &codes_bounded("keso")).is_none());
+        assert!(memchr(&title, &codes_bounded("dake")).is_some());
+        assert!(memchr(&title, &codes_bounded("sono 2")).is_some());
+    }
+
+    #[test]
+    fn bounded_codes_still_ignore_korean_spacing() {
+        let title = codes_bounded("Maison Inkaku | 메종 음핵");
+        assert!(memchr(&title, &codes_bounded("메종음핵")).is_some());
+        assert!(memchr(&title, &codes_bounded("메종 음핵")).is_some());
+        assert!(memchr(&title, &codes_bounded("inkaku")).is_some());
+    }
+
+    /// Naive substring search, enough for these tests.
+    fn memchr(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+        haystack.windows(needle.len().max(1)).position(|w| w == needle)
     }
 
     #[test]
