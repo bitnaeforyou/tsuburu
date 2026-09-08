@@ -34,6 +34,9 @@ pub struct AppState {
     pub grinder: Option<Arc<crate::grinder::Grinder>>,
     /// Where exported dialogue shards are written.
     pub shards_dir: Option<std::path::PathBuf>,
+    /// Local metadata snapshot. Cards for galleries it covers never touch
+    /// the network.
+    pub meta: Option<Arc<tsuburu_meta::MetaStore>>,
     version: RwLock<Option<Cached<String>>>,
     gg: RwLock<Option<Cached<GgMap>>>,
     /// 갤러리 메타 JSON은 최대 200 KB를 넘기도 한다. 카드 한 장으로 줄여
@@ -66,6 +69,7 @@ impl AppState {
             store,
             grinder,
             shards_dir: None,
+            meta: None,
             version: RwLock::new(None),
             gg: RwLock::new(None),
             cards: Cache::new(4096),
@@ -74,6 +78,11 @@ impl AppState {
 
     pub fn with_shards_dir(mut self, dir: std::path::PathBuf) -> Self {
         self.shards_dir = Some(dir);
+        self
+    }
+
+    pub fn with_meta(mut self, meta: Arc<tsuburu_meta::MetaStore>) -> Self {
+        self.meta = Some(meta);
         self
     }
 

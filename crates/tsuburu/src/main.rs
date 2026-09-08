@@ -41,6 +41,20 @@ enum Command {
         #[arg(short, long, default_value_t = 25)]
         limit: usize,
     },
+    /// artifact의 `llm-search-index` 디렉터리에서 대사 텍스트를 가져온다.
+    /// 서버가 떠 있으면 저장소가 잠겨 있으므로 먼저 끄거나 UI에서 실행한다.
+    ImportArtifact {
+        dir: std::path::PathBuf,
+    },
+    /// artifact의 `data.db`(SQLite)에서 갤러리 메타데이터 스냅샷을 가져온다.
+    /// `sqlite3` 명령으로 읽으므로 그 명령이 있어야 한다. 서버를 먼저 끈다.
+    ImportMeta {
+        db: std::path::PathBuf,
+
+        /// hitomi에서 이미 내려간 작품까지 포함한다.
+        #[arg(long)]
+        all: bool,
+    },
     /// 갤러리 한 편의 메타데이터와 이미지 URL을 출력한다.
     Gallery {
         id: i32,
@@ -99,6 +113,49 @@ async fn main() -> Result<()> {
                 stats.cache_hits,
                 stats.bytes
             );
+        }
+
+        Command::ImportArtifact { dir } => {
+            let path = tsuburu_store::data_dir()?.join("dialogue.redb");
+            let store = tsuburu_dialogue::DialogueStore::open(&path)
+                .map_err(|e| anyhow::anyhow!("{e} (is the server running? stop it first)"))?;
+            let reader = tsuburu_dialogue::artifact::ChunkReader::open(&dir)?;
+            let total = reader.len();
+            eprintln!("importing {total} chunks from {}", dir.display());
+            let started = Instant::now();
+            let works = tsuburu_dialogue::artifact::WorkGrouper::new(reader).filter_map(|w| match w {
+                Ok(w) => Some(w),
+                Err(err) => {
+                    eprintln!("skipping: {err}");
+                    None
+                }
+            });
+            let summary = store.import_works(works, "artifact", 500, |seen| {
+                if seen % 5000 == 0 {
+                    eprintln!("  {seen} works, {:?}", started.elapsed());
+                }
+            })?;
+            eprintln!(
+                "done in {:?}: {} works, {} added, {} already present",
+                started.elapsed(),
+                summary.galleries,
+                summary.added,
+                summary.skipped
+            );
+        }
+
+        Command::ImportMeta { db, all } => {
+            let path = tsuburu_store::data_dir()?.join("meta.redb");
+            let store = tsuburu_meta::MetaStore::open(&path)
+                .map_err(|e| anyhow::anyhow!("{e} (is the server running? stop it first)"))?;
+            let started = Instant::now();
+            let rows = artifact_meta::read_rows(&db, all)?;
+            let summary = store.import_works(rows, 2_000, |seen| {
+                if seen % 100_000 == 0 {
+                    eprintln!("  {seen} works, {:?}", started.elapsed());
+                }
+            })?;
+            eprintln!("done in {:?}: {} works", started.elapsed(), summary.works);
         }
 
         Command::Gallery { id, images } => {
@@ -193,6 +250,16 @@ async fn serve(
     let mut app_state = tsuburu_server::AppState::full(fetcher, cfg, store, grinder);
     if let Ok(dir) = tsuburu_store::data_dir() {
         app_state = app_state.with_shards_dir(dir.join("shards"));
+        let meta_path = dir.join("meta.redb");
+        if meta_path.is_file() {
+            match tsuburu_meta::MetaStore::open(&meta_path) {
+                Ok(meta) => {
+                    tracing::info!(path = %meta_path.display(), "opened the metadata snapshot");
+                    app_state = app_state.with_meta(Arc::new(meta));
+                }
+                Err(err) => eprintln!("metadata snapshot is disabled: {err}"),
+            }
+        }
     }
     let state = Arc::new(app_state);
     let app = tsuburu_server::router(Arc::clone(&state));
@@ -271,4 +338,159 @@ fn init_tracing(verbose: bool) {
         .with_env_filter(filter)
         .with_writer(std::io::stderr)
         .init();
+}
+
+/// Reading artifact's `data.db` through the `sqlite3` command.
+///
+/// The file is a SQLite database with FTS5 virtual tables. Linking a SQL
+/// engine into the binary would either bring in C or a large Rust crate for
+/// a one-time import, so the local `sqlite3` tool streams the rows out
+/// instead, with unit/record separators that cannot appear in the data.
+mod artifact_meta {
+    use anyhow::{Context, Result};
+    use std::io::{BufRead, BufReader};
+    use std::path::Path;
+    use std::process::{Command, Stdio};
+    use tsuburu_meta::Work;
+
+    const FIELD: u8 = 0x1f;
+    const RECORD: u8 = 0x1e;
+
+    pub fn read_rows(db: &Path, all: bool) -> Result<impl Iterator<Item = Work>> {
+        let filter = if all { "" } else { " WHERE ExistOnHitomi = 1" };
+        let sql = format!(
+            "SELECT Id, Title, Type, Language, Artists, Groups, Series, Characters, Tags, \
+             Published, Files, ExistOnHitomi, Thumbnail FROM HitomiColumnModel{filter} ORDER BY Id"
+        );
+        let mut child = Command::new("sqlite3")
+            .arg("-readonly")
+            .arg("-list")
+            .arg("-noheader")
+            .arg("-separator")
+            .arg(String::from_utf8_lossy(&[FIELD]).to_string())
+            .arg("-newline")
+            .arg(String::from_utf8_lossy(&[RECORD]).to_string())
+            .arg(db)
+            .arg(&sql)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .context("could not run `sqlite3`; install it to import artifact's data.db")?;
+        let stdout = child.stdout.take().context("no stdout from sqlite3")?;
+        let reader = BufReader::with_capacity(4 << 20, stdout);
+        Ok(reader
+            .split(RECORD)
+            .filter_map(|record| record.ok())
+            .filter(|record| !record.is_empty())
+            .filter_map(|record| parse_row(&record)))
+    }
+
+    fn parse_row(record: &[u8]) -> Option<Work> {
+        let fields: Vec<String> = record
+            .split(|&b| b == FIELD)
+            .map(|f| String::from_utf8_lossy(f).into_owned())
+            .collect();
+        if fields.len() < 13 {
+            return None;
+        }
+        let id: i32 = fields[0].trim().parse().ok()?;
+        Some(Work {
+            id,
+            title: fields[1].trim().to_string(),
+            kind: normalize_kind(&fields[2]),
+            language: fields[3].trim().to_lowercase(),
+            artists: split_list(&fields[4]),
+            groups: split_list(&fields[5]),
+            series: split_list(&fields[6]),
+            characters: split_list(&fields[7]),
+            tags: split_list(&fields[8]),
+            published: parse_published(&fields[9]),
+            pages: fields[10].trim().parse().unwrap_or(0),
+            exists: fields[11].trim() == "1",
+            thumbnail_hash: thumbnail_hash(&fields[12]),
+        })
+    }
+
+    /// `|a|b|` -> ["a", "b"]
+    fn split_list(s: &str) -> Vec<String> {
+        s.split('|').map(str::trim).filter(|p| !p.is_empty()).map(str::to_string).collect()
+    }
+
+    /// The source spells types inconsistently ("artist CG", "artist cg");
+    /// hitomi's own list names are the canonical form.
+    fn normalize_kind(s: &str) -> String {
+        s.trim().to_lowercase().replace(' ', "")
+    }
+
+    /// Either "YYYY-MM-DD HH:MM:SS" or .NET ticks (100 ns since year 1).
+    fn parse_published(s: &str) -> Option<i64> {
+        let s = s.trim();
+        if s.is_empty() {
+            return None;
+        }
+        if let Ok(ticks) = s.parse::<i64>() {
+            const UNIX_EPOCH_TICKS: i64 = 621_355_968_000_000_000;
+            return Some((ticks - UNIX_EPOCH_TICKS) / 10_000_000);
+        }
+        let (date, time) = s.split_once(' ')?;
+        let mut d = date.split('-').map(|p| p.parse::<i64>().ok());
+        let (y, m, day) = (d.next()??, d.next()??, d.next()??);
+        let mut t = time.split(':').map(|p| p.parse::<i64>().ok());
+        let (h, mi, sec) = (t.next()??, t.next()??, t.next().flatten().unwrap_or(0));
+        Some(days_from_civil(y, m, day) * 86_400 + h * 3_600 + mi * 60 + sec)
+    }
+
+    /// Howard Hinnant's algorithm; avoids a date crate for one field.
+    fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+        let y = if m <= 2 { y - 1 } else { y };
+        let era = y.div_euclid(400);
+        let yoe = y - era * 400;
+        let mp = (m + 9) % 12;
+        let doy = (153 * mp + 2) / 5 + d - 1;
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        era * 146_097 + doe - 719_468
+    }
+
+    /// `//tn.gold-usergeneratedcontent.net/webpbigtn/a/30/<64 hex>.webp` -> hash
+    fn thumbnail_hash(url: &str) -> Option<String> {
+        let name = url.rsplit('/').next()?;
+        let stem = name.split('.').next()?;
+        (stem.len() == 64 && stem.chars().all(|c| c.is_ascii_hexdigit())).then(|| stem.to_string())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn parses_both_date_forms() {
+            assert_eq!(parse_published("2026-07-04 15:47:00"), Some(1_783_180_020));
+            // 633309743400000000 ticks = 2007-11-18 10:39:00 UTC
+            assert_eq!(parse_published("633309743400000000"), Some(1_195_377_540));
+            assert_eq!(parse_published(""), None);
+        }
+
+        #[test]
+        fn parses_a_row() {
+            let fields = [
+                "4031231", "Drip Coffee | 드립 커피", "manga", "korean", "|borusiti|", "", "", "",
+                "|female:big breasts|digital|", "2026-07-04 15:47:00", "40", "1",
+                "//tn.gold-usergeneratedcontent.net/webpbigtn/a/30/753fff08a7c5c60af802a94e56128c4c3cd40791e719ae1c4fa3e89f5526e30a.webp",
+            ];
+            let record = fields.join(std::str::from_utf8(&[FIELD]).unwrap());
+            let w = parse_row(record.as_bytes()).unwrap();
+            assert_eq!(w.id, 4031231);
+            assert_eq!(w.artists, vec!["borusiti"]);
+            assert_eq!(w.tags, vec!["female:big breasts", "digital"]);
+            assert_eq!(w.pages, 40);
+            assert!(w.exists);
+            assert_eq!(w.thumbnail_hash.as_deref().map(|h| h.len()), Some(64));
+        }
+
+        #[test]
+        fn kinds_are_normalised() {
+            assert_eq!(normalize_kind("artist CG"), "artistcg");
+            assert_eq!(normalize_kind("image set"), "imageset");
+        }
+    }
 }

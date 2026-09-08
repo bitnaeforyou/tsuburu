@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Sort, SearchState } from './router'
+  import type { Scope, Sort, SearchState } from './router'
 
   // 검색 실행과 필터는 같은 성격의 도구이므로 한 줄에 모은다. 제출은 텍스트가
   // 아니라 아이콘이다. 위 줄의 Search 탭과 글자가 같으면 무엇이 이동이고
@@ -7,9 +7,12 @@
   let {
     params,
     onchange,
+    localAvailable = false,
   }: {
     params: SearchState
     onchange: (changes: Partial<SearchState>) => void
+    /** Whether a metadata snapshot is loaded; enables the local scope. */
+    localAvailable?: boolean
   } = $props()
 
   const SORTS: { value: Sort; label: string }[] = [
@@ -43,7 +46,9 @@
   <form onsubmit={submit}>
     <input
       bind:value={input}
-      placeholder="Search in Korean or English, use -term to exclude"
+      placeholder={params.scope === 'local'
+        ? 'Title, artist, series or character, in Korean or English'
+        : 'Search in Korean or English, use -term to exclude'}
       aria-label="Search"
       autocomplete="off"
     />
@@ -59,6 +64,15 @@
   </form>
 
   <div class="filters">
+    {#if localAvailable}
+      <label>
+        <span>In</span>
+        <select value={params.scope} onchange={(e) => onchange({ scope: e.currentTarget.value as Scope })}>
+          <option value="hitomi">hitomi tags</option>
+          <option value="local">local titles & artists</option>
+        </select>
+      </label>
+    {/if}
     <label>
       <span>Sort</span>
       <select value={params.sort} onchange={(e) => onchange({ sort: e.currentTarget.value as Sort })}>

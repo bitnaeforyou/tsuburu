@@ -5,11 +5,15 @@
 
 export type Sort = 'date' | 'today' | 'week' | 'month' | 'year'
 
+export type Scope = 'hitomi' | 'local'
+
 export type SearchState = {
   query: string
   sort: Sort
   language: string
   kind: string
+  /** `hitomi` searches the remote tag index; `local` the metadata snapshot. */
+  scope: Scope
 }
 
 export type Route =
@@ -26,6 +30,7 @@ export const defaultSearch: SearchState = {
   sort: 'date',
   language: 'all',
   kind: 'all',
+  scope: 'hitomi',
 }
 
 export function parse(hash: string): Route {
@@ -49,6 +54,7 @@ export function parse(hash: string): Route {
     sort: sort && SORTS.includes(sort) ? sort : 'date',
     language: params.get('language') || 'all',
     kind: params.get('kind') || 'all',
+    scope: params.get('scope') === 'local' ? 'local' : 'hitomi',
   }
 }
 
@@ -59,6 +65,7 @@ export function toSearch(state: Partial<SearchState> = {}): string {
   if (merged.sort !== 'date') params.set('sort', merged.sort)
   if (merged.language !== 'all') params.set('language', merged.language)
   if (merged.kind !== 'all') params.set('kind', merged.kind)
+  if (merged.scope !== 'hitomi') params.set('scope', merged.scope)
   const query = params.toString()
   return query ? `#/?${query}` : '#/'
 }

@@ -15,7 +15,7 @@ use std::sync::Arc;
 use tsuburu_dialogue::{Counts, Hit, ImportSummary, Priority, Shard};
 
 use crate::error::{ApiError, ErrorKind};
-use crate::grinder::{Coverage, Grinder, GrinderSettings, GrinderStatus, ids_from_text};
+use crate::grinder::{Coverage, Grinder, GrinderSettings, GrinderStatus, ImportProgress, ids_from_text};
 use crate::state::AppState;
 
 const MAX_RESULTS: usize = 100;
@@ -39,6 +39,8 @@ pub struct StatusResponse {
     pub counts: Option<Counts>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub coverage: Option<Coverage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub import: Option<ImportProgress>,
 }
 
 pub async fn status(State(state): State<Arc<AppState>>) -> Result<Json<StatusResponse>, ApiError> {
@@ -49,6 +51,7 @@ pub async fn status(State(state): State<Arc<AppState>>) -> Result<Json<StatusRes
             status: None,
             counts: None,
             coverage: None,
+            import: None,
         }));
     };
     // Coverage needs the popularity list; if hitomi is unreachable the
@@ -60,7 +63,29 @@ pub async fn status(State(state): State<Arc<AppState>>) -> Result<Json<StatusRes
         status: Some(grinder.status().await),
         counts: Some(grinder.store().counts()?),
         coverage,
+        import: grinder.import_progress(),
     }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImportArtifactBody {
+    /// Path to artifact's `llm-search-index` directory on this machine.
+    pub dir: String,
+}
+
+/// Loads artifact's recognised Korean corpus. Runs in the background;
+/// `status` reports progress.
+pub async fn import_artifact(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ImportArtifactBody>,
+) -> Result<Json<ImportProgress>, ApiError> {
+    let grinder = grinder(&state)?;
+    let dir = PathBuf::from(body.dir.trim());
+    if !dir.is_dir() {
+        return Err(ApiError::bad_request(format!("{} is not a directory", dir.display())));
+    }
+    grinder.start_artifact_import(dir).map_err(ApiError::bad_request)?;
+    Ok(Json(grinder.import_progress().unwrap_or_default()))
 }
 
 pub async fn update_settings(

@@ -21,9 +21,11 @@
   let offset = $state(0)
 
   let controller: AbortController | null = null
+  let localAvailable = $state(false)
 
   $effect(() => {
     void library.load().catch(() => {})
+    void api.metaStatus().then((s) => (localAvailable = s.available)).catch(() => {})
   })
 
   $effect(() => {
@@ -32,13 +34,15 @@
 
   // 검색어나 정렬, 필터가 바뀌면 처음부터 다시 그린다.
   $effect(() => {
-    const key = [params.query, params.sort, params.language, params.kind].join(' ')
+    const key = [params.query, params.sort, params.language, params.kind, params.scope].join(' ')
     void key
     ids = []
     terms = []
     total = 0
     offset = 0
     error = null
+    // Local scope needs something to search for; hitomi scope can browse.
+    if (params.scope === 'local' && !params.query && params.language === 'all' && params.kind === 'all') return
     void load(0)
   })
 
@@ -48,6 +52,18 @@
     loading = true
     error = null
     try {
+      if (params.scope === 'local') {
+        // The snapshot has no popularity data; results are newest first.
+        const page = await api.metaSearch(
+          { q: params.query, offset: from, limit: PAGE, language: params.language, kind: params.kind },
+          controller.signal,
+        )
+        total = page.total
+        terms = []
+        ids = from === 0 ? page.ids : [...ids, ...page.ids]
+        offset = from + page.ids.length
+        return
+      }
       const page = await api.search(
         {
           q: params.query,
@@ -83,7 +99,7 @@
 </script>
 
 <AppHeader active="search" />
-<SearchBar {params} onchange={go} />
+<SearchBar {params} onchange={go} {localAvailable} />
 
 <main>
   {#if error}
@@ -95,6 +111,7 @@
   {#if total > 0}
     <p class="count">
       {total.toLocaleString()} results
+      {#if params.scope === 'local'}&middot; from the local snapshot{/if}
       {#if !params.query && !filtering}&middot; browsing everything{/if}
     </p>
   {:else if !loading && !error}

@@ -27,6 +27,8 @@
   let hunt = $state({ q: '', language: 'korean', kind: 'doujinshi', limit: 500 })
   let huntResult = $state<string | null>(null)
 
+  let artifactDir = $state('')
+  let artifactResult = $state<string | null>(null)
   let backgroundOnly = $state(true)
   let shards = $state<api.ShardListing | null>(null)
   let exchangeResult = $state<string | null>(null)
@@ -133,6 +135,18 @@
       await refreshStatus()
     } catch (cause) {
       huntResult = cause instanceof Error ? cause.message : String(cause)
+    }
+  }
+
+  async function submitArtifact(event: SubmitEvent) {
+    event.preventDefault()
+    artifactResult = null
+    try {
+      const p = await api.importArtifact(artifactDir)
+      artifactResult = `Importing ${p.chunks_total.toLocaleString()} chunks from ${p.directory}`
+      await refreshStatus()
+    } catch (cause) {
+      artifactResult = cause instanceof Error ? cause.message : String(cause)
     }
   }
 
@@ -338,6 +352,33 @@
           <button type="submit">Queue</button>
         </div>
         {#if huntResult}<p class="muted small">{huntResult}</p>{/if}
+      </form>
+
+      <form onsubmit={submitArtifact}>
+        <strong>Import artifact's corpus</strong>
+        <p class="muted small">
+          If you have artifact's <code>llm-search-index</code> directory, its recognised
+          Korean text can be loaded whole: about 108,000 galleries in under a minute, with
+          no downloading or recognition.
+        </p>
+        <div class="row">
+          <input bind:value={artifactDir} placeholder="/path/to/llm-search-index" aria-label="Directory" />
+          <button type="submit" disabled={!artifactDir.trim() || status?.import?.running}>Import</button>
+        </div>
+        {#if status?.import}
+          <p class="muted small">
+            {#if status.import.running}
+              Importing… {status.import.works_seen.toLocaleString()} galleries so far
+            {:else if status.import.error}
+              Import failed: {status.import.error}
+            {:else}
+              Imported {status.import.added.toLocaleString()} galleries
+              ({status.import.skipped.toLocaleString()} were already here).
+            {/if}
+          </p>
+        {:else if artifactResult}
+          <p class="muted small">{artifactResult}</p>
+        {/if}
       </form>
 
       <div class="exchange">

@@ -8,10 +8,12 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, Semaphore, mpsc};
+use tsuburu_dialogue::artifact::{ChunkReader, WorkGrouper};
 use tsuburu_dialogue::{DialogueStore, PageText, Priority};
 use tsuburu_fetch::HttpFetcher;
 use tsuburu_hitomi::Fetcher;
@@ -54,6 +56,18 @@ impl Default for GrinderSettings {
     }
 }
 
+/// Progress of a bulk import from artifact's artefact.
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct ImportProgress {
+    pub running: bool,
+    pub directory: String,
+    pub chunks_total: usize,
+    pub works_seen: usize,
+    pub added: usize,
+    pub skipped: usize,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct GrinderStatus {
     pub running: bool,
@@ -77,6 +91,8 @@ pub struct Grinder {
     galleries_done: AtomicU64,
     /// Where the background sweep is in the popularity list.
     refill_cursor: RwLock<usize>,
+    /// Updated from a blocking thread, hence a std mutex.
+    import: std::sync::Mutex<Option<ImportProgress>>,
 }
 
 impl Grinder {
@@ -103,7 +119,71 @@ impl Grinder {
             pages_done: AtomicU64::new(0),
             galleries_done: AtomicU64::new(0),
             refill_cursor: RwLock::new(0),
+            import: std::sync::Mutex::new(None),
         }
+    }
+
+    pub fn import_progress(&self) -> Option<ImportProgress> {
+        self.import.lock().ok().and_then(|g| g.clone())
+    }
+
+    /// Starts importing artifact's `llm-search-index` directory in the
+    /// background. Returns an error if one is already running.
+    pub fn start_artifact_import(self: &Arc<Self>, dir: PathBuf) -> Result<(), String> {
+        let reader = ChunkReader::open(&dir).map_err(|e| e.to_string())?;
+        {
+            let mut guard = self.import.lock().map_err(|e| e.to_string())?;
+            if guard.as_ref().is_some_and(|p| p.running) {
+                return Err("an import is already running".into());
+            }
+            *guard = Some(ImportProgress {
+                running: true,
+                directory: dir.display().to_string(),
+                chunks_total: reader.len(),
+                ..ImportProgress::default()
+            });
+        }
+
+        let grinder = Arc::clone(self);
+        tokio::task::spawn_blocking(move || {
+            let store = grinder.store();
+            let progress_ref = &grinder.import;
+            let mut failed: Option<String> = None;
+            let works = WorkGrouper::new(reader).filter_map(|item| match item {
+                Ok(work) => Some(work),
+                Err(err) => {
+                    // One bad record must not lose the rest of the corpus.
+                    tracing::warn!(%err, "skipping a artifact record");
+                    None
+                }
+            });
+            let result = store.import_works(works, "artifact", 500, |seen| {
+                if let Ok(mut guard) = progress_ref.lock()
+                    && let Some(p) = guard.as_mut()
+                {
+                    p.works_seen = seen;
+                }
+            });
+            match result {
+                Ok(summary) => {
+                    if let Ok(mut guard) = progress_ref.lock()
+                        && let Some(p) = guard.as_mut()
+                    {
+                        p.added = summary.added;
+                        p.skipped = summary.skipped;
+                        p.works_seen = summary.galleries;
+                    }
+                }
+                Err(err) => failed = Some(err.to_string()),
+            }
+            if let Ok(mut guard) = progress_ref.lock()
+                && let Some(p) = guard.as_mut()
+            {
+                p.running = false;
+                p.error = failed;
+            }
+        });
+        Ok(())
     }
 
     pub async fn settings(&self) -> GrinderSettings {

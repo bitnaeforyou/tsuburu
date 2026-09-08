@@ -175,6 +175,7 @@ export type DialogueStatus = {
   status?: GrinderStatus
   counts?: Counts
   coverage?: Coverage
+  import?: ImportProgress
 }
 
 export type DialogueHit = {
@@ -239,4 +240,40 @@ export async function importShard(file: File): Promise<ImportSummary> {
     headers: { 'content-type': 'application/octet-stream' },
     body: file,
   })
+}
+
+// --- metadata snapshot ---
+
+export type MetaStatus = { available: boolean; works?: number; latest_id?: number }
+
+export function metaStatus(): Promise<MetaStatus> {
+  return request('/api/meta/status')
+}
+
+export function metaSearch(
+  params: { q: string; language?: string; kind?: string; offset: number; limit: number },
+  signal?: AbortSignal,
+): Promise<{ total: number; ids: number[] }> {
+  const search = new URLSearchParams({
+    q: params.q,
+    offset: String(params.offset),
+    limit: String(params.limit),
+  })
+  if (params.language && params.language !== 'all') search.set('language', params.language)
+  if (params.kind && params.kind !== 'all') search.set('kind', params.kind)
+  return request(`/api/meta/search?${search}`, { signal })
+}
+
+export type ImportProgress = {
+  running: boolean
+  directory: string
+  chunks_total: number
+  works_seen: number
+  added: number
+  skipped: number
+  error: string | null
+}
+
+export function importArtifact(dir: string): Promise<ImportProgress> {
+  return send('POST', '/api/dialogue/import-artifact', { dir })
 }

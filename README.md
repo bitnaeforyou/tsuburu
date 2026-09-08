@@ -55,6 +55,27 @@ tsuburu gallery 4170351          # inspect one gallery
 Search terms are combined with AND. Prefix a term with `-` to exclude it; quote
 the whole query so your shell does not read it as a flag.
 
+## Using artifact's artifacts
+
+If you have the data artifact publishes, two commands load it and most of the
+heavy work disappears:
+
+```
+tsuburu import-artifact /path/to/llm-search-index   # recognised Korean text, ~30 s
+tsuburu import-meta   /path/to/artifact/data.db   # metadata for 1.46M galleries, ~4 min
+```
+
+Stop the server first; each database is opened by one process at a time.
+`import-meta` reads the SQLite file through the local `sqlite3` command.
+
+With the metadata snapshot loaded, cards for galleries it covers never touch
+the network, and the search bar gains a **local titles & artists** scope that
+finds Korean titles, artists, series and characters offline. Galleries newer
+than the snapshot still come from hitomi.
+
+With the dialogue corpus loaded, every Korean gallery up to mid-2026 is
+searchable by a remembered line, with no downloading or recognition.
+
 ## Dialogue search
 
 hitomi's index only knows titles and tags. To find a work by a line you
@@ -136,7 +157,12 @@ intended for adults.
 ```
 crates/tsuburu-hitomi   hitomi's formats: index, search, metadata, image URLs
 crates/tsuburu-fetch    HTTP client, range requests, node cache
-crates/tsuburu-server   JSON API and image proxy
+crates/tsuburu-server   JSON API, image proxy, background indexer
+crates/tsuburu-store    favorites and reading history (redb)
+crates/tsuburu-korean   Korean search-term dictionary
+crates/tsuburu-ocr      text recognition behind a trait (Vision on macOS)
+crates/tsuburu-dialogue recognised text, matching, shards, artifact import
+crates/tsuburu-meta     local metadata snapshot and its search
 crates/tsuburu          CLI and server entry point
 web/                    Svelte 5 + Vite frontend
 docs/superpowers/       design spec and implementation plan

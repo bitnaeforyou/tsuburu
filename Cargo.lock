@@ -1001,6 +1001,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
+name = "lz4_flex"
+version = "0.11.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "373f5eceeeab7925e0c1098212f2fbc4d416adec9d35051a6ab251e824c1854a"
+
+[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2023,6 +2029,7 @@ dependencies = [
  "tsuburu-dialogue",
  "tsuburu-fetch",
  "tsuburu-hitomi",
+ "tsuburu-meta",
  "tsuburu-ocr",
  "tsuburu-server",
  "tsuburu-store",
@@ -2033,6 +2040,8 @@ name = "tsuburu-dialogue"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "lz4_flex",
+ "memchr",
  "redb",
  "serde",
  "serde_json",
@@ -2074,6 +2083,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsuburu-meta"
+version = "0.1.0"
+dependencies = [
+ "lz4_flex",
+ "redb",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tsuburu-dialogue",
+]
+
+[[package]]
 name = "tsuburu-ocr"
 version = "0.1.0"
 dependencies = [
@@ -2107,6 +2130,7 @@ dependencies = [
  "tsuburu-fetch",
  "tsuburu-hitomi",
  "tsuburu-korean",
+ "tsuburu-meta",
  "tsuburu-ocr",
  "tsuburu-store",
  "wiremock",

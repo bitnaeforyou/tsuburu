@@ -145,31 +145,58 @@ pub async fn cards(
     let gg = state.gg().await?;
     let mut out = Vec::with_capacity(ids.len());
 
+    // The local snapshot answers for anything it covers: no network, no
+    // 200 KB gallery JSON per card.
+    let snapshot: std::collections::HashMap<i32, Card> = match &state.meta {
+        Some(meta) => meta
+            .works(&ids)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|w| (w.id, card_from_work(w)))
+            .collect(),
+        None => Default::default(),
+    };
+
     // 갤러리 메타는 최대 200 KB를 넘기도 하므로 동시 요청 수는 fetcher의
     // 세마포어가 조인다. 여기서는 순서를 유지한 채 모으기만 한다.
     let mut tasks = Vec::with_capacity(ids.len());
     for id in ids {
+        // Older snapshot rows carry no thumbnail; their text is used as is
+        // and the picture is fetched, falling back to text-only on failure.
+        let fallback = snapshot.get(&id).cloned();
+        if let Some(local) = &fallback
+            && local.thumbnail.is_some()
+        {
+            tasks.push(CardTask::Ready(local.clone()));
+            continue;
+        }
         if let Some(cached) = state.cards.get(&id) {
             tasks.push(CardTask::Ready(cached));
             continue;
         }
         let state = Arc::clone(&state);
         let gg = gg.clone();
-        tasks.push(CardTask::Pending(tokio::spawn(async move {
-            build_card(&state, &gg, id).await
-        })));
+        tasks.push(CardTask::Pending(
+            tokio::spawn(async move { build_card(&state, &gg, id).await }),
+            fallback,
+        ));
     }
 
     for task in tasks {
         match task {
             CardTask::Ready(card) => out.push(card),
-            CardTask::Pending(handle) => match handle.await {
+            CardTask::Pending(handle, fallback) => match handle.await {
                 Ok(Ok(card)) => {
                     state.cards.insert(card.id, card.clone());
                     out.push(card);
                 }
                 // 한 장이 실패했다고 페이지 전체를 버리지 않는다.
-                Ok(Err(err)) => tracing::warn!(%err, "skipping a card"),
+                Ok(Err(err)) => {
+                    tracing::warn!(%err, "card fetch failed");
+                    if let Some(card) = fallback {
+                        out.push(card);
+                    }
+                }
                 Err(err) => tracing::warn!(%err, "card task panicked"),
             },
         }
@@ -178,9 +205,21 @@ pub async fn cards(
     Ok(Json(out))
 }
 
+fn card_from_work(w: tsuburu_meta::Work) -> Card {
+    Card {
+        id: w.id,
+        title: (!w.title.is_empty()).then_some(w.title),
+        kind: (!w.kind.is_empty()).then_some(w.kind),
+        language: (!w.language.is_empty()).then_some(w.language),
+        pages: w.pages as usize,
+        tags: w.tags.into_iter().take(8).collect(),
+        thumbnail: w.thumbnail_hash.map(|h| format!("/tn/{h}.avif")),
+    }
+}
+
 enum CardTask {
     Ready(Card),
-    Pending(tokio::task::JoinHandle<Result<Card, tsuburu_hitomi::GalleryFetchError>>),
+    Pending(tokio::task::JoinHandle<Result<Card, tsuburu_hitomi::GalleryFetchError>>, Option<Card>),
 }
 
 async fn build_card(
