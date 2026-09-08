@@ -272,6 +272,14 @@ impl MetaStore {
     /// `glasses` also tries both, the way hitomi's own search reads it.
     fn ids_for_term(&self, tx: &redb::ReadTransaction, term: &str) -> Result<HashSet<i32>, MetaError> {
         let term = term.trim().to_lowercase();
+        if let Some(tag) = term.strip_prefix("tag:") {
+            let mut out = self.ids_for(tx, &term)?;
+            if !tag.starts_with("female:") && !tag.starts_with("male:") {
+                out.extend(self.ids_for(tx, &format!("tag:female:{tag}"))?);
+                out.extend(self.ids_for(tx, &format!("tag:male:{tag}"))?);
+            }
+            return Ok(out);
+        }
         if NAMESPACES.iter().any(|ns| term.starts_with(&format!("{ns}:"))) {
             return self.ids_for(tx, &term);
         }
@@ -449,6 +457,13 @@ mod tests {
 
         let q = MetaQuery { terms: vec!["glasses".into()], language: Some("korean".into()), ..MetaQuery::default() };
         assert_eq!(store.search(&q, 0, 10).unwrap().ids, vec![3]);
+    }
+
+    #[test]
+    fn explicit_tag_terms_also_cover_gendered_variants() {
+        let (store, _d) = seeded();
+        let q = MetaQuery { terms: vec!["tag:glasses".into(), "artist:keso".into()], ..MetaQuery::default() };
+        assert_eq!(store.search(&q, 0, 10).unwrap().ids, vec![3, 2]);
     }
 
     #[test]
