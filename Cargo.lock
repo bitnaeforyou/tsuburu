@@ -2049,6 +2049,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
+ "tsuburu-text",
 ]
 
 [[package]]
@@ -2087,13 +2088,14 @@ name = "tsuburu-meta"
 version = "0.1.0"
 dependencies = [
  "lz4_flex",
+ "memchr",
  "redb",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
  "tracing",
- "tsuburu-dialogue",
+ "tsuburu-text",
 ]
 
 [[package]]
@@ -2148,6 +2150,10 @@ dependencies = [
  "thiserror",
  "tracing",
 ]
+
+[[package]]
+name = "tsuburu-text"
+version = "0.1.0"
 
 [[package]]
 name = "typenum"

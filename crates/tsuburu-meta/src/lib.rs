@@ -13,15 +13,17 @@ use redb::{Database, MultimapTableDefinition, ReadableTable, ReadableTableMetada
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use tsuburu_dialogue::jamo::{normalize, normalize_into};
+use tsuburu_text::{codes, codes_into};
 
 const WORKS: TableDefinition<i32, &[u8]> = TableDefinition::new("works");
-/// id -> title, kept separately so title scans do not decode whole works.
-const TITLES: TableDefinition<i32, &str> = TableDefinition::new("titles");
+/// id -> the title's match codes. Scanning these avoids decoding a work and
+/// re-normalising 1.4 million titles on every query.
+const TITLES: TableDefinition<i32, &[u8]> = TableDefinition::new("titles");
 /// "tag:glasses" -> ids. Sorted keys make prefix suggestions a range scan.
 const TERMS: MultimapTableDefinition<&str, i32> = MultimapTableDefinition::new("terms");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
-const SCHEMA_VERSION: &str = "1";
+/// 2: titles stored as match codes.
+const SCHEMA_VERSION: &str = "2";
 
 #[derive(Debug, thiserror::Error)]
 pub enum MetaError {
@@ -33,6 +35,8 @@ pub enum MetaError {
     Corrupt(String),
     #[error("this metadata snapshot was written by a newer tsuburu (schema {found})")]
     NewerSchema { found: String },
+    #[error("this metadata snapshot uses an old layout (schema {found}); import it again")]
+    OlderSchema { found: String },
 }
 
 impl From<serde_json::Error> for MetaError {
@@ -166,6 +170,9 @@ impl MetaStore {
                     meta.insert("schema", SCHEMA_VERSION).map_err(db_err)?;
                 }
                 Some(found) if found == SCHEMA_VERSION => {}
+                Some(found) if found.as_str() < SCHEMA_VERSION => {
+                    return Err(MetaError::OlderSchema { found });
+                }
                 Some(found) => return Err(MetaError::NewerSchema { found }),
             }
         }
@@ -212,7 +219,7 @@ impl MetaStore {
                 for work in pending.drain(..) {
                     let encoded = lz4_flex::compress_prepend_size(&serde_json::to_vec(&work)?);
                     table.insert(work.id, encoded.as_slice()).map_err(db_err)?;
-                    titles.insert(work.id, work.title.as_str()).map_err(db_err)?;
+                    titles.insert(work.id, codes(&work.title).as_slice()).map_err(db_err)?;
                     for key in work.term_keys() {
                         terms.insert(key.as_str(), work.id).map_err(db_err)?;
                     }
@@ -322,19 +329,17 @@ impl MetaStore {
 
         let mut ids: Vec<i32> = match (&query.title, candidates) {
             (Some(title), candidates) if !title.trim().is_empty() => {
-                let needle = normalize(title);
+                let mut needle = Vec::new();
+                codes_into(title, &mut needle);
                 let titles = tx.open_table(TITLES).map_err(db_err)?;
                 let mut out = Vec::new();
-                let mut buf = String::new();
                 for row in titles.iter().map_err(db_err)? {
                     let (key, value) = row.map_err(db_err)?;
                     let id = key.value();
                     if candidates.as_ref().is_some_and(|c| !c.contains(&id)) {
                         continue;
                     }
-                    buf.clear();
-                    normalize_into(value.value(), &mut buf);
-                    if buf.contains(&needle) {
+                    if memchr::memmem::find(value.value(), &needle).is_some() {
                         out.push(id);
                     }
                 }

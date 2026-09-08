@@ -77,6 +77,11 @@ With the dialogue corpus loaded, every Korean gallery up to mid-2026 is
 searchable by a remembered line, with no downloading or recognition. A query
 over the 108,000 galleries takes about half a second.
 
+Imported text has gaps: artifact's OCR missed bubbles that Vision reads. The
+Dialogue tab can queue any gallery to be read again, and "re-read imported
+galleries" makes the background sweep go over the whole imported corpus. That
+costs as much as indexing from nothing, so it is off by default.
+
 ## Dialogue search
 
 hitomi's index only knows titles and tags. To find a work by a line you

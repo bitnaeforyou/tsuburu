@@ -43,6 +43,13 @@ pub struct GrinderSettings {
     /// Download cap. Recognition only consumes about 2.8 MB/s, so a higher
     /// cap would just pile pages up.
     pub bytes_per_second: u64,
+    /// Recognise galleries whose text was imported from elsewhere.
+    ///
+    /// artifact's corpus has gaps: bubbles its OCR missed that Vision reads.
+    /// Off by default because re-reading 108,000 galleries costs the same
+    /// as indexing them from nothing.
+    #[serde(default)]
+    pub reindex_imported: bool,
 }
 
 impl Default for GrinderSettings {
@@ -52,6 +59,7 @@ impl Default for GrinderSettings {
             language: "korean".into(),
             kinds: vec!["doujinshi".into(), "manga".into()],
             bytes_per_second: 3 * 1024 * 1024,
+            reindex_imported: false,
         }
     }
 }
@@ -258,7 +266,12 @@ impl Grinder {
         let popular = self.cfg.sort_list_url(Sort::PopularYear, language);
         let total = nozomi::count(self.fetcher.as_ref(), &popular).await.map_err(|e| e.to_string())?;
 
-        let done = self.store.done_ids().map_err(|e| e.to_string())?;
+        // With re-indexing on, only what this machine has read counts as done.
+        let done = if settings.reindex_imported {
+            self.store.locally_indexed_ids().map_err(|e| e.to_string())?
+        } else {
+            self.store.done_ids().map_err(|e| e.to_string())?
+        };
         let mut allowed: HashSet<i32> = HashSet::new();
         for kind in &settings.kinds {
             let url = self.cfg.type_list_url(kind, language);
@@ -283,7 +296,9 @@ impl Grinder {
         if batch.is_empty() {
             return Ok(0);
         }
-        self.store.enqueue(&batch, Priority::Background).map_err(|e| e.to_string())
+        self.store
+            .enqueue_with(&batch, Priority::Background, settings.reindex_imported)
+            .map_err(|e| e.to_string())
     }
 
     async fn note_error(&self, message: String) {
@@ -462,7 +477,12 @@ impl Grinder {
         let settings = self.settings.read().await.clone();
         let language = settings.language.as_str();
         let popular = self.cfg.sort_list_url(Sort::PopularYear, language);
-        let done = self.store.done_ids().map_err(|e| e.to_string())?;
+        // With re-indexing on, only what this machine has read counts as done.
+        let done = if settings.reindex_imported {
+            self.store.locally_indexed_ids().map_err(|e| e.to_string())?
+        } else {
+            self.store.done_ids().map_err(|e| e.to_string())?
+        };
         let top = nozomi::page(self.fetcher.as_ref(), &popular, 0, 10_000)
             .await
             .map_err(|e| e.to_string())?;

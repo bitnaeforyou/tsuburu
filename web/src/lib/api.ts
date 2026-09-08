@@ -147,6 +147,7 @@ export type GrinderSettings = {
   language: string
   kinds: string[]
   bytes_per_second: number
+  reindex_imported: boolean
 }
 
 export type GrinderStatus = {
@@ -203,8 +204,11 @@ export function dialogueSearch(
   return request(`/api/dialogue/search?${params}`, { signal })
 }
 
-export function enqueueDialogue(text: string): Promise<{ found: number; added: number }> {
-  return send('POST', '/api/dialogue/enqueue', { text, priority: 'imported' })
+export function enqueueDialogue(
+  text: string,
+  force = false,
+): Promise<{ found: number; added: number }> {
+  return send('POST', '/api/dialogue/enqueue', { text, priority: 'imported', force })
 }
 
 export function huntDialogue(body: {
@@ -212,6 +216,7 @@ export function huntDialogue(body: {
   language?: string
   kind?: string
   limit?: number
+  force?: boolean
 }): Promise<{ found: number; added: number }> {
   return send('POST', '/api/dialogue/hunt', body)
 }

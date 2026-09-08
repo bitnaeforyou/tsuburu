@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+tsuburu-text = { path = "../tsuburu-text" }
 redb = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -4,7 +4,8 @@
 //! downloads pages and runs recognition lives in the server, feeding
 //! results into [`DialogueStore`].
 
-pub mod jamo;
+pub use tsuburu_text as jamo;
+
 pub mod matcher;
 pub mod shard;
 pub mod store;

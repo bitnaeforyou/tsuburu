@@ -1,8 +1,11 @@
-//! Hangul normalisation for fuzzy matching.
+//! Hangul normalisation shared by the searchable stores.
 //!
 //! OCR gets a final consonant wrong far more often than it gets a whole
 //! syllable wrong. Comparing decomposed jamo instead of syllables lets a
 //! one-jamo error still match, at the cost of a slightly longer string.
+//!
+//! Both the dialogue corpus and the metadata snapshot match Korean this way,
+//! so it lives here rather than in either of them.
 
 const BASE: u32 = 0xAC00;
 const LAST: u32 = 0xD7A3;

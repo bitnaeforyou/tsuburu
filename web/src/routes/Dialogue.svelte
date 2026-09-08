@@ -23,8 +23,9 @@
   let statusError = $state<unknown>(null)
 
   let importText = $state('')
+  let importForce = $state(false)
   let importResult = $state<string | null>(null)
-  let hunt = $state({ q: '', language: 'korean', kind: 'doujinshi', limit: 500 })
+  let hunt = $state({ q: '', language: 'korean', kind: 'doujinshi', limit: 500, force: false })
   let huntResult = $state<string | null>(null)
 
   let artifactDir = $state('')
@@ -112,7 +113,7 @@
     event.preventDefault()
     importResult = null
     try {
-      const r = await api.enqueueDialogue(importText)
+      const r = await api.enqueueDialogue(importText, importForce)
       importResult = `${r.found} ids found, ${r.added} queued ahead of everything else.`
       importText = ''
       await refreshStatus()
@@ -130,6 +131,7 @@
         language: hunt.language,
         kind: hunt.kind,
         limit: hunt.limit,
+        force: hunt.force,
       })
       huntResult = `${r.found} galleries matched, ${r.added} queued.`
       await refreshStatus()
@@ -261,6 +263,14 @@
               </label>
             {/each}
           </span>
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={settings.reindex_imported}
+              onchange={(e) => updateSetting({ reindex_imported: e.currentTarget.checked })}
+            />
+            Re-read imported galleries
+          </label>
           <label>
             Download cap
             <select
@@ -330,7 +340,13 @@
           database. They are indexed before anything else.
         </p>
         <textarea bind:value={importText} rows="3" placeholder="https://hitomi.la/doujinshi/...-1234567.html"></textarea>
-        <button type="submit" disabled={!importText.trim()}>Queue</button>
+        <div class="row">
+          <label class="check">
+            <input type="checkbox" bind:checked={importForce} />
+            Read them again even if they already have text
+          </label>
+          <button type="submit" disabled={!importText.trim()}>Queue</button>
+        </div>
         {#if importResult}<p class="muted small">{importResult}</p>{/if}
       </form>
 
@@ -349,6 +365,10 @@
             {#each KINDS as k (k)}<option value={k}>{k}</option>{/each}
           </select>
           <input type="number" bind:value={hunt.limit} min="1" max="5000" aria-label="Limit" />
+          <label class="check">
+            <input type="checkbox" bind:checked={hunt.force} />
+            re-read
+          </label>
           <button type="submit">Queue</button>
         </div>
         {#if huntResult}<p class="muted small">{huntResult}</p>{/if}

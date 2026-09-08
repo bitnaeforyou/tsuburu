@@ -14,7 +14,7 @@
 //! allocation per candidate, which is what a scan over 2.5 million pages
 //! needs.
 
-use crate::jamo::codes;
+use tsuburu_text::codes;
 
 /// Window length in code bytes; roughly two syllables. Three-jamo windows
 /// are so common in Korean that unrelated pages scored well.

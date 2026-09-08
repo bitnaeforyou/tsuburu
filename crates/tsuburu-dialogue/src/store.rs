@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::jamo::codes_into;
+use tsuburu_text::codes_into;
 use crate::matcher::{Match, Query};
 use crate::shard::{Shard, ShardEntry};
 
@@ -218,6 +218,18 @@ impl DialogueStore {
     /// Adds galleries to the queue. Finished ones are skipped; a pending one
     /// is promoted if the new priority is higher, never demoted.
     pub fn enqueue(&self, ids: &[i32], priority: Priority) -> Result<usize, DialogueError> {
+        self.enqueue_with(ids, priority, false)
+    }
+
+    /// `force` re-queues galleries that are already done, so text imported
+    /// from elsewhere can be recognised again locally. Their stored text
+    /// stays searchable until the new pass replaces it.
+    pub fn enqueue_with(
+        &self,
+        ids: &[i32],
+        priority: Priority,
+        force: bool,
+    ) -> Result<usize, DialogueError> {
         let now = now_millis();
         let tx = self.db.begin_write().map_err(db_err)?;
         let mut added = 0usize;
@@ -229,7 +241,11 @@ impl DialogueStore {
                 let existing: Option<JobRecord> =
                     existing.map(|s| serde_json::from_str(&s)).transpose()?;
                 match existing {
-                    Some(job) if job.status == Status::Done => continue,
+                    Some(job) if job.status == Status::Done && !force => continue,
+                    Some(job) if job.status == Status::Done => {
+                        // Done jobs hold no queue key; nothing to remove.
+                        let _ = job;
+                    }
                     Some(job) if job.status == Status::Pending && job.priority >= priority => continue,
                     Some(job) => {
                         // Promote (or retry a failure) by replacing the queue key.
@@ -369,6 +385,25 @@ impl DialogueStore {
         for row in texts.iter().map_err(db_err)? {
             let (key, _) = row.map_err(db_err)?;
             out.insert(key.value());
+        }
+        Ok(out)
+    }
+
+    /// Ids this machine recognised itself, as opposed to imported text.
+    ///
+    /// Imported corpora have gaps: artifact's OCR missed bubbles that Vision
+    /// reads. The sweep can be told to go over them again, and this is how
+    /// it knows which it has already redone.
+    pub fn locally_indexed_ids(&self) -> Result<std::collections::HashSet<i32>, DialogueError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let jobs = tx.open_table(JOBS).map_err(db_err)?;
+        let mut out = std::collections::HashSet::new();
+        for row in jobs.iter().map_err(db_err)? {
+            let (key, value) = row.map_err(db_err)?;
+            let job: JobRecord = serde_json::from_str(value.value())?;
+            if job.status == Status::Done && job.source.is_none() {
+                out.insert(key.value());
+            }
         }
         Ok(out)
     }
@@ -872,6 +907,31 @@ mod tests {
         store.complete(1, &pages(&[&["a"]])).unwrap();
         assert_eq!(store.enqueue(&[1], Priority::Imported).unwrap(), 0, "done stays done");
         assert_eq!(store.next_pending().unwrap(), None);
+    }
+
+    #[test]
+    fn forcing_requeues_a_done_gallery_but_keeps_its_text() {
+        let (store, _d) = store();
+        store.enqueue(&[9], Priority::Background).unwrap();
+        store.complete(9, &pages(&[&["원래 텍스트"]])).unwrap();
+
+        assert_eq!(store.enqueue(&[9], Priority::Hunt).unwrap(), 0);
+        assert_eq!(store.enqueue_with(&[9], Priority::Hunt, true).unwrap(), 1);
+        assert_eq!(store.next_pending().unwrap(), Some(9));
+        assert_eq!(store.text(9).unwrap().unwrap()[0].lines, vec!["원래 텍스트"]);
+
+        store.complete(9, &pages(&[&["다시 읽은 텍스트"]])).unwrap();
+        assert_eq!(store.text(9).unwrap().unwrap()[0].lines, vec!["다시 읽은 텍스트"]);
+    }
+
+    #[test]
+    fn locally_indexed_excludes_imported_text() {
+        let (store, _d) = store();
+        store.enqueue(&[1], Priority::Background).unwrap();
+        store.complete(1, &pages(&[&["mine"]])).unwrap();
+        store.import_works(vec![(2, pages(&[&["theirs"]]))], "artifact", 10, |_| {}).unwrap();
+        assert_eq!(store.locally_indexed_ids().unwrap(), [1].into_iter().collect());
+        assert_eq!(store.done_ids().unwrap().len(), 2);
     }
 
     #[test]

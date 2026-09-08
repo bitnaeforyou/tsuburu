@@ -142,6 +142,9 @@ pub struct EnqueueBody {
     pub text: String,
     #[serde(default = "default_priority")]
     pub priority: Priority,
+    /// Re-recognise galleries that already have text.
+    #[serde(default)]
+    pub force: bool,
 }
 
 fn default_priority() -> Priority {
@@ -163,7 +166,7 @@ pub async fn enqueue(
     if ids.is_empty() {
         return Err(ApiError::bad_request("no gallery ids found in the text"));
     }
-    let added = grinder.store().enqueue(&ids, body.priority)?;
+    let added = grinder.store().enqueue_with(&ids, body.priority, body.force)?;
     Ok(Json(EnqueueResponse { found: ids.len(), added }))
 }
 
@@ -178,6 +181,9 @@ pub struct HuntBody {
     /// How many of the matching galleries to queue, most recent first.
     #[serde(default = "default_hunt_limit")]
     pub limit: usize,
+    /// Re-recognise galleries that already have text.
+    #[serde(default)]
+    pub force: bool,
 }
 
 fn default_hunt_limit() -> usize {
@@ -218,7 +224,7 @@ pub async fn hunt(
         },
     )
     .await?;
-    let added = grinder.store().enqueue(&page.ids, Priority::Hunt)?;
+    let added = grinder.store().enqueue_with(&page.ids, Priority::Hunt, body.force)?;
     Ok(Json(EnqueueResponse { found: page.ids.len(), added }))
 }
 
