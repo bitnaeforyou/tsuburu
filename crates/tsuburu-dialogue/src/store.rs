@@ -150,6 +150,12 @@ pub struct Hit {
     pub exact: bool,
     /// The matching line with a little context either side.
     pub snippet: Vec<String>,
+    /// Other galleries with the same passage on the same page.
+    ///
+    /// The same work is uploaded to hitomi more than once, and every copy
+    /// matches identically. Showing them all buries the distinct results.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub also: Vec<i32>,
 }
 
 pub struct DialogueStore {
@@ -645,6 +651,7 @@ impl DialogueStore {
                 .then(b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal))
                 .then(b.gallery_id.cmp(&a.gallery_id))
         });
+        let mut hits = collapse_duplicates(hits);
         hits.truncate(limit);
         Ok(hits)
     }
@@ -709,6 +716,7 @@ impl DialogueStore {
                     score: m.score,
                     exact: m.exact,
                     snippet: snippet(&lines, query),
+                    also: Vec::new(),
                 });
             }
         }
@@ -830,6 +838,33 @@ impl<'a> Iterator for PageIter<'a> {
         self.at = end;
         Some(PageView { page, text })
     }
+}
+
+/// Folds copies of the same upload into one result.
+///
+/// Sorted order puts the newest id first, so that is the one kept and the
+/// rest are listed under `also`.
+fn collapse_duplicates(hits: Vec<Hit>) -> Vec<Hit> {
+    let mut out: Vec<Hit> = Vec::with_capacity(hits.len());
+    let mut seen: std::collections::HashMap<(u16, Vec<u8>), usize> =
+        std::collections::HashMap::new();
+    for hit in hits {
+        // Match codes, not raw text: copies differ by OCR noise in the
+        // punctuation ("온거야 …?" against "온거야 ?").
+        let mut key_codes = Vec::new();
+        for line in &hit.snippet {
+            codes_into(line, &mut key_codes);
+        }
+        let key = (hit.page, key_codes);
+        match seen.get(&key) {
+            Some(&index) => out[index].also.push(hit.gallery_id),
+            None => {
+                seen.insert(key, out.len());
+                out.push(hit);
+            }
+        }
+    }
+    out
 }
 
 /// The line that matches best plus one line either side.
@@ -999,6 +1034,34 @@ mod tests {
         assert_eq!(hits[0].page, 1);
         assert!(!hits[1].exact);
         assert!(hits[0].snippet.iter().any(|l| l.contains("구급차")));
+    }
+
+    #[test]
+    fn copies_of_the_same_upload_collapse_into_one_result() {
+        let (store, _d) = store();
+        // hitomi carries the same work under several ids; every copy matches.
+        store.enqueue(&[100, 101, 200], Priority::Background).unwrap();
+        for id in [100, 101] {
+            store.complete(id, &pages(&[&["구급차라도", "부르는 게 좋겠어요"]])).unwrap();
+        }
+        store.complete(200, &pages(&[&["다른 작품", "구급차라도 부르는 게 좋겠어요"]])).unwrap();
+
+        let hits = store.search("구급차라도 부르는 게", 10).unwrap();
+        assert_eq!(hits.len(), 2, "two distinct works, not three rows");
+        let collapsed = hits.iter().find(|h| h.gallery_id == 101).unwrap();
+        assert_eq!(collapsed.also, vec![100], "the older copy is listed, not dropped");
+    }
+
+    #[test]
+    fn copies_collapse_through_ocr_noise_in_punctuation() {
+        let (store, _d) = store();
+        store.enqueue(&[300, 301], Priority::Background).unwrap();
+        store.complete(300, &pages(&[&["도와주러 온거야 …?", "구급차라도 부를까요~?"]])).unwrap();
+        store.complete(301, &pages(&[&["도와주러 온거야 ?", "구급차라도 부를까요~?"]])).unwrap();
+
+        let hits = store.search("구급차라도 부를까요", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].also, vec![300]);
     }
 
     #[test]

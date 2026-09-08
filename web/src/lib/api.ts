@@ -185,6 +185,8 @@ export type DialogueHit = {
   score: number
   exact: boolean
   snippet: string[]
+  /** Other galleries carrying the same passage: re-uploads of one work. */
+  also?: number[]
 }
 
 export function dialogueStatus(): Promise<DialogueStatus> {

@@ -321,6 +321,11 @@
                 <a href={toGallery(hit.gallery_id, hit.page)}>
                   Page {hit.page + 1}
                   {#if hit.exact}<span class="badge">exact</span>{:else}<span class="badge fuzzy">~{Math.round(hit.score * 100)}%</span>{/if}
+                  {#if hit.also?.length}
+                    <span class="badge fuzzy" title={hit.also.join(', ')}>
+                      +{hit.also.length} copy{hit.also.length > 1 ? 'ies' : ''}
+                    </span>
+                  {/if}
                 </a>
                 <blockquote>
                   {#each hit.snippet as line, i (i)}<span>{line}</span>{/each}
