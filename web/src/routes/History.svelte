@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
+  import { t } from '../lib/i18n.svelte'
   import { library } from '../lib/library.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -45,12 +46,12 @@
     {#if items.length > 0}
       {#if confirming}
         <span class="confirm">
-          Clear everything?
-          <button onclick={clear}>Yes, clear</button>
-          <button onclick={() => (confirming = false)}>Cancel</button>
+          {t('history.confirm')}
+          <button onclick={clear}>{t('history.confirmYes')}</button>
+          <button onclick={() => (confirming = false)}>{t('common.cancel')}</button>
         </span>
       {:else}
-        <button onclick={() => (confirming = true)}>Clear</button>
+        <button onclick={() => (confirming = true)}>{t('history.clear')}</button>
       {/if}
     {/if}
   {/snippet}
@@ -60,11 +61,11 @@
   {#if error}
     <ErrorNote {error} onretry={load} />
   {:else if loading}
-    <p class="count">Loading...</p>
+    <p class="count">{t('common.loading')}</p>
   {:else if items.length === 0}
-    <p class="count">Nothing read yet.</p>
+    <p class="count">{t('history.empty')}</p>
   {:else}
-    <p class="count">{items.length} recently read</p>
+    <p class="count">{t('history.count', { n: items.length })}</p>
     <Grid>
       {#each items as item (item.id)}
         <Card

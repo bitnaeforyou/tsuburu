@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
+  import { t } from '../lib/i18n.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import { library } from '../lib/library.svelte'
   import { toArtist, toSearch } from '../lib/router'
@@ -178,7 +179,7 @@
 </script>
 
 <header>
-  <button onclick={back}>&larr; Back</button>
+  <button onclick={back}>&larr; {t('gallery.back')}</button>
   <h1>{gallery?.title ?? `#${id}`}</h1>
   {#if gallery && !library.unavailable}
     <button
@@ -187,7 +188,7 @@
       onclick={() => library.toggle(id, summary())}
       aria-pressed={favorited}
     >
-      {favorited ? '★ Saved' : '☆ Save'}
+      {favorited ? `★ ${t('gallery.saved')}` : `☆ ${t('gallery.save')}`}
     </button>
   {/if}
   {#if gallery}
@@ -199,13 +200,13 @@
   {#if error}
     <ErrorNote {error} onretry={load} />
   {:else if !gallery}
-    <p class="status">Loading...</p>
+    <p class="status">{t('common.loading')}</p>
   {:else}
     {#if resumeAt !== null}
       <div class="resume">
-        You stopped on page {resumeAt + 1}.
-        <button onclick={resume}>Continue</button>
-        <button onclick={() => (resumeAt = null)}>Start over</button>
+        {t('gallery.resume', { n: resumeAt + 1 })}
+        <button onclick={resume}>{t('gallery.continue')}</button>
+        <button onclick={() => (resumeAt = null)}>{t('gallery.startOver')}</button>
       </div>
     {/if}
 
@@ -223,14 +224,18 @@
     <div class="keep">
       {#if download}
         <span class="muted">
-          {download.have} / {download.pages} pages on disk
-          {#if download.job.running}&middot; downloading{/if}
+          {t('gallery.onDisk', { have: download.have, pages: download.pages })}
+          {#if download.job.running}&middot; {t('gallery.downloading')}{/if}
         </span>
       {/if}
       <button onclick={keepWork}>
-        {download?.complete ? 'Downloaded' : download ? 'Get the rest' : 'Download'}
+        {download?.complete
+          ? t('gallery.downloaded')
+          : download
+            ? t('gallery.getRest')
+            : t('gallery.download')}
       </button>
-      <button onclick={() => keepPage(current)}>Download this page</button>
+      <button onclick={() => keepPage(current)}>{t('gallery.downloadPage')}</button>
       {#if downloadError}<span class="muted">{downloadError}</span>{/if}
     </div>
 
@@ -246,7 +251,7 @@
           src={p.src}
           width={p.width}
           height={p.height}
-          alt={`Page ${i + 1}`}
+          alt={t('common.page', { n: i + 1 })}
           loading={i <= PREFETCH ? 'eager' : 'lazy'}
           decoding="async"
         />
@@ -254,12 +259,14 @@
     </div>
 
     <nav>
-      <button onclick={() => go(current - 1)} disabled={current === 0}>Previous</button>
+      <button onclick={() => go(current - 1)} disabled={current === 0}>
+        {t('gallery.previous')}
+      </button>
       <button onclick={() => go(current + 1)} disabled={current >= gallery.pages.length - 1}>
-        Next
+        {t('gallery.next')}
       </button>
     </nav>
-    <p class="hint">Arrow keys turn pages &middot; Esc goes back</p>
+    <p class="hint">{t('gallery.hint')}</p>
   {/if}
 </main>
 

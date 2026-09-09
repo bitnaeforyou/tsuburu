@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
+  import { t } from '../lib/i18n.svelte'
   import { library } from '../lib/library.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -40,7 +41,7 @@
 <main>
   {#if artists.length}
     <section class="artists">
-      <strong>Artists you follow</strong>
+      <strong>{t('favorites.artists')}</strong>
       <ul>
         {#each artists as artist (artist.name)}
           <li>
@@ -55,13 +56,11 @@
   {#if error}
     <ErrorNote {error} onretry={load} />
   {:else if loading}
-    <p class="count">Loading...</p>
+    <p class="count">{t('common.loading')}</p>
   {:else if visible.length === 0}
-    <p class="count">
-      No favorites yet. Tap the star on any result to keep it here.
-    </p>
+    <p class="count">{t('favorites.empty')}</p>
   {:else}
-    <p class="count">{visible.length} saved</p>
+    <p class="count">{t('favorites.count', { n: visible.length })}</p>
     <Grid>
       {#each visible as item (item.id)}
         <Card id={item.id} preset={item} />

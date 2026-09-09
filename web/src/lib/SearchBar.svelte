@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Scope, Sort, SearchState } from './router'
+  import { t, type Key } from './i18n.svelte'
 
   // 검색 실행과 필터는 같은 성격의 도구이므로 한 줄에 모은다. 제출은 텍스트가
   // 아니라 아이콘이다. 위 줄의 Search 탭과 글자가 같으면 무엇이 이동이고
@@ -15,12 +16,12 @@
     localAvailable?: boolean
   } = $props()
 
-  const SORTS: { value: Sort; label: string }[] = [
-    { value: 'date', label: 'Newest' },
-    { value: 'today', label: 'Popular today' },
-    { value: 'week', label: 'Popular this week' },
-    { value: 'month', label: 'Popular this month' },
-    { value: 'year', label: 'Popular this year' },
+  const SORTS: { value: Sort; key: Key }[] = [
+    { value: 'date', key: 'search.sortDate' },
+    { value: 'today', key: 'search.sortToday' },
+    { value: 'week', key: 'search.sortWeek' },
+    { value: 'month', key: 'search.sortMonth' },
+    { value: 'year', key: 'search.sortYear' },
   ]
   const LANGUAGES = ['all', 'korean', 'japanese', 'english', 'chinese', 'spanish']
   const KINDS = ['all', 'doujinshi', 'manga', 'artistcg', 'gamecg', 'imageset']
@@ -47,15 +48,15 @@
     <input
       bind:value={input}
       placeholder={params.scope === 'local'
-        ? 'Title, artist, series or character, in Korean or English'
-        : 'Search in Korean or English, use -term to exclude'}
-      aria-label="Search"
+        ? t('search.placeholderLocal')
+        : t('search.placeholder')}
+      aria-label={t('nav.search')}
       autocomplete="off"
     />
     {#if input}
-      <button type="button" class="clear" onclick={clear} aria-label="Clear search">&times;</button>
+      <button type="button" class="clear" onclick={clear} aria-label={t('search.clear')}>&times;</button>
     {/if}
-    <button type="submit" class="submit" aria-label="Search" title="Search">
+    <button type="submit" class="submit" aria-label={t('nav.search')} title={t('nav.search')}>
       <svg viewBox="0 0 20 20" aria-hidden="true" width="16" height="16">
         <circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8" />
         <line x1="13" y1="13" x2="17.5" y2="17.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
@@ -66,37 +67,37 @@
   <div class="filters">
     {#if localAvailable}
       <label>
-        <span>In</span>
+        <span>{t('search.in')}</span>
         <select value={params.scope} onchange={(e) => onchange({ scope: e.currentTarget.value as Scope })}>
-          <option value="hitomi">hitomi tags</option>
-          <option value="local">local titles & artists</option>
+          <option value="hitomi">{t('search.scopeHitomi')}</option>
+          <option value="local">{t('search.scopeLocal')}</option>
         </select>
       </label>
     {/if}
     <!-- The snapshot has no popularity data, so sorting only applies to hitomi. -->
     {#if params.scope !== 'local'}
       <label>
-        <span>Sort</span>
+        <span>{t('search.sort')}</span>
         <select value={params.sort} onchange={(e) => onchange({ sort: e.currentTarget.value as Sort })}>
           {#each SORTS as option (option.value)}
-            <option value={option.value}>{option.label}</option>
+            <option value={option.value}>{t(option.key)}</option>
           {/each}
         </select>
       </label>
     {/if}
     <label>
-      <span>Language</span>
+      <span>{t('search.language')}</span>
       <select value={params.language} onchange={(e) => onchange({ language: e.currentTarget.value })}>
         {#each LANGUAGES as value (value)}
-          <option {value}>{value}</option>
+          <option {value}>{t(`lang.${value}` as Key)}</option>
         {/each}
       </select>
     </label>
     <label>
-      <span>Type</span>
+      <span>{t('search.type')}</span>
       <select value={params.kind} onchange={(e) => onchange({ kind: e.currentTarget.value })}>
         {#each KINDS as value (value)}
-          <option {value}>{value}</option>
+          <option {value}>{t(`kind.${value}` as Key)}</option>
         {/each}
       </select>
     </label>

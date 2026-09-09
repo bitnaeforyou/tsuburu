@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from './i18n.svelte'
+
   let { onconfirm }: { onconfirm: () => void } = $props()
 
   function confirm() {
@@ -10,15 +12,9 @@
 <div class="gate">
   <div class="card">
     <h1>tsuburu</h1>
-    <p>
-      This application searches and displays content from hitomi.la, which includes
-      adult material. It is intended for adults only.
-    </p>
-    <p class="muted">
-      tsuburu runs entirely on your own machine. It does not host or redistribute
-      anything; it relays only the requests you make.
-    </p>
-    <button onclick={confirm}>I am 18 or older — continue</button>
+    <p>{t('age.body')}</p>
+    <p class="muted">{t('age.privacy')}</p>
+    <button onclick={confirm}>{t('age.confirm')}</button>
   </div>
 </div>
 

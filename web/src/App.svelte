@@ -8,8 +8,14 @@
   import Artist from './routes/Artist.svelte'
   import Downloads from './routes/Downloads.svelte'
   import AgeGate from './lib/AgeGate.svelte'
+  import { i18n } from './lib/i18n.svelte'
 
   let route = $state<Route>(parse(location.hash))
+
+  // Screen readers and hyphenation both go by this.
+  $effect(() => {
+    document.documentElement.lang = i18n.locale
+  })
   let confirmed = $state(localStorage.getItem('tsuburu.age') === 'ok')
 
   $effect(() => {

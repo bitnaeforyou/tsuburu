@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import { toDialogue, toSearch } from './router'
+  import { LOCALES, i18n, t, type Locale } from './i18n.svelte'
 
   // 화면 이동은 전부 여기 모은다. 예전에는 검색 실행 버튼과 Search 탭이 나란히
   // 붙어 있어서, 생김새가 같은 두 개가 서로 다른 일을 했다. 위 줄은 이동만,
@@ -14,11 +15,11 @@
   } = $props()
 
   const TABS = [
-    { id: 'search', label: 'Search', href: toSearch() },
-    { id: 'dialogue', label: 'Dialogue', href: toDialogue() },
-    { id: 'favorites', label: 'Favorites', href: '#/favorites' },
-    { id: 'downloads', label: 'Downloads', href: '#/downloads' },
-    { id: 'history', label: 'History', href: '#/history' },
+    { id: 'search', key: 'nav.search', href: toSearch() },
+    { id: 'dialogue', key: 'nav.dialogue', href: toDialogue() },
+    { id: 'favorites', key: 'nav.favorites', href: '#/favorites' },
+    { id: 'downloads', key: 'nav.downloads', href: '#/downloads' },
+    { id: 'history', key: 'nav.history', href: '#/history' },
   ] as const
 </script>
 
@@ -32,9 +33,19 @@
   <nav>
     {#each TABS as tab (tab.id)}
       <a href={tab.href} class:current={active === tab.id} aria-current={active === tab.id ? 'page' : undefined}>
-        {tab.label}
+        {t(tab.key)}
       </a>
     {/each}
+    <select
+      class="locale"
+      aria-label={t('nav.locale')}
+      value={i18n.locale}
+      onchange={(e) => i18n.set(e.currentTarget.value as Locale)}
+    >
+      {#each Object.entries(LOCALES) as [code, name] (code)}
+        <option value={code}>{name}</option>
+      {/each}
+    </select>
   </nav>
 </header>
 
@@ -66,7 +77,20 @@
 
   nav {
     display: flex;
+    align-items: center;
     gap: 0.15rem;
+  }
+
+  /* The language belongs with the navigation, but it is not a place to go. */
+  .locale {
+    margin-left: 0.5rem;
+    font: inherit;
+    font-size: 0.85rem;
+    color: var(--muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.2rem 0.3rem;
   }
 
   nav a {

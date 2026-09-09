@@ -191,7 +191,22 @@ of a Korean page, tesseract found 7 of the 8 words Vision did — enough for
 matching, which ignores spacing inside Hangul and scores fuzzily, but noisier
 line by line.
 
-## Languages
+## Interface language
+
+The interface is in Korean, English or Japanese. It follows the browser on
+first run and remembers the choice after that; the switch sits at the end of
+the navigation bar.
+
+Only the wording around the content is translated. Titles, tags and dialogue
+stay in whatever language hitomi holds them in, and the server's diagnostic
+detail on an error stays in English — the sentence above it, which is the part
+that says what to do, does not.
+
+Adding a language is one file under `web/src/lib/locales/`, typed against the
+English one so a missing message is a build error rather than an English word
+on a translated screen.
+
+## Matching across scripts
 
 Titles and dialogue are matched through a shared encoding that covers Hangul,
 Latin and everything else, so a Japanese title or a Cyrillic line matches the

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Term } from './api'
+  import { t } from './i18n.svelte'
 
   let { terms }: { terms: Term[] } = $props()
 
@@ -21,7 +22,7 @@
             </span>
           {/if}
         {:else}
-          <span class="note">no translation</span>
+          <span class="note">{t('terms.noTranslation')}</span>
         {/if}
       </span>
     {/each}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
+  import { t, type Key } from '../lib/i18n.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import Card from '../lib/Card.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
@@ -253,62 +254,71 @@
 <main>
   {#if status && !status.supported}
     <div class="panel">
-      <strong>Dialogue search is not available on this platform.</strong>
+      <strong>{t('dialogue.unsupported')}</strong>
       <p class="muted">
-        {#if status.note}
-          {status.note} — macOS and Windows read pages with their own recognition; elsewhere
-          tsuburu calls tesseract, and a decoder in front of it because hitomi serves AVIF.
-        {:else}
-          Recognition is unavailable here. An imported corpus is still searchable.
-        {/if}
+        {status.note
+          ? t('dialogue.unsupportedNote', { note: status.note })
+          : t('dialogue.unsupportedPlain')}
       </p>
     </div>
   {:else}
     <section class="panel status">
       <div class="row">
         <div>
-          <strong>Index</strong>
+          <strong>{t('dialogue.index')}</strong>
           {#if coverage}
             <span class="muted">
-              top 1,000: {percent(coverage.top_1k, 1000)}% ·
-              top 10,000: {percent(coverage.top_10k, coverage.top_10k_total)}% ·
-              all: {coverage.done.toLocaleString()} / {coverage.total.toLocaleString()}
+              {t('dialogue.coverageTop1k', { percent: percent(coverage.top_1k, 1000) })} ·
+              {t('dialogue.coverageTop10k', {
+                percent: percent(coverage.top_10k, coverage.top_10k_total),
+              })} ·
+              {t('dialogue.coverageAll', {
+                done: coverage.done.toLocaleString(),
+                total: coverage.total.toLocaleString(),
+              })}
             </span>
           {:else if status?.counts}
-            <span class="muted">{status.counts.done.toLocaleString()} galleries indexed</span>
+            <span class="muted">
+              {t('dialogue.indexed', { n: status.counts.done.toLocaleString() })}
+            </span>
           {:else}
-            <span class="muted">loading…</span>
+            <span class="muted">{t('dialogue.loadingIndex')}</span>
           {/if}
         </div>
         {#if settings}
           <button class:on={settings.enabled} onclick={toggleIndexing}>
-            {settings.enabled ? 'Stop indexing' : 'Start indexing'}
+            {settings.enabled ? t('dialogue.stop') : t('dialogue.start')}
           </button>
         {/if}
       </div>
       {#if running}
         <p class="muted small">
           {#if running.running && running.current}
-            Indexing #{running.current}{running.current_title ? ` — ${running.current_title}` : ''}
-            · {running.pages_per_second.toFixed(1)} pages/s
-            · {running.galleries_this_session} galleries this session
+            {t('dialogue.indexingNow', { id: running.current })}{running.current_title
+              ? ` — ${running.current_title}`
+              : ''}
+            · {t('dialogue.rate', { rate: running.pages_per_second.toFixed(1) })}
+            · {t('dialogue.thisSession', { n: running.galleries_this_session })}
           {:else if settings?.enabled}
-            Waiting for the next gallery…
+            {t('dialogue.waiting')}
           {:else}
-            Indexing is off. Nothing is downloaded until you start it.
+            {t('dialogue.off')}
           {/if}
           {#if status?.counts}
-            · queue {status.counts.pending.toLocaleString()} · failed {status.counts.failed}
+            · {t('dialogue.queued', {
+              queue: status.counts.pending.toLocaleString(),
+              failed: status.counts.failed,
+            })}
           {/if}
         </p>
         {#if running.last_error}
-          <p class="muted small">Last problem: {running.last_error}</p>
+          <p class="muted small">{t('dialogue.lastProblem', { error: running.last_error })}</p>
         {/if}
       {/if}
       {#if settings}
         <div class="row small muted">
           <span>
-            Types:
+            {t('dialogue.types')}
             {#each KINDS.filter((k) => k !== 'all') as kind (kind)}
               <label class="check">
                 <input
@@ -316,7 +326,7 @@
                   checked={settings.kinds.includes(kind)}
                   onchange={() => toggleKind(kind)}
                 />
-                {kind}
+                {t(`kind.${kind}` as Key)}
               </label>
             {/each}
           </span>
@@ -326,10 +336,10 @@
               checked={settings.reindex_imported}
               onchange={(e) => updateSetting({ reindex_imported: e.currentTarget.checked })}
             />
-            Re-read imported galleries
+            {t('dialogue.reindexImported')}
           </label>
           <label>
-            Download cap
+            {t('dialogue.downloadCap')}
             <select
               value={settings.bytes_per_second}
               onchange={(e) => updateSetting({ bytes_per_second: Number(e.currentTarget.value) })}
@@ -350,22 +360,20 @@
       <input
         bind:value={input}
         placeholder={mode === 'meaning'
-          ? 'Describe the scene; the words need not appear'
-          : 'A line you remember, in Korean'}
-        aria-label="Dialogue search"
+          ? t('dialogue.searchMeaning')
+          : t('dialogue.searchWords')}
+        aria-label={t('dialogue.searchLabel')}
         autocomplete="off"
       />
-      <select bind:value={mode} aria-label="How to match">
-        <option value="words">these words</option>
-        <option value="meaning">this meaning</option>
+      <select bind:value={mode} aria-label={t('dialogue.mode')}>
+        <option value="words">{t('dialogue.modeWords')}</option>
+        <option value="meaning">{t('dialogue.modeMeaning')}</option>
       </select>
-      <button type="submit" disabled={!input.trim()}>Find</button>
+      <button type="submit" disabled={!input.trim()}>{t('dialogue.find')}</button>
     </form>
     {#if mode === 'meaning'}
       <p class="muted small">
-        Matching by meaning needs the model that built the index
-        (Qwen3-Embedding-4B). tsuburu ships none; point it at a local
-        embedding server below.
+        {t('dialogue.meaningNote')}
       </p>
     {/if}
 
@@ -376,27 +384,31 @@
     {#if query && !searchError}
       {#if searching}
         <p class="muted">
-          Searching{status?.counts?.done ? ` ${status.counts.done.toLocaleString()}` : ''} indexed
-          galleries…
+          {status?.counts?.done
+            ? t('dialogue.searchingCount', { n: status.counts.done.toLocaleString() })
+            : t('dialogue.searching')}
         </p>
       {:else if hits.length === 0}
         <p class="muted">
-          Nothing indexed so far contains that. It may still be in a gallery that has not
-          been indexed yet.
+          {t('dialogue.noHits')}
         </p>
       {:else}
-        <p class="muted">{hits.length} galleries</p>
+        <p class="muted">{t('common.galleries', { n: hits.length })}</p>
         <ul class="hits">
           {#each hits as hit (hit.gallery_id)}
             <li class="hit">
               <div class="thumb"><Card id={hit.gallery_id} /></div>
               <div class="body">
                 <a href={toGallery(hit.gallery_id, hit.page)}>
-                  Page {hit.page + 1}
-                  {#if hit.exact}<span class="badge">exact</span>{:else}<span class="badge fuzzy">~{Math.round(hit.score * 100)}%</span>{/if}
+                  {t('common.page', { n: hit.page + 1 })}
+                  {#if hit.exact}<span class="badge">{t('dialogue.exact')}</span>{:else}<span
+                      class="badge fuzzy">~{Math.round(hit.score * 100)}%</span
+                    >{/if}
                   {#if hit.also?.length}
                     <span class="badge fuzzy" title={hit.also.join(', ')}>
-                      +{hit.also.length} copy{hit.also.length > 1 ? 'ies' : ''}
+                      {hit.also.length > 1
+                        ? t('dialogue.copies', { n: hit.also.length })
+                        : t('dialogue.copy', { n: hit.also.length })}
                     </span>
                   {/if}
                 </a>
@@ -404,19 +416,21 @@
                   {#each hit.snippet as line, i (i)}<span>{line}</span>{/each}
                 </blockquote>
                 <button class="similar-toggle" onclick={() => showSimilar(hit)}>
-                  {similarFor === `${hit.gallery_id}:${hit.page}` ? 'Hide similar scenes' : 'Similar scenes'}
+                  {similarFor === `${hit.gallery_id}:${hit.page}`
+                    ? t('dialogue.similarHide')
+                    : t('dialogue.similarShow')}
                 </button>
                 {#if similarFor === `${hit.gallery_id}:${hit.page}`}
                   {#if similarError}
                     <p class="muted small">{similarError}</p>
                   {:else if similar.length === 0}
-                    <p class="muted small">Looking through the embeddings…</p>
+                    <p class="muted small">{t('dialogue.similarSearching')}</p>
                   {:else}
                     <ul class="similar">
                       {#each similar as near (near.gallery_id)}
                         <li>
                           <a href={toGallery(near.gallery_id, near.page)}>
-                            Page {near.page + 1}
+                            {t('common.page', { n: near.page + 1 })}
                             <span class="badge fuzzy">{Math.round(near.score * 100)}%</span>
                           </a>
                           <span class="muted small">{near.snippet.join(' / ')}</span>
@@ -434,66 +448,74 @@
 
     <section class="panel tools">
       <form onsubmit={submitImport}>
-        <strong>Import reading history</strong>
-        <p class="muted small">
-          Paste hitomi URLs or gallery ids from your browser history or an old artifact
-          database. They are indexed before anything else.
-        </p>
+        <strong>{t('dialogue.importHistory')}</strong>
+        <p class="muted small">{t('dialogue.importHistoryNote')}</p>
         <textarea bind:value={importText} rows="3" placeholder="https://hitomi.la/doujinshi/...-1234567.html"></textarea>
         <div class="row">
           <label class="check">
             <input type="checkbox" bind:checked={importForce} />
-            Read them again even if they already have text
+            {t('dialogue.readAgain')}
           </label>
-          <button type="submit" disabled={!importText.trim()}>Queue</button>
+          <button type="submit" disabled={!importText.trim()}>{t('dialogue.queue')}</button>
         </div>
         {#if importResult}<p class="muted small">{importResult}</p>{/if}
       </form>
 
       <form onsubmit={submitHunt}>
-        <strong>Hunt</strong>
-        <p class="muted small">
-          Narrow with what you remember (tags, language, type) and queue those galleries
-          ahead of the background sweep.
-        </p>
+        <strong>{t('dialogue.hunt')}</strong>
+        <p class="muted small">{t('dialogue.huntNote')}</p>
         <div class="row">
-          <input bind:value={hunt.q} placeholder="tags, e.g. 안경 거유" aria-label="Hunt terms" />
+          <input
+            bind:value={hunt.q}
+            placeholder={t('dialogue.huntPlaceholder')}
+            aria-label={t('dialogue.huntTerms')}
+          />
           <select bind:value={hunt.language}>
-            {#each LANGUAGES as l (l)}<option value={l}>{l}</option>{/each}
+            {#each LANGUAGES as l (l)}<option value={l}>{t(`lang.${l}` as Key)}</option>{/each}
           </select>
           <select bind:value={hunt.kind}>
-            {#each KINDS as k (k)}<option value={k}>{k}</option>{/each}
+            {#each KINDS as k (k)}<option value={k}>{t(`kind.${k}` as Key)}</option>{/each}
           </select>
-          <input type="number" bind:value={hunt.limit} min="1" max="5000" aria-label="Limit" />
+          <input
+            type="number"
+            bind:value={hunt.limit}
+            min="1"
+            max="5000"
+            aria-label={t('dialogue.limit')}
+          />
           <label class="check">
             <input type="checkbox" bind:checked={hunt.force} />
-            re-read
+            {t('dialogue.reread')}
           </label>
-          <button type="submit">Queue</button>
+          <button type="submit">{t('dialogue.queue')}</button>
         </div>
         {#if huntResult}<p class="muted small">{huntResult}</p>{/if}
       </form>
 
       <form onsubmit={submitArtifact}>
-        <strong>Import artifact's corpus</strong>
-        <p class="muted small">
-          If you have artifact's <code>llm-search-index</code> directory, its recognised
-          Korean text can be loaded whole: about 108,000 galleries in under a minute, with
-          no downloading or recognition.
-        </p>
+        <strong>{t('dialogue.artifact')}</strong>
+        <p class="muted small">{t('dialogue.artifactNote')}</p>
         <div class="row">
-          <input bind:value={artifactDir} placeholder="/path/to/llm-search-index" aria-label="Directory" />
-          <button type="submit" disabled={!artifactDir.trim() || status?.import?.running}>Import</button>
+          <input
+            bind:value={artifactDir}
+            placeholder="/path/to/llm-search-index"
+            aria-label={t('dialogue.directory')}
+          />
+          <button type="submit" disabled={!artifactDir.trim() || status?.import?.running}>
+            {t('dialogue.import')}
+          </button>
         </div>
         {#if status?.import}
           <p class="muted small">
             {#if status.import.running}
-              Importing… {status.import.works_seen.toLocaleString()} galleries so far
+              {t('dialogue.importing', { n: status.import.works_seen.toLocaleString() })}
             {:else if status.import.error}
-              Import failed: {status.import.error}
+              {t('dialogue.importFailed', { error: status.import.error })}
             {:else}
-              Imported {status.import.added.toLocaleString()} galleries
-              ({status.import.skipped.toLocaleString()} were already here).
+              {t('dialogue.imported', {
+                added: status.import.added.toLocaleString(),
+                skipped: status.import.skipped.toLocaleString(),
+              })}
             {/if}
           </p>
         {:else if artifactResult}
@@ -502,27 +524,26 @@
       </form>
 
       <form onsubmit={(e) => { e.preventDefault(); void savePack() }}>
-        <strong>Meaning-search pack</strong>
-        <p class="muted small">
-          Run Qwen3-Embedding-4B yourself — llama.cpp's server, Ollama, anything
-          speaking the OpenAI shape — and give tsuburu its address. Checking
-          re-embeds a passage already in the index and compares: near 1 means the
-          pack matches, anything lower means a different model and answers that
-          look right but are not.
-        </p>
+        <strong>{t('dialogue.pack')}</strong>
+        <p class="muted small">{t('dialogue.packNote')}</p>
         {#if pack}
           <div class="row">
-            <input bind:value={pack.url} aria-label="Embedding server URL" />
-            <input bind:value={pack.model} aria-label="Model name" />
-            <button type="submit" disabled={packBusy}>Save and check</button>
+            <input bind:value={pack.url} aria-label={t('dialogue.packUrl')} />
+            <input bind:value={pack.model} aria-label={t('dialogue.packModel')} />
+            <button type="submit" disabled={packBusy}>{t('dialogue.packSave')}</button>
           </div>
         {/if}
         {#if packBusy}
-          <p class="muted small">Asking the server…</p>
+          <p class="muted small">{t('dialogue.packAsking')}</p>
         {:else if packCheck}
           <p class="muted small">
-            {packCheck.ok ? '✓' : '✗'} similarity {packCheck.cosine.toFixed(3)} against
-            gallery {packCheck.sample_gallery} page {packCheck.sample_page + 1} — {packCheck.note}
+            {packCheck.ok ? '✓' : '✗'}
+            {t('dialogue.packResult', {
+              cosine: packCheck.cosine.toFixed(3),
+              gallery: packCheck.sample_gallery,
+              page: packCheck.sample_page + 1,
+              note: packCheck.note,
+            })}
           </p>
         {:else if packError}
           <p class="muted small">{packError}</p>
@@ -530,21 +551,17 @@
       </form>
 
       <div class="exchange">
-        <strong>Share the index</strong>
-        <p class="muted small">
-          Recognised text is small; the images are not. Export what this machine has read
-          as shard files and hand them to someone else, or import theirs. Files are
-          verified against the hash in their name.
-        </p>
+        <strong>{t('dialogue.share')}</strong>
+        <p class="muted small">{t('dialogue.shareNote')}</p>
         <div class="row">
           <label class="check">
             <input type="checkbox" bind:checked={backgroundOnly} />
-            Only background-indexed galleries (keeps what you chose to read out of the file)
+            {t('dialogue.exportSwept')}
           </label>
-          <button onclick={exportShards} disabled={exchanging}>Export</button>
+          <button onclick={exportShards} disabled={exchanging}>{t('dialogue.export')}</button>
           <label class="upload">
             <input type="file" accept=".tsd" multiple onchange={importFiles} disabled={exchanging} />
-            Import .tsd files
+            {t('dialogue.importShards')}
           </label>
         </div>
         {#if exchangeResult}<p class="muted small">{exchangeResult}</p>{/if}
@@ -554,7 +571,9 @@
               <li>
                 <a href={api.shardUrl(file.name)} download={file.name}>{file.name}</a>
                 <span class="muted small">
-                  {formatBytes(file.bytes)}{file.galleries ? ` · ${file.galleries} galleries` : ''}
+                  {formatBytes(file.bytes)}{file.galleries
+                    ? ` · ${t('common.galleries', { n: file.galleries })}`
+                    : ''}
                 </span>
               </li>
             {/each}

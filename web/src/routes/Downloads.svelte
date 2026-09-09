@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
+  import { t } from '../lib/i18n.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -64,16 +65,13 @@
   {#if error}
     <ErrorNote {error} onretry={load} />
   {:else if loading}
-    <p class="muted">Loading...</p>
+    <p class="muted">{t('common.loading')}</p>
   {:else if items.length === 0}
-    <p class="muted">
-      Nothing downloaded. Open a work and use <strong>Download</strong> to keep it on disk;
-      downloaded pages are read without touching hitomi.
-    </p>
+    <p class="muted">{t('downloads.empty')}</p>
   {:else}
     <p class="muted">
-      {items.length}
-      {items.length === 1 ? 'work' : 'works'} &middot; {size(bytes)} on disk
+      {items.length === 1 ? t('downloads.work') : t('downloads.works', { n: items.length })}
+      &middot; {t('downloads.onDisk', { size: size(bytes) })}
     </p>
     <Grid>
       {#each items as item (item.id)}
@@ -92,15 +90,15 @@
           <div class="bar" style:--done={`${item.pages ? (item.have / item.pages) * 100 : 0}%`}>
             <span>
               {item.have} / {item.pages}
-              {#if item.job.running}&middot; downloading{/if}
-              {#if item.job.failed}&middot; {item.job.failed} failed{/if}
+              {#if item.job.running}&middot; {t('gallery.downloading')}{/if}
+              {#if item.job.failed}&middot; {t('downloads.failed', { n: item.job.failed })}{/if}
             </span>
           </div>
           <div class="actions">
             {#if !item.complete && !item.job.running}
-              <button onclick={() => resume(item.id)}>Get the rest</button>
+              <button onclick={() => resume(item.id)}>{t('gallery.getRest')}</button>
             {/if}
-            <button onclick={() => remove(item.id)}>Delete</button>
+            <button onclick={() => remove(item.id)}>{t('downloads.delete')}</button>
           </div>
         </div>
       {/each}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
+  import { t } from '../lib/i18n.svelte'
   import { defaultSearch, toSearch, type SearchState } from '../lib/router'
   import { library } from '../lib/library.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
@@ -110,18 +111,18 @@
 
   {#if total > 0}
     <p class="count">
-      {total.toLocaleString()} results
-      {#if params.scope === 'local'}&middot; from the local snapshot{/if}
-      {#if !params.query && !filtering}&middot; browsing everything{/if}
+      {t('search.results', { n: total.toLocaleString() })}
+      {#if params.scope === 'local'}&middot; {t('search.fromSnapshot')}{/if}
+      {#if !params.query && !filtering}&middot; {t('search.browsingAll')}{/if}
     </p>
   {:else if !loading && !error}
     <p class="count">
-      {params.query ? `No results for ${params.query}.` : 'Nothing matched these filters.'}
+      {params.query ? t('search.noResultsFor', { query: params.query }) : t('search.noResults')}
     </p>
   {/if}
 
   {#if slowSort}
-    <p class="count">Few results to sort by popularity, so this may take a moment.</p>
+    <p class="count">{t('search.slowSort')}</p>
   {/if}
 
   <Grid>
@@ -131,11 +132,11 @@
   </Grid>
 
   {#if loading}
-    <p class="count">Loading...</p>
+    <p class="count">{t('common.loading')}</p>
   {/if}
 
   {#if hasMore && !loading}
-    <button class="more" onclick={() => load(offset)}>Load more</button>
+    <button class="more" onclick={() => load(offset)}>{t('common.loadMore')}</button>
   {/if}
 </main>
 

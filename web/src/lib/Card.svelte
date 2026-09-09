@@ -3,6 +3,7 @@
   import * as cards from './cards.svelte'
   import { library } from './library.svelte'
   import { toGallery } from './router'
+  import { t } from './i18n.svelte'
 
   let {
     id,
@@ -77,7 +78,7 @@
       {#if thumbnail}
         <img src={thumbnail} alt="" loading="lazy" decoding="async" />
       {:else if failed}
-        <span class="placeholder">unavailable</span>
+        <span class="placeholder">{t('card.unavailable')}</span>
       {/if}
       {#if progress && progress.pages > 0}
         <div class="progress" style:--read={`${((progress.page + 1) / progress.pages) * 100}%`}>
@@ -87,7 +88,7 @@
     </div>
     <h3>{title}</h3>
     <p class="meta">
-      {pages} pages{language ? ` · ${language}` : ''}
+      {t('common.pages', { n: pages })}{language ? ` · ${language}` : ''}
     </p>
   </a>
 
@@ -97,8 +98,8 @@
       class:on={favorited}
       onclick={toggleFavorite}
       aria-pressed={favorited}
-      aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'}
-      title={favorited ? 'Remove from favorites' : 'Add to favorites'}
+      aria-label={favorited ? t('card.favoriteRemove') : t('card.favoriteAdd')}
+      title={favorited ? t('card.favoriteRemove') : t('card.favoriteAdd')}
     >
       {favorited ? '★' : '☆'}
     </button>

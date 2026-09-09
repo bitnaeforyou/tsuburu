@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
+  import { t } from '../lib/i18n.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -60,7 +61,7 @@
       <h1>{artist}</h1>
       {#if info}
         <p class="muted">
-          {info.total.toLocaleString()} works
+          {t('artist.works', { n: info.total.toLocaleString() })}
           {#if info.languages.length}
             &middot; {info.languages.map(([l, n]) => `${l} ${n}`).join(' · ')}
           {/if}
@@ -69,15 +70,15 @@
     </div>
     {#if info}
       <button class:on={info.following} onclick={toggleFollow}>
-        {info.following ? '★ Following' : '☆ Follow'}
+        {info.following ? `★ ${t('artist.following')}` : `☆ ${t('artist.follow')}`}
       </button>
     {/if}
   </header>
 
   <label class="filter">
-    Language
+    {t('search.language')}
     <select bind:value={language}>
-      <option value="all">all</option>
+      <option value="all">{t('lang.all')}</option>
       {#each info?.languages ?? [] as [name, count] (name)}
         <option value={name}>{name} ({count})</option>
       {/each}
@@ -95,13 +96,13 @@
   </Grid>
 
   {#if loading}
-    <p class="muted">Loading...</p>
+    <p class="muted">{t('common.loading')}</p>
   {:else if ids.length === 0 && !error}
-    <p class="muted">Nothing by that name in the local snapshot.</p>
+    <p class="muted">{t('artist.empty')}</p>
   {/if}
 
   {#if hasMore && !loading}
-    <button class="more" onclick={() => load(ids.length)}>Load more</button>
+    <button class="more" onclick={() => load(ids.length)}>{t('common.loadMore')}</button>
   {/if}
 </main>
 
