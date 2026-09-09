@@ -369,7 +369,7 @@
       <ErrorNote error={searchError} onretry={search} />
     {/if}
 
-    {#if query}
+    {#if query && !searchError}
       {#if searching}
         <p class="muted">
           Searching{status?.counts?.done ? ` ${status.counts.done.toLocaleString()}` : ''} indexed

@@ -71,7 +71,10 @@
       downloaded pages are read without touching hitomi.
     </p>
   {:else}
-    <p class="muted">{items.length} works &middot; {size(bytes)} on disk</p>
+    <p class="muted">
+      {items.length}
+      {items.length === 1 ? 'work' : 'works'} &middot; {size(bytes)} on disk
+    </p>
     <Grid>
       {#each items as item (item.id)}
         <div class="entry">
