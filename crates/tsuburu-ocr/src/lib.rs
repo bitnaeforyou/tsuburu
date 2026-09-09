@@ -1,9 +1,9 @@
 //! Text recognition behind a platform-neutral trait.
 //!
-//! No model files are shipped. Each platform calls the OCR its operating
-//! system already has: Vision on macOS, and nothing yet elsewhere. The
-//! pipeline only ever sees [`Ocr`], so a backend can be added without
-//! touching it.
+//! No model files are shipped. Each platform calls the OCR it can already
+//! reach: Vision on macOS, Windows.Media.Ocr on Windows, and tesseract
+//! wherever the system packages it. The pipeline only ever sees [`Ocr`], so
+//! a backend can be added without touching it.
 //!
 //! Measured on an M4 Pro against Korean manga pages: Vision's accurate mode
 //! with language correction off, fed a 75% downscale, reaches about
@@ -107,15 +107,55 @@ mod vision;
 #[cfg(target_os = "macos")]
 pub use vision::VisionOcr;
 
+#[cfg(windows)]
+mod winrt;
+#[cfg(windows)]
+pub use winrt::WindowsOcr;
+
+// Compiled on macOS too, where Vision is preferred, so that the parsing this
+// backend does is type-checked and tested on every Unix.
+#[cfg(unix)]
+mod tesseract;
+#[cfg(unix)]
+pub use tesseract::TesseractOcr;
+
 /// The OCR this platform provides, if any.
 pub fn platform_ocr(options: OcrOptions) -> Option<Box<dyn Ocr>> {
     #[cfg(target_os = "macos")]
     {
         Some(Box::new(VisionOcr::new(options)))
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        Some(Box::new(WindowsOcr::new(options)))
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        TesseractOcr::new(options).map(|ocr| Box::new(ocr) as Box<dyn Ocr>)
+    }
+    #[cfg(not(any(target_os = "macos", windows, unix)))]
     {
         let _ = options;
+        None
+    }
+}
+
+/// Why this platform has no recognition, when something can be done about it.
+///
+/// macOS and Windows always have one, so the answer is only ever about the
+/// tools a Unix system has not been given yet.
+pub fn platform_note() -> Option<String> {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let missing = tesseract::missing();
+        if missing.is_empty() {
+            None
+        } else {
+            Some(format!("install {} to index dialogue on this platform", missing.join(" and ")))
+        }
+    }
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    {
         None
     }
 }

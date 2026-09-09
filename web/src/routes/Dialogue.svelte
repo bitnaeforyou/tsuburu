@@ -255,8 +255,12 @@
     <div class="panel">
       <strong>Dialogue search is not available on this platform.</strong>
       <p class="muted">
-        It relies on the operating system's text recognition. macOS is supported; other
-        platforms are not yet.
+        {#if status.note}
+          {status.note} — macOS and Windows read pages with their own recognition; elsewhere
+          tsuburu calls tesseract, and a decoder in front of it because hitomi serves AVIF.
+        {:else}
+          Recognition is unavailable here. An imported corpus is still searchable.
+        {/if}
       </p>
     </div>
   {:else}

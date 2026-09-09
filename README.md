@@ -164,10 +164,32 @@ like a bad corpus.
 ## Platforms
 
 Searching, reading, favorites, history, downloads and the imports work
-everywhere. Text recognition is the exception: it calls the operating system's
-own OCR, which so far means Vision on macOS. Elsewhere the Dialogue tab
-reports itself as unavailable rather than pretending, though an imported
-corpus is still searchable.
+everywhere. Text recognition differs, because tsuburu ships no model and calls
+whatever the machine can already reach:
+
+| | Recognition | Decoding |
+|---|---|---|
+| macOS | Vision | ImageIO |
+| Windows | Windows.Media.Ocr | WIC — AVIF needs the free AV1 Video Extension |
+| Linux, other Unix | `tesseract` | `ffmpeg`, ImageMagick or `avifdec` |
+
+The first two come with the operating system. Linux has neither, so tsuburu
+calls two tools the distribution packages — the same arrangement `import-meta`
+uses for `sqlite3`:
+
+```
+sudo apt install tesseract-ocr tesseract-ocr-kor ffmpeg
+```
+
+A decoder has to sit in front of tesseract because hitomi serves AVIF, which
+leptonica cannot read. When either is absent the Dialogue tab says which one,
+rather than reporting itself broken; an imported corpus stays searchable
+either way.
+
+Recognition is not equally good everywhere. Measured against Vision's reading
+of a Korean page, tesseract found 7 of the 8 words Vision did — enough for
+matching, which ignores spacing inside Hangul and scores fuzzily, but noisier
+line by line.
 
 ## Languages
 

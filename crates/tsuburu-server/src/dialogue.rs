@@ -43,6 +43,9 @@ pub struct StatusResponse {
     pub coverage: Option<Coverage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub import: Option<ImportProgress>,
+    /// What the platform is missing, when installing it would help.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 pub async fn status(State(state): State<Arc<AppState>>) -> Result<Json<StatusResponse>, ApiError> {
@@ -54,6 +57,7 @@ pub async fn status(State(state): State<Arc<AppState>>) -> Result<Json<StatusRes
             counts: None,
             coverage: None,
             import: None,
+            note: tsuburu_ocr::platform_note(),
         }));
     };
     // Coverage needs the popularity list; if hitomi is unreachable the
@@ -66,6 +70,7 @@ pub async fn status(State(state): State<Arc<AppState>>) -> Result<Json<StatusRes
         counts: Some(grinder.store().counts()?),
         coverage,
         import: grinder.import_progress(),
+        note: None,
     }))
 }
 

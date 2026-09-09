@@ -174,6 +174,8 @@ export type Coverage = {
 
 export type DialogueStatus = {
   supported: boolean
+  // What the platform is missing, when installing it would help.
+  note?: string
   settings?: GrinderSettings
   status?: GrinderStatus
   counts?: Counts
