@@ -16,6 +16,8 @@
   let current = $state(0)
   let resumeAt = $state<number | null>(null)
   let elements = $state<(HTMLImageElement | null)[]>([])
+  let download = $state<api.DownloadItem | null>(null)
+  let downloadError = $state<string | null>(null)
 
   const favorited = $derived(library.has(id))
 
@@ -23,6 +25,45 @@
     void load()
     void library.load().catch(() => {})
   })
+
+  // The bar has to keep moving while pages arrive, and stop when they stop.
+  $effect(() => {
+    if (!gallery) return
+    void refreshDownload()
+    const timer = setInterval(() => {
+      if (download?.job.running) void refreshDownload()
+    }, 1500)
+    return () => clearInterval(timer)
+  })
+
+  async function refreshDownload() {
+    try {
+      download = await api.downloadStatus(id)
+    } catch {
+      // Never downloaded: not an error, just nothing to show.
+      download = null
+    }
+  }
+
+  async function keepWork() {
+    downloadError = null
+    try {
+      await api.startDownload(id)
+      await refreshDownload()
+    } catch (cause) {
+      downloadError = cause instanceof Error ? cause.message : String(cause)
+    }
+  }
+
+  async function keepPage(page: number) {
+    downloadError = null
+    try {
+      await api.startDownload(id, [page])
+      await refreshDownload()
+    } catch (cause) {
+      downloadError = cause instanceof Error ? cause.message : String(cause)
+    }
+  }
 
   async function load() {
     error = null
@@ -168,6 +209,20 @@
       </div>
     {/if}
 
+    <div class="keep">
+      {#if download}
+        <span class="muted">
+          {download.have} / {download.pages} pages on disk
+          {#if download.job.running}&middot; downloading{/if}
+        </span>
+      {/if}
+      <button onclick={keepWork}>
+        {download?.complete ? 'Downloaded' : download ? 'Get the rest' : 'Download'}
+      </button>
+      <button onclick={() => keepPage(current)}>Download this page</button>
+      {#if downloadError}<span class="muted">{downloadError}</span>{/if}
+    </div>
+
     {#if gallery.tags.length}
       <p class="tags">{gallery.tags.join(' · ')}</p>
     {/if}
@@ -250,6 +305,22 @@
     color: var(--muted);
     font-size: 0.85rem;
     margin: 0 0 1rem;
+  }
+
+  .keep {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+  }
+  .keep button {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+  }
+  .muted {
+    color: var(--muted);
   }
 
   .reader {

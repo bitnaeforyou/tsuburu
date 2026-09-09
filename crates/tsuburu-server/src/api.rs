@@ -236,6 +236,30 @@ async fn build_card(
     })
 }
 
+/// The reader's view of a work that only exists on disk.
+fn from_download(stored: tsuburu_downloads::Download) -> GalleryResponse {
+    GalleryResponse {
+        id: stored.id,
+        title: stored.title,
+        japanese_title: None,
+        kind: stored.kind,
+        language: stored.language,
+        date: None,
+        tags: Vec::new(),
+        artists: Vec::new(),
+        series: Vec::new(),
+        pages: stored
+            .pages
+            .into_iter()
+            .map(|p| Page {
+                src: format!("/img/{}.{}", p.hash, p.ext),
+                width: p.width,
+                height: p.height,
+            })
+            .collect(),
+    }
+}
+
 /// Files a gallery fetched from hitomi into the local snapshot.
 ///
 /// Failing to write is not worth failing the request over; the snapshot is
@@ -288,7 +312,18 @@ pub async fn gallery(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
 ) -> Result<Json<GalleryResponse>, ApiError> {
-    let gallery = tsuburu_hitomi::fetch_gallery(state.fetcher.as_ref(), &state.cfg, id).await?;
+    let gallery = match tsuburu_hitomi::fetch_gallery(state.fetcher.as_ref(), &state.cfg, id).await
+    {
+        Ok(gallery) => gallery,
+        // A downloaded work must open with hitomi unreachable; its page list
+        // is on disk, which is all the reader needs.
+        Err(err) => {
+            return match crate::downloads::stored_gallery(&state, id) {
+                Some(stored) => Ok(Json(from_download(stored))),
+                None => Err(err.into()),
+            };
+        }
+    };
     remember(&state, id, &gallery);
 
     let pages = gallery

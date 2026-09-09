@@ -97,6 +97,12 @@ fn describe(kind: ErrorKind, detail: &str) -> String {
     }
 }
 
+impl From<tsuburu_downloads::DownloadError> for ApiError {
+    fn from(err: tsuburu_downloads::DownloadError) -> Self {
+        Self { error: ErrorKind::Storage, message: describe(ErrorKind::Storage, &err.to_string()) }
+    }
+}
+
 impl From<tsuburu_dialogue::DialogueError> for ApiError {
     fn from(err: tsuburu_dialogue::DialogueError) -> Self {
         Self { error: ErrorKind::Storage, message: describe(ErrorKind::Storage, &err.to_string()) }

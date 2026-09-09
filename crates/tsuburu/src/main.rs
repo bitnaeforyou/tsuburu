@@ -251,6 +251,13 @@ async fn serve(
     let mut app_state = tsuburu_server::AppState::full(fetcher, cfg, store, grinder);
     if let Ok(dir) = tsuburu_store::data_dir() {
         app_state = app_state.with_shards_dir(dir.join("shards"));
+        match tsuburu_downloads::DownloadStore::open(&dir) {
+            Ok(downloads) => {
+                tracing::info!(path = %downloads.images_dir().display(), "opened downloads");
+                app_state = app_state.with_downloads(Arc::new(downloads));
+            }
+            Err(err) => eprintln!("downloads are disabled: {err}"),
+        }
         let meta_path = dir.join("meta.redb");
         if meta_path.is_file() {
             match tsuburu_meta::MetaStore::open(&meta_path) {

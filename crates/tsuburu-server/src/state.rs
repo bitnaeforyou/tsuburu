@@ -39,6 +39,9 @@ pub struct AppState {
     pub meta: Option<Arc<tsuburu_meta::MetaStore>>,
     /// Embedding search, opened on first use.
     pub similarity: crate::similar::LazySimilarity,
+    /// Pages kept on disk. `None` if the store could not be opened.
+    pub downloads: Option<Arc<tsuburu_downloads::DownloadStore>>,
+    pub download_jobs: Arc<crate::downloads::Jobs>,
     version: RwLock<Option<Cached<String>>>,
     gg: RwLock<Option<Cached<GgMap>>>,
     /// 갤러리 메타 JSON은 최대 200 KB를 넘기도 한다. 카드 한 장으로 줄여
@@ -73,6 +76,8 @@ impl AppState {
             shards_dir: None,
             meta: None,
             similarity: Default::default(),
+            downloads: None,
+            download_jobs: Default::default(),
             version: RwLock::new(None),
             gg: RwLock::new(None),
             cards: Cache::new(4096),
@@ -86,6 +91,11 @@ impl AppState {
 
     pub fn with_meta(mut self, meta: Arc<tsuburu_meta::MetaStore>) -> Self {
         self.meta = Some(meta);
+        self
+    }
+
+    pub fn with_downloads(mut self, downloads: Arc<tsuburu_downloads::DownloadStore>) -> Self {
+        self.downloads = Some(downloads);
         self
     }
 

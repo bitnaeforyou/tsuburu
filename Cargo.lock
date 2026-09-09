@@ -2036,6 +2036,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tsuburu-dialogue",
+ "tsuburu-downloads",
  "tsuburu-fetch",
  "tsuburu-hitomi",
  "tsuburu-meta",
@@ -2060,6 +2061,18 @@ dependencies = [
  "thiserror",
  "tracing",
  "tsuburu-text",
+]
+
+[[package]]
+name = "tsuburu-downloads"
+version = "0.1.0"
+dependencies = [
+ "redb",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -2149,6 +2162,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tsuburu-dialogue",
+ "tsuburu-downloads",
  "tsuburu-embed",
  "tsuburu-fetch",
  "tsuburu-hitomi",

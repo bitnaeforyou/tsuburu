@@ -9,7 +9,7 @@
     active,
     actions,
   }: {
-    active: 'search' | 'dialogue' | 'favorites' | 'history'
+    active: 'search' | 'dialogue' | 'favorites' | 'downloads' | 'history'
     actions?: Snippet
   } = $props()
 
@@ -17,6 +17,7 @@
     { id: 'search', label: 'Search', href: toSearch() },
     { id: 'dialogue', label: 'Dialogue', href: toDialogue() },
     { id: 'favorites', label: 'Favorites', href: '#/favorites' },
+    { id: 'downloads', label: 'Downloads', href: '#/downloads' },
     { id: 'history', label: 'History', href: '#/history' },
   ] as const
 </script>

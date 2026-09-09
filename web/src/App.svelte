@@ -5,6 +5,7 @@
   import Favorites from './routes/Favorites.svelte'
   import History from './routes/History.svelte'
   import Dialogue from './routes/Dialogue.svelte'
+  import Downloads from './routes/Downloads.svelte'
   import AgeGate from './lib/AgeGate.svelte'
 
   let route = $state<Route>(parse(location.hash))
@@ -27,6 +28,8 @@
   <History />
 {:else if route.name === 'dialogue'}
   <Dialogue query={route.query} />
+{:else if route.name === 'downloads'}
+  <Downloads />
 {:else}
   <Search params={route} />
 {/if}

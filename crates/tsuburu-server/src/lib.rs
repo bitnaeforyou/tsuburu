@@ -3,6 +3,7 @@
 pub mod api;
 pub mod assets;
 pub mod dialogue;
+pub mod downloads;
 pub mod error;
 pub mod grinder;
 pub mod library;
@@ -46,6 +47,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/api/dialogue/import",
             post(dialogue::import).layer(axum::extract::DefaultBodyLimit::max(SHARD_UPLOAD_LIMIT)),
+        )
+        .route("/api/downloads", get(downloads::list))
+        .route(
+            "/api/downloads/{id}",
+            post(downloads::start).get(downloads::status).delete(downloads::remove),
         )
         .route("/img/{file}", get(proxy::image))
         .route("/tn/{file}", get(proxy::thumbnail))

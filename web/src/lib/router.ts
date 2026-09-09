@@ -22,6 +22,7 @@ export type Route =
   | { name: 'favorites' }
   | { name: 'history' }
   | { name: 'dialogue'; query: string }
+  | { name: 'downloads' }
 
 const SORTS: Sort[] = ['date', 'today', 'week', 'month', 'year']
 
@@ -46,6 +47,7 @@ export function parse(hash: string): Route {
   if (head === '/favorites') return { name: 'favorites' }
   if (head === '/history') return { name: 'history' }
   if (head === '/dialogue') return { name: 'dialogue', query: params.get('q') ?? '' }
+  if (head === '/downloads') return { name: 'downloads' }
 
   const sort = params.get('sort') as Sort | null
   return {

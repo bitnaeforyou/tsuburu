@@ -34,6 +34,14 @@ pub async fn image(
         hasavif: u8::from(ext == "avif"),
     };
 
+    // A downloaded page is served from disk under the same URL the reader
+    // already uses, which is the whole of offline reading.
+    if let Some(downloads) = state.downloads.as_ref()
+        && let Ok(Some(bytes)) = downloads.read_image(hash, ext)
+    {
+        return Ok(local_image(bytes, ext));
+    }
+
     let gg = state.gg().await?;
     let url = tsuburu_hitomi::image_url(&state.cfg, &gg, &file)?;
     match stream(&state, &url, ext).await {
@@ -69,6 +77,15 @@ fn split_hash(file: &str) -> Result<(&str, &str), ApiError> {
         return Err(ApiError::bad_request("hash must be 64 hex characters"));
     }
     Ok((hash, ext))
+}
+
+fn local_image(bytes: Vec<u8>, ext: &str) -> Response {
+    let mut headers = HeaderMap::new();
+    if let Ok(value) = HeaderValue::from_str(&format!("image/{ext}")) {
+        headers.insert(header::CONTENT_TYPE, value);
+    }
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL));
+    (StatusCode::OK, headers, bytes).into_response()
 }
 
 async fn stream(state: &AppState, url: &str, ext: &str) -> Result<Response, ApiError> {

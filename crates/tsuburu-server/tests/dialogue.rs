@@ -269,3 +269,92 @@ async fn shard_download_rejects_names_that_are_not_shards() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+// --- downloads and offline reading ---
+
+/// redb allows one handle per file, so tests open the store once and build
+/// each router around that same handle.
+fn app_over(downloads: &Arc<tsuburu_downloads::DownloadStore>) -> axum::Router {
+    let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
+    // A dead address: nothing here is allowed to reach the network.
+    let cfg =
+        Config { scheme: "http".into(), ltn_domain: "127.0.0.1:9".into(), ..Config::default() };
+    let state = AppState::full(fetcher, cfg, None, None).with_downloads(Arc::clone(downloads));
+    router(Arc::new(state))
+}
+
+fn open_downloads(dir: &tempfile::TempDir) -> Arc<tsuburu_downloads::DownloadStore> {
+    Arc::new(tsuburu_downloads::DownloadStore::open(dir.path()).unwrap())
+}
+
+fn stored(id: i32, hash: &str) -> tsuburu_downloads::Download {
+    tsuburu_downloads::Download {
+        id,
+        title: Some("Downloaded work".into()),
+        language: Some("korean".into()),
+        kind: Some("manga".into()),
+        pages: vec![tsuburu_downloads::DownloadedPage {
+            page: 0,
+            hash: hash.to_string(),
+            ext: "avif".into(),
+            width: 100,
+            height: 200,
+        }],
+        added_at: 1,
+    }
+}
+
+#[tokio::test]
+async fn a_downloaded_work_opens_and_reads_with_hitomi_unreachable() {
+    let dir = tempfile::tempdir().unwrap();
+    let downloads = open_downloads(&dir);
+    let hash = "b".repeat(64);
+    downloads.put(&stored(77, &hash)).unwrap();
+    downloads.save_image(&hash, "avif", b"page-bytes").unwrap();
+
+    let (status, body) = call(app_over(&downloads), "GET", "/api/gallery/77", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["title"], "Downloaded work");
+    assert_eq!(body["pages"][0]["src"], format!("/img/{hash}.avif"));
+
+    let response = app_over(&downloads)
+        .oneshot(Request::builder().uri(format!("/img/{hash}.avif")).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(&bytes[..], b"page-bytes", "served from disk, not relayed");
+}
+
+#[tokio::test]
+async fn a_gallery_that_was_never_downloaded_still_reports_the_network_failure() {
+    let dir = tempfile::tempdir().unwrap();
+    let downloads = open_downloads(&dir);
+    let (status, body) = call(app_over(&downloads), "GET", "/api/gallery/12345", None).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["error"], "network");
+}
+
+#[tokio::test]
+async fn downloads_are_listed_with_progress_and_can_be_removed() {
+    let dir = tempfile::tempdir().unwrap();
+    let downloads = open_downloads(&dir);
+    let hash = "c".repeat(64);
+    downloads.put(&stored(9, &hash)).unwrap();
+
+    let (status, body) = call(app_over(&downloads), "GET", "/api/downloads", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["items"][0]["id"], 9);
+    assert_eq!(body["items"][0]["have"], 0);
+    assert_eq!(body["items"][0]["complete"], false);
+
+    downloads.save_image(&hash, "avif", b"x").unwrap();
+    let (_, body) = call(app_over(&downloads), "GET", "/api/downloads/9", None).await;
+    assert_eq!(body["have"], 1);
+    assert_eq!(body["complete"], true);
+
+    let (status, body) = call(app_over(&downloads), "DELETE", "/api/downloads/9", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["removed"], true);
+    assert!(!downloads.has_image(&hash, "avif"), "its only page goes with it");
+}

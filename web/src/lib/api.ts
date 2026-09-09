@@ -291,3 +291,37 @@ export function similarScenes(id: number, page: number, limit = 12): Promise<Sim
   const params = new URLSearchParams({ id: String(id), page: String(page), limit: String(limit) })
   return request(`/api/dialogue/similar?${params}`)
 }
+
+// --- downloads ---
+
+export type DownloadItem = {
+  id: number
+  title: string | null
+  language: string | null
+  pages: number
+  have: number
+  bytes: number
+  added_at: number
+  complete: boolean
+  job: { running: boolean; wanted: number; fetched: number; failed: number; error: string | null }
+}
+
+export function downloads(): Promise<{ items: DownloadItem[]; bytes: number }> {
+  return request('/api/downloads')
+}
+
+export function downloadStatus(id: number): Promise<DownloadItem> {
+  return request(`/api/downloads/${id}`)
+}
+
+export function startDownload(
+  id: number,
+  pages: number[] = [],
+): Promise<{ id: number; wanted: number; already_here: number }> {
+  return send('POST', `/api/downloads/${id}`, { pages })
+}
+
+export function removeDownload(id: number): Promise<{ removed: boolean }> {
+  return send('DELETE', `/api/downloads/${id}`)
+}
+
