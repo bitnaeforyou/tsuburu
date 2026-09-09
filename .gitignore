@@ -1,9 +1,8 @@
 /target
 **/node_modules
-# 빌드 산출물은 커밋하지 않는다. 다만 rust-embed가 컴파일 시점에 이 디렉터리를
-# 요구하므로 자리는 남겨둔다 (없으면 안내 메시지를 내보내도록 처리돼 있다).
-/web/dist/*
-!/web/dist/.gitkeep
+# 빌드 산출물은 커밋하지 않는다. rust-embed가 컴파일 시점에 이 디렉터리를
+# 요구하지만, 없으면 tsuburu-server의 build.rs가 만든다.
+/web/dist
 .DS_Store
 *.log
 .env

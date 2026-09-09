@@ -191,9 +191,9 @@ cargo build --release
 ```
 
 The frontend is embedded into the binary at compile time, so the release
-artifact is a single file. Its output is not committed — only the empty
-directory — so a build that skips the frontend step compiles and then says so
-instead of serving a blank page.
+artifact is a single file. `web/dist` is not committed; a build that skips the
+frontend step still compiles and then says the assets are missing, rather than
+serving a blank page.
 
 ## Testing
 
