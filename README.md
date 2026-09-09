@@ -55,6 +55,27 @@ tsuburu gallery 4170351          # inspect one gallery
 Search terms are combined with AND. Prefix a term with `-` to exclude it; quote
 the whole query so your shell does not read it as a flag.
 
+## Reading offline
+
+Any work, or any single page, can be kept on disk. The reader has
+**Download** and **Download this page**; the Downloads tab lists what is here,
+how far each work got, and lets a work be finished or deleted.
+
+Pages are stored under the hash hitomi already gives them, so the same page in
+two re-uploads is stored once, and deleting a work leaves the pages another
+one still needs. Reading a downloaded work does not touch the network at all:
+the image proxy answers from disk first, and if the gallery's metadata cannot
+be fetched, the page list on disk is enough to open it.
+
+## Artists
+
+An artist's name in a gallery links to a page of everything they drew — newest
+first, out of the metadata snapshot, with a count per language so you can stay
+in the one you read. **Follow** keeps a name next to your favorites, and the
+Favorites tab lists the ones you follow with how much each has.
+
+Artist pages come from the snapshot, so they need `import-meta` to have run.
+
 ## Using artifact's artifacts
 
 If you have the data artifact publishes, two commands load it and most of the
@@ -107,6 +128,13 @@ cut that down:
   old artifact database; they are indexed before anything else.
 - **Hunt.** Narrow with tags, language and type, and queue only those.
 
+### Sharing what has been read
+
+The text is the expensive part and it is small, so it can travel. The
+Dialogue tab exports what a machine has read as `.tsd` shard files and imports
+other people's; files are checked against the hash in their name, and an
+export can leave out the galleries you chose to read yourself.
+
 ### Similar scenes
 
 The artifact also carries an embedding per passage, produced by a 4B model.
@@ -118,21 +146,40 @@ finds the nearest others, which answers "what else reads like this".
 The first query pulls the 2.6 GB index off disk and takes a few seconds; after
 that it is about 0.2 s.
 
-The text is the expensive part and it is small, so it can travel. The
-Dialogue tab exports what a machine has read as `.tsd` shard files and imports
-other people's; files are checked against the hash in their name, and an
-export can leave out the galleries you chose to read yourself.
+### Searching by meaning
 
-Recognition uses Vision on macOS. Other platforms report the feature as
-unavailable rather than pretending.
+Searching those same vectors by a *phrase* rather than by a passage needs the
+model that made them, which is a multi-gigabyte download. tsuburu does not
+bundle it and does not need it: the phrase mode stays hidden until you point
+the Dialogue tab's pack setting at a server that speaks the OpenAI embeddings
+API — llama.cpp, Ollama, LM Studio or anything else — running
+`Qwen3-Embedding-4B` or a model whose vectors it shares.
+
+A different model answers with perfectly plausible vectors and useless
+results, so the setting has a **Check** button: it embeds a passage that is
+already in the index and compares the answer with the vector stored for it.
+Anything below 0.9 is reported as the wrong model rather than left looking
+like a bad corpus.
 
 ## Platforms
 
-Searching, reading, favorites, history and the imports work everywhere. Text
-recognition is the exception: it calls the operating system's own OCR, which
-so far means Vision on macOS. Elsewhere the Dialogue tab reports itself as
-unavailable rather than pretending, though an imported corpus is still
-searchable.
+Searching, reading, favorites, history, downloads and the imports work
+everywhere. Text recognition is the exception: it calls the operating system's
+own OCR, which so far means Vision on macOS. Elsewhere the Dialogue tab
+reports itself as unavailable rather than pretending, though an imported
+corpus is still searchable.
+
+## Languages
+
+Titles and dialogue are matched through a shared encoding that covers Hangul,
+Latin and everything else, so a Japanese title or a Cyrillic line matches the
+way a Korean one does — spacing is ignored inside Hangul and respected between
+Latin words.
+
+Recognition is told which script to expect, because asking for all of them at
+once costs accuracy. The Dialogue tab's language setting picks both the corpus
+to sweep and the recognition language, and the engine is rebuilt when it
+changes.
 
 ## Building
 
@@ -144,8 +191,9 @@ cargo build --release
 ```
 
 The frontend is embedded into the binary at compile time, so the release
-artifact is a single file. `web/dist` is not committed; if you build without it,
-the server will say so instead of serving a blank page.
+artifact is a single file. Its output is not committed — only the empty
+directory — so a build that skips the frontend step compiles and then says so
+instead of serving a blank page.
 
 ## Testing
 
@@ -192,7 +240,8 @@ crates/tsuburu-ocr      text recognition behind a trait (Vision on macOS)
 crates/tsuburu-dialogue recognised text, matching, shards, artifact import
 crates/tsuburu-meta     local metadata snapshot and its search
 crates/tsuburu-embed    nearest-neighbour search over artifact's embeddings
-crates/tsuburu-text     Hangul matching shared by the searchable stores
+crates/tsuburu-downloads pages kept on disk, shared by content hash
+crates/tsuburu-text     multi-script matching shared by the searchable stores
 crates/tsuburu          CLI and server entry point
 web/                    Svelte 5 + Vite frontend
 docs/superpowers/       design spec and implementation plan
