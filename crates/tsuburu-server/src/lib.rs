@@ -8,6 +8,7 @@ pub mod grinder;
 pub mod library;
 pub mod meta;
 pub mod proxy;
+pub mod similar;
 pub mod state;
 
 use axum::Router;
@@ -35,6 +36,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/dialogue/status", get(dialogue::status))
         .route("/api/dialogue/settings", put(dialogue::update_settings))
         .route("/api/dialogue/search", get(dialogue::search))
+        .route("/api/dialogue/similar", get(dialogue::similar))
         .route("/api/dialogue/enqueue", post(dialogue::enqueue))
         .route("/api/dialogue/hunt", post(dialogue::hunt))
         .route("/api/dialogue/import-artifact", post(dialogue::import_artifact))

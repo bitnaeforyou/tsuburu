@@ -37,6 +37,8 @@ pub struct AppState {
     /// Local metadata snapshot. Cards for galleries it covers never touch
     /// the network.
     pub meta: Option<Arc<tsuburu_meta::MetaStore>>,
+    /// Embedding search, opened on first use.
+    pub similarity: crate::similar::LazySimilarity,
     version: RwLock<Option<Cached<String>>>,
     gg: RwLock<Option<Cached<GgMap>>>,
     /// 갤러리 메타 JSON은 최대 200 KB를 넘기도 한다. 카드 한 장으로 줄여
@@ -70,6 +72,7 @@ impl AppState {
             grinder,
             shards_dir: None,
             meta: None,
+            similarity: Default::default(),
             version: RwLock::new(None),
             gg: RwLock::new(None),
             cards: Cache::new(4096),

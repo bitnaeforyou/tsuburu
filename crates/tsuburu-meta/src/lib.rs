@@ -247,6 +247,41 @@ impl MetaStore {
         Ok(summary)
     }
 
+    /// Adds or replaces one work, keeping the term index in step.
+    ///
+    /// The snapshot stops at the day it was taken. Galleries fetched from
+    /// hitomi afterwards are written here as they are seen, so the local
+    /// scope keeps up with what the user actually browses instead of going
+    /// stale until the next full import.
+    pub fn upsert(&self, work: &Work) -> Result<(), MetaError> {
+        let previous = self.work(work.id)?;
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut works = tx.open_table(WORKS).map_err(db_err)?;
+            let mut titles = tx.open_table(TITLES).map_err(db_err)?;
+            let mut terms = tx.open_multimap_table(TERMS).map_err(db_err)?;
+
+            // Terms that no longer apply have to go, or a corrected record
+            // stays findable under its old artist.
+            if let Some(previous) = &previous {
+                let keep: HashSet<String> = work.term_keys().into_iter().collect();
+                for key in previous.term_keys() {
+                    if !keep.contains(&key) {
+                        terms.remove(key.as_str(), previous.id).map_err(db_err)?;
+                    }
+                }
+            }
+            let encoded = lz4_flex::compress_prepend_size(&serde_json::to_vec(work)?);
+            works.insert(work.id, encoded.as_slice()).map_err(db_err)?;
+            titles.insert(work.id, codes_bounded(&work.title).as_slice()).map_err(db_err)?;
+            for key in work.term_keys() {
+                terms.insert(key.as_str(), work.id).map_err(db_err)?;
+            }
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(())
+    }
+
     pub fn work(&self, id: i32) -> Result<Option<Work>, MetaError> {
         let tx = self.db.begin_read().map_err(db_err)?;
         let works = tx.open_table(WORKS).map_err(db_err)?;
@@ -511,6 +546,27 @@ mod tests {
             )
             .unwrap();
         (store, dir)
+    }
+
+    #[test]
+    fn upsert_adds_a_work_and_retires_its_old_terms() {
+        let (store, _d) = seeded();
+        let mut fresh = work(9, "새 작품", "newcomer", &["female:glasses"], "korean", "manga");
+        store.upsert(&fresh).unwrap();
+        assert_eq!(store.latest_id().unwrap(), Some(9));
+        let by_artist = |a: &str| {
+            store
+                .search(&MetaQuery { terms: vec![a.into()], ..MetaQuery::default() }, 0, 10)
+                .unwrap()
+                .ids
+        };
+        assert_eq!(by_artist("newcomer"), vec![9]);
+
+        fresh.artists = vec!["corrected".into()];
+        store.upsert(&fresh).unwrap();
+        assert!(by_artist("newcomer").is_empty(), "the old artist must stop matching");
+        assert_eq!(by_artist("corrected"), vec![9]);
+        assert_eq!(store.count().unwrap(), 4, "replaced, not duplicated");
     }
 
     #[test]

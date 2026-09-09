@@ -28,6 +28,28 @@
   let hunt = $state({ q: '', language: 'korean', kind: 'doujinshi', limit: 500, force: false })
   let huntResult = $state<string | null>(null)
 
+  let similarFor = $state<string | null>(null)
+  let similar = $state<api.SimilarHit[]>([])
+  let similarError = $state<string | null>(null)
+
+  // The embeddings answer "what else reads like this", using the vector
+  // already stored for the passage. No model is loaded to ask.
+  async function showSimilar(hit: api.DialogueHit) {
+    const key = `${hit.gallery_id}:${hit.page}`
+    if (similarFor === key) {
+      similarFor = null
+      return
+    }
+    similarFor = key
+    similar = []
+    similarError = null
+    try {
+      similar = await api.similarScenes(hit.gallery_id, hit.page)
+    } catch (cause) {
+      similarError = cause instanceof Error ? cause.message : String(cause)
+    }
+  }
+
   let artifactDir = $state('')
   let artifactResult = $state<string | null>(null)
   let backgroundOnly = $state(true)
@@ -333,6 +355,28 @@
                 <blockquote>
                   {#each hit.snippet as line, i (i)}<span>{line}</span>{/each}
                 </blockquote>
+                <button class="similar-toggle" onclick={() => showSimilar(hit)}>
+                  {similarFor === `${hit.gallery_id}:${hit.page}` ? 'Hide similar scenes' : 'Similar scenes'}
+                </button>
+                {#if similarFor === `${hit.gallery_id}:${hit.page}`}
+                  {#if similarError}
+                    <p class="muted small">{similarError}</p>
+                  {:else if similar.length === 0}
+                    <p class="muted small">Looking through the embeddings…</p>
+                  {:else}
+                    <ul class="similar">
+                      {#each similar as near (near.gallery_id)}
+                        <li>
+                          <a href={toGallery(near.gallery_id, near.page)}>
+                            Page {near.page + 1}
+                            <span class="badge fuzzy">{Math.round(near.score * 100)}%</span>
+                          </a>
+                          <span class="muted small">{near.snippet.join(' / ')}</span>
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                {/if}
               </div>
             </li>
           {/each}
@@ -524,6 +568,25 @@
     flex-direction: column;
     gap: 0.15rem;
   }
+  .similar-toggle {
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    padding: 0.2rem 0.55rem;
+  }
+  .similar {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0 0 0 0.75rem;
+    border-left: 2px solid var(--border);
+    display: grid;
+    gap: 0.3rem;
+    font-size: 0.85rem;
+  }
+  .similar a {
+    text-decoration: none;
+    margin-right: 0.5rem;
+  }
+
   .tools {
     display: grid;
     gap: 1.25rem;

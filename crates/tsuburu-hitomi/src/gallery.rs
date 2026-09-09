@@ -36,6 +36,28 @@ struct RawTag {
     male: serde_json::Value,
 }
 
+/// `[{"artist": "keso", "url": "..."}]` and its siblings all carry the name
+/// under a different key, so each list gets its own shape.
+#[derive(Debug, Clone, Deserialize)]
+struct RawArtist {
+    artist: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RawGroup {
+    group: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RawParody {
+    parody: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RawCharacter {
+    character: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct RawGallery {
     #[serde(default)]
@@ -53,6 +75,14 @@ struct RawGallery {
     #[serde(default)]
     tags: Option<Vec<RawTag>>,
     #[serde(default)]
+    artists: Option<Vec<RawArtist>>,
+    #[serde(default)]
+    groups: Option<Vec<RawGroup>>,
+    #[serde(default)]
+    parodys: Option<Vec<RawParody>>,
+    #[serde(default)]
+    characters: Option<Vec<RawCharacter>>,
+    #[serde(default)]
     files: Vec<GalleryFile>,
 }
 
@@ -65,6 +95,11 @@ pub struct Gallery {
     pub language: Option<String>,
     pub date: Option<String>,
     pub tags: Vec<String>,
+    pub artists: Vec<String>,
+    pub groups: Vec<String>,
+    /// hitomi calls these "parodys"; everywhere else they are series.
+    pub series: Vec<String>,
+    pub characters: Vec<String>,
     pub files: Vec<GalleryFile>,
 }
 
@@ -111,8 +146,21 @@ pub fn parse_gallery_info(body: &str) -> Result<Gallery, GalleryError> {
         language: raw.language,
         date: raw.date,
         tags,
+        artists: names(raw.artists, |a| a.artist),
+        groups: names(raw.groups, |g| g.group),
+        series: names(raw.parodys, |p| p.parody),
+        characters: names(raw.characters, |c| c.character),
         files: raw.files,
     })
+}
+
+/// These lists are `null` far more often than they are empty.
+fn names<T>(list: Option<Vec<T>>, name: impl Fn(T) -> Option<String>) -> Vec<String> {
+    list.unwrap_or_default()
+        .into_iter()
+        .filter_map(|item| name(item).map(|n| n.trim().to_lowercase()))
+        .filter(|n| !n.is_empty())
+        .collect()
 }
 
 #[cfg(test)]
@@ -123,6 +171,9 @@ mod tests {
     fn parses_real_gallery_info() {
         let body = include_str!("../tests/fixtures/gallery.js");
         let g = parse_gallery_info(body).unwrap();
+        assert_eq!(g.artists, vec!["umanosuke"]);
+        assert!(g.series.contains(&"code geass".to_string()));
+        assert!(g.groups.is_empty(), "the field is null, not an empty list");
         assert!(!g.files.is_empty());
         assert_eq!(g.files[0].hash.len(), 64);
         assert!(g.files[0].hash.chars().all(|c| c.is_ascii_hexdigit()));

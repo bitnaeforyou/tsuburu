@@ -1028,6 +1028,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "memmap2"
+version = "0.9.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2042,6 +2051,7 @@ dependencies = [
  "flate2",
  "lz4_flex",
  "memchr",
+ "memmap2",
  "redb",
  "serde",
  "serde_json",
@@ -2050,6 +2060,16 @@ dependencies = [
  "thiserror",
  "tracing",
  "tsuburu-text",
+]
+
+[[package]]
+name = "tsuburu-embed"
+version = "0.1.0"
+dependencies = [
+ "memmap2",
+ "tempfile",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -2129,6 +2149,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tsuburu-dialogue",
+ "tsuburu-embed",
  "tsuburu-fetch",
  "tsuburu-hitomi",
  "tsuburu-korean",

@@ -223,6 +223,16 @@ impl DialogueStore {
         Ok(())
     }
 
+    /// Where artifact's artefact directory was last imported from, so the
+    /// embeddings can be opened without asking again.
+    pub fn artifact_dir(&self) -> Result<Option<PathBuf>, DialogueError> {
+        Ok(self.setting("artifact_dir")?.map(PathBuf::from))
+    }
+
+    pub fn set_artifact_dir(&self, dir: &Path) -> Result<(), DialogueError> {
+        self.set_setting("artifact_dir", &dir.display().to_string())
+    }
+
     // --- queue ---
 
     /// Adds galleries to the queue. Finished ones are skipped; a pending one

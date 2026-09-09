@@ -72,8 +72,9 @@ sqlite.org needs to be on `PATH`.
 
 With the metadata snapshot loaded, cards for galleries it covers never touch
 the network, and the search bar gains a **local titles & artists** scope that
-finds Korean titles, artists, series and characters offline. Galleries newer
-than the snapshot still come from hitomi.
+finds Korean titles, artists, series and characters offline. The snapshot
+stops at the day it was taken, but galleries fetched from hitomi afterwards
+are filed into it as they are seen, so it keeps up with what you browse.
 
 With the dialogue corpus loaded, every Korean gallery up to mid-2026 is
 searchable by a remembered line, with no downloading or recognition. A query
@@ -105,6 +106,17 @@ cut that down:
 - **Import history.** Paste hitomi URLs or ids from your browser history or an
   old artifact database; they are indexed before anything else.
 - **Hunt.** Narrow with tags, language and type, and queue only those.
+
+### Similar scenes
+
+The artifact also carries an embedding per passage, produced by a 4B model.
+Searching it by a phrase would need that model; searching it by a passage
+already in the index needs nothing at all. Each dialogue result has a
+**Similar scenes** button that takes the vector stored for that passage and
+finds the nearest others, which answers "what else reads like this".
+
+The first query pulls the 2.6 GB index off disk and takes a few seconds; after
+that it is about 0.2 s.
 
 The text is the expensive part and it is small, so it can travel. The
 Dialogue tab exports what a machine has read as `.tsd` shard files and imports
@@ -179,6 +191,8 @@ crates/tsuburu-korean   Korean search-term dictionary
 crates/tsuburu-ocr      text recognition behind a trait (Vision on macOS)
 crates/tsuburu-dialogue recognised text, matching, shards, artifact import
 crates/tsuburu-meta     local metadata snapshot and its search
+crates/tsuburu-embed    nearest-neighbour search over artifact's embeddings
+crates/tsuburu-text     Hangul matching shared by the searchable stores
 crates/tsuburu          CLI and server entry point
 web/                    Svelte 5 + Vite frontend
 docs/superpowers/       design spec and implementation plan

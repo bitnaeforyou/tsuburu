@@ -218,6 +218,7 @@ async fn build_card(
     id: i32,
 ) -> Result<Card, tsuburu_hitomi::GalleryFetchError> {
     let gallery = tsuburu_hitomi::fetch_gallery(state.fetcher.as_ref(), &state.cfg, id).await?;
+    remember(state, id, &gallery);
     // URL을 실제로 만들어보고, 만들 수 있을 때만 경로를 내보낸다.
     let thumbnail = gallery.files.first().and_then(|f| {
         tsuburu_hitomi::thumbnail_url(&state.cfg, gg, &f.hash).ok()?;
@@ -235,6 +236,32 @@ async fn build_card(
     })
 }
 
+/// Files a gallery fetched from hitomi into the local snapshot.
+///
+/// Failing to write is not worth failing the request over; the snapshot is
+/// an optimisation, and the response is already in hand.
+fn remember(state: &AppState, id: i32, gallery: &tsuburu_hitomi::Gallery) {
+    let Some(meta) = state.meta.as_ref() else { return };
+    let work = tsuburu_meta::Work {
+        id,
+        title: gallery.title.clone().unwrap_or_default(),
+        kind: gallery.kind.clone().unwrap_or_default().to_lowercase().replace(' ', ""),
+        language: gallery.language.clone().unwrap_or_default().to_lowercase(),
+        artists: gallery.artists.clone(),
+        groups: gallery.groups.clone(),
+        series: gallery.series.clone(),
+        characters: gallery.characters.clone(),
+        tags: gallery.tags.clone(),
+        published: None,
+        pages: gallery.files.len() as u32,
+        thumbnail_hash: gallery.files.first().map(|f| f.hash.clone()),
+        exists: true,
+    };
+    if let Err(err) = meta.upsert(&work) {
+        tracing::debug!(id, %err, "could not add the gallery to the snapshot");
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct GalleryResponse {
     pub id: i32,
@@ -244,6 +271,8 @@ pub struct GalleryResponse {
     pub language: Option<String>,
     pub date: Option<String>,
     pub tags: Vec<String>,
+    pub artists: Vec<String>,
+    pub series: Vec<String>,
     pub pages: Vec<Page>,
 }
 
@@ -260,6 +289,7 @@ pub async fn gallery(
     Path(id): Path<i32>,
 ) -> Result<Json<GalleryResponse>, ApiError> {
     let gallery = tsuburu_hitomi::fetch_gallery(state.fetcher.as_ref(), &state.cfg, id).await?;
+    remember(&state, id, &gallery);
 
     let pages = gallery
         .files
@@ -279,6 +309,8 @@ pub async fn gallery(
         language: gallery.language,
         date: gallery.date,
         tags: gallery.tags,
+        artists: gallery.artists,
+        series: gallery.series,
         pages,
     }))
 }

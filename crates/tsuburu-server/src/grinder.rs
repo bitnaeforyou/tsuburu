@@ -139,6 +139,9 @@ impl Grinder {
     /// background. Returns an error if one is already running.
     pub fn start_artifact_import(self: &Arc<Self>, dir: PathBuf) -> Result<(), String> {
         let reader = ChunkReader::open(&dir).map_err(|e| e.to_string())?;
+        if let Err(err) = self.store.set_artifact_dir(&dir) {
+            tracing::warn!(%err, "could not remember the artefact directory");
+        }
         {
             let mut guard = self.import.lock().map_err(|e| e.to_string())?;
             if guard.as_ref().is_some_and(|p| p.running) {

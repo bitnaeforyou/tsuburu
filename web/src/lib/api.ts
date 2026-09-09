@@ -284,3 +284,10 @@ export type ImportProgress = {
 export function importArtifact(dir: string): Promise<ImportProgress> {
   return send('POST', '/api/dialogue/import-artifact', { dir })
 }
+
+export type SimilarHit = { gallery_id: number; page: number; score: number; snippet: string[] }
+
+export function similarScenes(id: number, page: number, limit = 12): Promise<SimilarHit[]> {
+  const params = new URLSearchParams({ id: String(id), page: String(page), limit: String(limit) })
+  return request(`/api/dialogue/similar?${params}`)
+}

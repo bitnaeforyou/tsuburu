@@ -120,6 +120,7 @@ async fn main() -> Result<()> {
             let store = tsuburu_dialogue::DialogueStore::open(&path)
                 .map_err(|e| anyhow::anyhow!("{e} (is the server running? stop it first)"))?;
             let reader = tsuburu_dialogue::artifact::ChunkReader::open(&dir)?;
+            store.set_artifact_dir(&dir)?;
             let total = reader.len();
             eprintln!("importing {total} chunks from {}", dir.display());
             let started = Instant::now();

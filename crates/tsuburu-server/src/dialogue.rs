@@ -368,3 +368,77 @@ pub async fn import(
 fn storage_error(err: &dyn std::fmt::Display) -> ApiError {
     ApiError { error: ErrorKind::Storage, message: err.to_string() }
 }
+
+// --- similar scenes ---
+
+#[derive(Debug, Deserialize)]
+pub struct SimilarParams {
+    pub id: i32,
+    #[serde(default)]
+    pub page: u16,
+    #[serde(default = "default_limit")]
+    pub limit: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SimilarHit {
+    pub gallery_id: i32,
+    pub page: u16,
+    pub score: f32,
+    pub snippet: Vec<String>,
+}
+
+/// Passages closest in meaning to the one being read.
+///
+/// The neighbours come from artifact's embeddings; the text shown beside them
+/// comes from the local corpus, so nothing is fetched.
+pub async fn similar(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<SimilarParams>,
+) -> Result<Json<Vec<SimilarHit>>, ApiError> {
+    let grinder = Arc::clone(grinder(&state)?);
+    let dir = grinder.store().artifact_dir()?.ok_or_else(|| ApiError {
+        error: ErrorKind::Unsupported,
+        message: "no embeddings are available; import artifact's llm-search-index first".into(),
+    })?;
+
+    let limit = params.limit.clamp(1, MAX_RESULTS);
+    let id = params.id;
+    let page = params.page;
+    let state_for_blocking = Arc::clone(&state);
+    let hits = tokio::task::spawn_blocking(move || -> Result<Vec<SimilarHit>, String> {
+        let similarity = state_for_blocking.similarity.get(&dir)?;
+        let store = grinder.store();
+        let passage = |work: i32, page: u16| -> Option<Vec<u8>> {
+            let pages = store.text(work).ok().flatten()?;
+            let text = pages.into_iter().find(|p| p.page == page)?.lines.concat();
+            Some(tsuburu_dialogue::jamo::codes(&text))
+        };
+        let matches = similarity.near(id, page, limit, &passage)?;
+        Ok(matches
+            .into_iter()
+            .map(|m| SimilarHit {
+                gallery_id: m.gallery_id,
+                page: m.page,
+                score: m.score,
+                // The passage itself, straight from the imported corpus.
+                snippet: store
+                    .text(m.gallery_id)
+                    .ok()
+                    .flatten()
+                    .and_then(|pages| {
+                        pages
+                            .into_iter()
+                            .find(|p| p.page == m.page)
+                            .map(|p| p.lines.into_iter().take(3).collect::<Vec<_>>())
+                    })
+                    .unwrap_or_default(),
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| storage_error(&e))?
+    .map_err(|message| ApiError { error: ErrorKind::Storage, message })?;
+
+    Ok(Json(hits))
+}
