@@ -75,31 +75,31 @@ pub async fn works(
         exists_only: true,
         ..MetaQuery::default()
     };
-    let lookup = meta.clone();
     let query_for_page = query.clone();
-    let page = tokio::task::spawn_blocking(move || lookup.search(&query_for_page, offset, limit))
-        .await
-        .map_err(|e| storage(&e))?
-        .map_err(storage)?;
-
     // The language breakdown is what tells a reader whether an artist is
-    // worth following in the language they read.
-    let languages = if offset == 0 {
-        let all =
-            meta.search(&MetaQuery { language: None, ..query }, 0, usize::MAX).map_err(storage)?;
-        let works = meta.works(&all.ids).map_err(storage)?;
+    // worth following in the language they read, so it is counted over the
+    // whole catalogue - which is why this runs off the runtime's threads.
+    let every_language = MetaQuery { language: None, ..query };
+    let wants_languages = offset == 0;
+    let (page, languages) = tokio::task::spawn_blocking(move || {
+        let page = meta.search(&query_for_page, offset, limit)?;
+        if !wants_languages {
+            return Ok((page, Vec::new()));
+        }
+        let all = meta.search(&every_language, 0, usize::MAX)?;
         let mut counts: std::collections::HashMap<String, usize> = Default::default();
-        for work in works {
+        for work in meta.works(&all.ids)? {
             *counts.entry(work.language).or_default() += 1;
         }
         let mut counts: Vec<(String, usize)> =
             counts.into_iter().filter(|(l, _)| !l.is_empty()).collect();
         counts.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         counts.truncate(8);
-        counts
-    } else {
-        Vec::new()
-    };
+        Ok::<_, tsuburu_meta::MetaError>((page, counts))
+    })
+    .await
+    .map_err(|e| storage(&e))?
+    .map_err(storage)?;
 
     let following =
         state.store.as_ref().and_then(|s| s.follows_artist(&name).ok()).unwrap_or(false);
@@ -124,10 +124,13 @@ pub async fn following(
             names.into_iter().map(|name| Followed { name, works: 0, recent: Vec::new() }).collect(),
         ));
     };
-    let mut out = Vec::with_capacity(names.len());
-    for name in names {
-        let page = meta
-            .search(
+    // One term lookup per followed name; enough of them to keep off the
+    // runtime's threads.
+    let meta = Arc::clone(meta);
+    let out = tokio::task::spawn_blocking(move || {
+        let mut out = Vec::with_capacity(names.len());
+        for name in names {
+            let page = meta.search(
                 &MetaQuery {
                     terms: vec![format!("artist:{name}")],
                     exists_only: true,
@@ -135,10 +138,14 @@ pub async fn following(
                 },
                 0,
                 6,
-            )
-            .map_err(storage)?;
-        out.push(Followed { name, works: page.total, recent: page.ids });
-    }
+            )?;
+            out.push(Followed { name, works: page.total, recent: page.ids });
+        }
+        Ok::<_, tsuburu_meta::MetaError>(out)
+    })
+    .await
+    .map_err(|e| storage(&e))?
+    .map_err(storage)?;
     Ok(Json(out))
 }
 
