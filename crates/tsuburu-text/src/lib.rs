@@ -1,4 +1,4 @@
-//! Hangul normalisation shared by the searchable stores.
+//! Text normalisation shared by the searchable stores.
 //!
 //! OCR gets a final consonant wrong far more often than it gets a whole
 //! syllable wrong. Comparing decomposed jamo instead of syllables lets a
@@ -6,6 +6,11 @@
 //!
 //! Both the dialogue corpus and the metadata snapshot match Korean this way,
 //! so it lives here rather than in either of them.
+//!
+//! Anything that is neither Hangul nor ASCII — kana, kanji, hanzi, Cyrillic —
+//! is escaped rather than dropped, so a Japanese or Chinese corpus is just as
+//! searchable. See [`codes_into`] for the byte layout and why it can be
+//! searched with a plain substring scan.
 
 const BASE: u32 = 0xAC00;
 const LAST: u32 = 0xD7A3;
@@ -60,6 +65,11 @@ pub fn codes_bounded_into(text: &str, out: &mut Vec<u8>) {
 
 /// Never produced by any character, so it cannot collide with a code.
 const BOUNDARY: u8 = 0x01;
+/// Introduces a character that is neither Hangul nor ASCII.
+const ESCAPE: u8 = 0xC4;
+/// Escaped characters spell their scalar in nibbles drawn from here, which
+/// sits above every jamo code and outside ASCII.
+const NIBBLE_BASE: u8 = 0xC5;
 
 fn encode(text: &str, out: &mut Vec<u8>, boundaries: bool) {
     let start = out.len();
@@ -85,8 +95,33 @@ fn encode(text: &str, out: &mut Vec<u8>, boundaries: bool) {
             out.push(c.to_ascii_lowercase() as u8);
         } else if c.is_whitespace() {
             gap = true;
+        } else if c.is_alphanumeric() {
+            // Kana, kanji, hanzi, Cyrillic and the like.
+            emit_gap(out, &mut gap, boundaries, false, start);
+            escape_char(out, c);
         }
         // Punctuation carries nothing worth matching and does not separate.
+    }
+}
+
+/// Spells a character as `ESCAPE` plus four nibbles.
+///
+/// Every byte in the stream then says what it is: below `0x80` is ASCII,
+/// `0x80..=0xC3` is a jamo, `ESCAPE` opens an escape, and `NIBBLE_BASE..`
+/// only ever appears inside one. Nothing an encoder produces *starts* with a
+/// nibble byte, so a needle can never match part-way through a character and
+/// a plain substring scan stays correct.
+fn escape_char(out: &mut Vec<u8>, c: char) {
+    let scalar = c as u32;
+    // Beyond the basic plane there is nothing worth matching on.
+    if scalar > 0xFFFF {
+        return;
+    }
+    let folded = c.to_lowercase().next().map(|l| l as u32).unwrap_or(scalar);
+    let scalar = if folded <= 0xFFFF { folded } else { scalar };
+    out.push(ESCAPE);
+    for shift in [12, 8, 4, 0] {
+        out.push(NIBBLE_BASE + ((scalar >> shift) & 0xF) as u8);
     }
 }
 
@@ -182,6 +217,38 @@ mod tests {
     /// Naive substring search, enough for these tests.
     fn memchr(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         haystack.windows(needle.len().max(1)).position(|w| w == needle)
+    }
+
+    #[test]
+    fn other_scripts_are_escaped_not_dropped() {
+        let japanese = codes("やめて");
+        assert_eq!(japanese.len(), 15, "three characters, five bytes each");
+        assert!(japanese.chunks(5).all(|c| c[0] == ESCAPE));
+        assert!(memchr(&codes("やめてください"), &japanese).is_some());
+        assert!(memchr(&japanese, &codes("あきらめて")).is_none());
+    }
+
+    #[test]
+    fn scripts_cannot_match_across_a_character_boundary() {
+        // A needle never begins with a nibble byte, so it cannot align
+        // inside an escaped character.
+        for text in ["漢字", "ひらがな", "Привет", "한글", "mixed 漢 text"] {
+            let encoded = codes(text);
+            assert!(
+                encoded.iter().all(|&b| b < 0x80 || (0x80..=0xC3).contains(&b) || b >= ESCAPE),
+                "unexpected byte in {text}"
+            );
+        }
+        // The two share nibble bytes but must not match each other.
+        assert!(memchr(&codes("漢"), &codes("字")).is_none());
+    }
+
+    #[test]
+    fn mixed_scripts_round_trip_through_a_search() {
+        let page = codes("これは 안녕 test 漢字 です");
+        for needle in ["안녕", "test", "漢字", "これは"] {
+            assert!(memchr(&page, &codes(needle)).is_some(), "{needle}");
+        }
     }
 
     #[test]

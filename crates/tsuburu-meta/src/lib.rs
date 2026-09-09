@@ -25,7 +25,8 @@ const TITLES: TableDefinition<i32, &[u8]> = TableDefinition::new("titles");
 const TERMS: MultimapTableDefinition<&str, i32> = MultimapTableDefinition::new("terms");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 /// 2: titles stored as match codes. 3: those codes keep Latin word bounds.
-const SCHEMA_VERSION: &str = "3";
+/// 4: they cover scripts other than Hangul.
+const SCHEMA_VERSION: &str = "4";
 
 #[derive(Debug, thiserror::Error)]
 pub enum MetaError {

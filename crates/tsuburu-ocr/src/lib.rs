@@ -54,6 +54,41 @@ impl Default for OcrOptions {
     }
 }
 
+impl OcrOptions {
+    /// Recognition languages for one of hitomi's language names.
+    ///
+    /// Vision needs to be told which scripts to expect; asking for all of
+    /// them at once costs accuracy. Chinese is requested in both scripts
+    /// because hitomi does not say which a work uses.
+    pub fn for_language(language: &str) -> Self {
+        let languages: Vec<String> = match language.trim().to_lowercase().as_str() {
+            "korean" => vec!["ko-KR"],
+            "japanese" => vec!["ja-JP"],
+            "chinese" => vec!["zh-Hans", "zh-Hant"],
+            "spanish" => vec!["es-ES"],
+            "french" => vec!["fr-FR"],
+            "german" => vec!["de-DE"],
+            "italian" => vec!["it-IT"],
+            "portuguese" => vec!["pt-BR"],
+            "russian" => vec!["ru-RU"],
+            "thai" => vec!["th-TH"],
+            "vietnamese" => vec!["vi-VT"],
+            "indonesian" => vec!["id-ID"],
+            "polish" => vec!["pl-PL"],
+            "turkish" => vec!["tr-TR"],
+            "czech" => vec!["cs-CZ"],
+            "dutch" => vec!["nl-NL"],
+            "ukrainian" => vec!["uk-UA"],
+            // An unknown language is likelier Latin-script than anything else.
+            _ => vec!["en-US"],
+        }
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+        Self { languages, ..Self::default() }
+    }
+}
+
 pub trait Ocr: Send + Sync {
     /// Recognise text in an encoded image (AVIF, WebP, PNG, JPEG...).
     fn recognize(&self, encoded: &[u8]) -> Result<Vec<Line>, OcrError>;
@@ -231,6 +266,15 @@ mod tests {
         let mut lines = vec![mk("b", 0.2, 0.40), mk("a", 0.2, 0.10)];
         reading_order(&mut lines);
         assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["a", "b"]);
+    }
+
+    #[test]
+    fn languages_map_to_recognition_tags() {
+        assert_eq!(OcrOptions::for_language("japanese").languages, ["ja-JP"]);
+        assert_eq!(OcrOptions::for_language("Chinese").languages, ["zh-Hans", "zh-Hant"]);
+        assert_eq!(OcrOptions::for_language("korean").languages, ["ko-KR"]);
+        // Nothing is refused; an unknown name falls back rather than failing.
+        assert_eq!(OcrOptions::for_language("klingon").languages, ["en-US"]);
     }
 
     #[cfg(target_os = "macos")]

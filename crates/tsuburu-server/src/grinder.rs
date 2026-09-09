@@ -91,7 +91,13 @@ pub struct Grinder {
     fetcher: Arc<HttpFetcher>,
     cfg: Config,
     store: Arc<DialogueStore>,
-    ocr: Arc<dyn Ocr>,
+    /// Rebuilt when the corpus language changes, so recognition is told
+    /// which script to expect.
+    ocr: RwLock<Arc<dyn Ocr>>,
+    /// The language `ocr` was built for.
+    ocr_language: RwLock<String>,
+    /// How to build one; `None` where the platform has no recognition.
+    make_ocr: fn(tsuburu_ocr::OcrOptions) -> Option<Box<dyn Ocr>>,
     settings: RwLock<GrinderSettings>,
     status: RwLock<GrinderStatus>,
     stop: AtomicBool,
@@ -110,7 +116,18 @@ impl Grinder {
         store: Arc<DialogueStore>,
         ocr: Arc<dyn Ocr>,
     ) -> Self {
-        let settings = store
+        Self::with_factory(fetcher, cfg, store, ocr, |_| None)
+    }
+
+    /// `make_ocr` is called when the corpus language changes.
+    pub fn with_factory(
+        fetcher: Arc<HttpFetcher>,
+        cfg: Config,
+        store: Arc<DialogueStore>,
+        ocr: Arc<dyn Ocr>,
+        make_ocr: fn(tsuburu_ocr::OcrOptions) -> Option<Box<dyn Ocr>>,
+    ) -> Self {
+        let settings: GrinderSettings = store
             .setting(SETTINGS_KEY)
             .ok()
             .flatten()
@@ -120,7 +137,9 @@ impl Grinder {
             fetcher,
             cfg,
             store,
-            ocr,
+            ocr_language: RwLock::new(settings.language.clone()),
+            ocr: RwLock::new(ocr),
+            make_ocr,
             settings: RwLock::new(settings),
             status: RwLock::new(GrinderStatus::default()),
             stop: AtomicBool::new(false),
@@ -199,6 +218,21 @@ impl Grinder {
 
     pub async fn settings(&self) -> GrinderSettings {
         self.settings.read().await.clone()
+    }
+
+    /// Swaps in an engine for `language` if the current one is for another.
+    async fn ocr_for(&self, language: &str) -> Arc<dyn Ocr> {
+        if self.ocr_language.read().await.as_str() == language {
+            return Arc::clone(&*self.ocr.read().await);
+        }
+        if let Some(engine) = (self.make_ocr)(tsuburu_ocr::OcrOptions::for_language(language)) {
+            let engine: Arc<dyn Ocr> = Arc::from(engine);
+            *self.ocr.write().await = Arc::clone(&engine);
+            *self.ocr_language.write().await = language.to_string();
+            tracing::info!(language, "switched text recognition");
+            return engine;
+        }
+        Arc::clone(&*self.ocr.read().await)
     }
 
     pub async fn update_settings(&self, next: GrinderSettings) {
@@ -423,7 +457,9 @@ impl Grinder {
             }
         });
 
-        let pages = self.recognise(&mut rx).await;
+        let language = self.settings.read().await.language.clone();
+        let ocr = self.ocr_for(&language).await;
+        let pages = self.recognise_with(&mut rx, ocr).await;
         downloader.await.map_err(|e| e.to_string())?;
         tracing::debug!(id, ms = started.elapsed().as_millis() as u64, "gallery recognised");
         pages
@@ -435,11 +471,20 @@ impl Grinder {
         &self,
         rx: &mut mpsc::Receiver<(u16, Vec<u8>)>,
     ) -> Result<Vec<PageText>, String> {
+        let ocr = Arc::clone(&*self.ocr.read().await);
+        self.recognise_with(rx, ocr).await
+    }
+
+    async fn recognise_with(
+        &self,
+        rx: &mut mpsc::Receiver<(u16, Vec<u8>)>,
+        ocr: Arc<dyn Ocr>,
+    ) -> Result<Vec<PageText>, String> {
         let limiter = Arc::new(Semaphore::new(OCR_WORKERS));
         let mut tasks = tokio::task::JoinSet::new();
         while let Some((page, bytes)) = rx.recv().await {
             let permit = Arc::clone(&limiter).acquire_owned().await.map_err(|e| e.to_string())?;
-            let ocr = Arc::clone(&self.ocr);
+            let ocr = Arc::clone(&ocr);
             tasks.spawn_blocking(move || {
                 let _permit = permit;
                 let text = ocr.recognize(&bytes).map(|mut lines| {

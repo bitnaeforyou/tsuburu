@@ -31,8 +31,8 @@ const CODES: TableDefinition<i32, &[u8]> = TableDefinition::new("codes");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 
 /// 2: LZ4 binary pages. 3: match codes beside the text. 4: codes in their
-/// own table.
-const SCHEMA_VERSION: &str = "4";
+/// own table. 5: codes cover scripts other than Hangul.
+const SCHEMA_VERSION: &str = "5";
 
 #[derive(Debug, thiserror::Error)]
 pub enum DialogueError {

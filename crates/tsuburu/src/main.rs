@@ -230,11 +230,12 @@ async fn serve(
                     ..FetchConfig::default()
                 })
                 .context("failed to build the indexing HTTP client")?;
-                Some(Arc::new(tsuburu_server::grinder::Grinder::new(
+                Some(Arc::new(tsuburu_server::grinder::Grinder::with_factory(
                     Arc::new(grinder_fetcher),
                     cfg.clone(),
                     Arc::new(dialogue),
                     Arc::from(ocr),
+                    tsuburu_ocr::platform_ocr,
                 )))
             }
             Err(err) => {
