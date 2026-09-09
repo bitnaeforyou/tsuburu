@@ -5,6 +5,7 @@
   import Favorites from './routes/Favorites.svelte'
   import History from './routes/History.svelte'
   import Dialogue from './routes/Dialogue.svelte'
+  import Artist from './routes/Artist.svelte'
   import Downloads from './routes/Downloads.svelte'
   import AgeGate from './lib/AgeGate.svelte'
 
@@ -28,6 +29,8 @@
   <History />
 {:else if route.name === 'dialogue'}
   <Dialogue query={route.query} />
+{:else if route.name === 'artist'}
+  <Artist artist={route.artist} />
 {:else if route.name === 'downloads'}
   <Downloads />
 {:else}

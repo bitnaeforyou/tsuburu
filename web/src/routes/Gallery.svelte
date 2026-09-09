@@ -2,7 +2,7 @@
   import * as api from '../lib/api'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import { library } from '../lib/library.svelte'
-  import { toSearch } from '../lib/router'
+  import { toArtist, toSearch } from '../lib/router'
 
   let { id, startPage = null }: { id: number; startPage?: number | null } = $props()
 
@@ -209,6 +209,17 @@
       </div>
     {/if}
 
+    {#if gallery.artists.length || gallery.series.length}
+      <p class="credits">
+        {#each gallery.artists as name (name)}
+          <a href={toArtist(name)}>{name}</a>
+        {/each}
+        {#if gallery.series.length}
+          <span class="muted">&middot; {gallery.series.join(', ')}</span>
+        {/if}
+      </p>
+    {/if}
+
     <div class="keep">
       {#if download}
         <span class="muted">
@@ -305,6 +316,14 @@
     color: var(--muted);
     font-size: 0.85rem;
     margin: 0 0 1rem;
+  }
+
+  .credits {
+    margin: 0 0 0.5rem;
+    font-size: 0.9rem;
+  }
+  .credits a {
+    margin-right: 0.5rem;
   }
 
   .keep {

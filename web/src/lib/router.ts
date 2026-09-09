@@ -22,6 +22,7 @@ export type Route =
   | { name: 'favorites' }
   | { name: 'history' }
   | { name: 'dialogue'; query: string }
+  | { name: 'artist'; artist: string }
   | { name: 'downloads' }
 
 const SORTS: Sort[] = ['date', 'today', 'week', 'month', 'year']
@@ -48,6 +49,8 @@ export function parse(hash: string): Route {
   if (head === '/history') return { name: 'history' }
   if (head === '/dialogue') return { name: 'dialogue', query: params.get('q') ?? '' }
   if (head === '/downloads') return { name: 'downloads' }
+  const artist = /^\/artist\/(.+)$/.exec(head)
+  if (artist) return { name: 'artist', artist: decodeURIComponent(artist[1]) }
 
   const sort = params.get('sort') as Sort | null
   return {
@@ -74,6 +77,10 @@ export function toSearch(state: Partial<SearchState> = {}): string {
 
 export function toGallery(id: number, page?: number): string {
   return page !== undefined ? `#/g/${id}?p=${page}` : `#/g/${id}`
+}
+
+export function toArtist(name: string): string {
+  return `#/artist/${encodeURIComponent(name)}`
 }
 
 export function toDialogue(query = ''): string {

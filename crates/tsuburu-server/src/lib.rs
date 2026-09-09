@@ -1,6 +1,7 @@
 //! localhost에서 도는 HTTP 서버.
 
 pub mod api;
+pub mod artists;
 pub mod assets;
 pub mod dialogue;
 pub mod downloads;
@@ -31,6 +32,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/favorites/{id}", put(library::add_favorite).delete(library::remove_favorite))
         .route("/api/history", get(library::list_history).delete(library::clear_history))
         .route("/api/history/{id}", put(library::record_progress))
+        .route("/api/artists/following", get(artists::following))
+        .route("/api/artists/{name}", get(artists::works))
+        .route("/api/artists/{name}/follow", put(artists::follow).delete(artists::unfollow))
         .route("/api/meta/status", get(meta::status))
         .route("/api/meta/search", get(meta::search))
         .route("/api/meta/suggest", get(meta::suggest))

@@ -14,6 +14,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const FAVORITES: TableDefinition<i32, &str> = TableDefinition::new("favorites");
 const HISTORY: TableDefinition<i32, &str> = TableDefinition::new("history");
+/// Artist name (lower case) -> when it was followed.
+const ARTISTS: TableDefinition<&str, u64> = TableDefinition::new("artists");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 
 const SCHEMA_VERSION: &str = "1";
@@ -111,6 +113,7 @@ impl Store {
         {
             tx.open_table(FAVORITES).map_err(db_err)?;
             tx.open_table(HISTORY).map_err(db_err)?;
+            tx.open_table(ARTISTS).map_err(db_err)?;
             let mut meta = tx.open_table(META).map_err(db_err)?;
             let existing = meta.get("schema").map_err(db_err)?.map(|v| v.value().to_string());
             match existing {
@@ -154,6 +157,57 @@ impl Store {
         let mut all: Vec<Favorite> = self.list(FAVORITES)?;
         all.sort_unstable_by_key(|f| std::cmp::Reverse(f.added_at));
         Ok(all)
+    }
+
+    // --- 작가 팔로우 ---
+
+    /// Names are stored lower case: hitomi's own spelling varies by upload.
+    pub fn follow_artist(&self, name: &str) -> Result<bool, StoreError> {
+        let key = name.trim().to_lowercase();
+        if key.is_empty() {
+            return Ok(false);
+        }
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut artists = tx.open_table(ARTISTS).map_err(db_err)?;
+            if artists.get(key.as_str()).map_err(db_err)?.is_none() {
+                artists.insert(key.as_str(), now_millis()).map_err(db_err)?;
+            }
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(true)
+    }
+
+    pub fn unfollow_artist(&self, name: &str) -> Result<bool, StoreError> {
+        let key = name.trim().to_lowercase();
+        let tx = self.db.begin_write().map_err(db_err)?;
+        let existed;
+        {
+            let mut artists = tx.open_table(ARTISTS).map_err(db_err)?;
+            existed = artists.remove(key.as_str()).map_err(db_err)?.is_some();
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(existed)
+    }
+
+    pub fn follows_artist(&self, name: &str) -> Result<bool, StoreError> {
+        let key = name.trim().to_lowercase();
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let artists = tx.open_table(ARTISTS).map_err(db_err)?;
+        Ok(artists.get(key.as_str()).map_err(db_err)?.is_some())
+    }
+
+    /// Most recently followed first.
+    pub fn followed_artists(&self) -> Result<Vec<String>, StoreError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let artists = tx.open_table(ARTISTS).map_err(db_err)?;
+        let mut all = Vec::new();
+        for row in artists.iter().map_err(db_err)? {
+            let (key, value) = row.map_err(db_err)?;
+            all.push((value.value(), key.value().to_string()));
+        }
+        all.sort_unstable_by_key(|(at, _)| std::cmp::Reverse(*at));
+        Ok(all.into_iter().map(|(_, name)| name).collect())
     }
 
     // --- 읽음 기록 ---
@@ -323,6 +377,33 @@ mod tests {
 
         let ids: Vec<i32> = store.favorites().unwrap().iter().map(|f| f.summary.id).collect();
         assert_eq!(ids, vec![2, 1]);
+    }
+
+    #[test]
+    fn artists_are_followed_case_insensitively_and_listed_newest_first() {
+        let (store, _dir) = store();
+        assert!(!store.follows_artist("Keso").unwrap());
+        assert!(store.follow_artist("Keso").unwrap());
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        store.follow_artist("borusiti").unwrap();
+        assert!(store.follows_artist("keso").unwrap(), "the spelling varies by upload");
+
+        assert_eq!(store.followed_artists().unwrap(), vec!["borusiti", "keso"]);
+
+        // Following again must not reorder what the user has arranged.
+        store.follow_artist("keso").unwrap();
+        assert_eq!(store.followed_artists().unwrap(), vec!["borusiti", "keso"]);
+
+        assert!(store.unfollow_artist("KESO").unwrap());
+        assert_eq!(store.followed_artists().unwrap(), vec!["borusiti"]);
+        assert!(!store.unfollow_artist("keso").unwrap());
+    }
+
+    #[test]
+    fn an_empty_artist_name_is_not_followed() {
+        let (store, _dir) = store();
+        assert!(!store.follow_artist("   ").unwrap());
+        assert!(store.followed_artists().unwrap().is_empty());
     }
 
     #[test]

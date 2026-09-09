@@ -66,6 +66,8 @@ export type Gallery = {
   language: string | null
   date: string | null
   tags: string[]
+  artists: string[]
+  series: string[]
   pages: Page[]
 }
 
@@ -323,5 +325,40 @@ export function startDownload(
 
 export function removeDownload(id: number): Promise<{ removed: boolean }> {
   return send('DELETE', `/api/downloads/${id}`)
+}
+
+// --- artists ---
+
+export type ArtistResponse = {
+  name: string
+  total: number
+  ids: number[]
+  following: boolean
+  languages: [string, number][]
+}
+
+export function artist(
+  name: string,
+  offset = 0,
+  limit = 25,
+  language?: string,
+): Promise<ArtistResponse> {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+  if (language && language !== 'all') params.set('language', language)
+  return request(`/api/artists/${encodeURIComponent(name)}?${params}`)
+}
+
+export type FollowedArtist = { name: string; works: number; recent: number[] }
+
+export function followedArtists(): Promise<FollowedArtist[]> {
+  return request('/api/artists/following')
+}
+
+export function followArtist(name: string): Promise<{ following: boolean }> {
+  return send('PUT', `/api/artists/${encodeURIComponent(name)}/follow`)
+}
+
+export function unfollowArtist(name: string): Promise<{ following: boolean }> {
+  return send('DELETE', `/api/artists/${encodeURIComponent(name)}/follow`)
 }
 
