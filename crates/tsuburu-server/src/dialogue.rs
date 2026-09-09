@@ -442,3 +442,209 @@ pub async fn similar(
 
     Ok(Json(hits))
 }
+
+// --- phrase search, through a model the user supplies ---
+
+/// Where phrases get turned into vectors. Stored so it survives a restart.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EmbedderSettings {
+    pub url: String,
+    pub model: String,
+}
+
+impl Default for EmbedderSettings {
+    fn default() -> Self {
+        let d = tsuburu_embed::embedder::EmbedderConfig::default();
+        Self { url: d.url, model: d.model }
+    }
+}
+
+fn embedder_settings(grinder: &Grinder) -> EmbedderSettings {
+    grinder
+        .store()
+        .embedder()
+        .ok()
+        .flatten()
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default()
+}
+
+pub async fn get_embedder(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<EmbedderSettings>, ApiError> {
+    Ok(Json(embedder_settings(grinder(&state)?)))
+}
+
+pub async fn set_embedder(
+    State(state): State<Arc<AppState>>,
+    Json(settings): Json<EmbedderSettings>,
+) -> Result<Json<EmbedderSettings>, ApiError> {
+    let grinder = grinder(&state)?;
+    if settings.url.trim().is_empty() {
+        return Err(ApiError::bad_request("give the embedding server's URL"));
+    }
+    let json = serde_json::to_string(&settings).map_err(|e| storage_error(&e))?;
+    grinder.store().set_embedder(&json)?;
+    Ok(Json(settings))
+}
+
+/// Asks the user's embedding server for a vector.
+async fn embed(
+    state: &AppState,
+    settings: &EmbedderSettings,
+    text: &str,
+    dims: usize,
+) -> Result<Vec<f32>, ApiError> {
+    let config = tsuburu_embed::embedder::EmbedderConfig {
+        url: settings.url.clone(),
+        model: settings.model.clone(),
+        dims,
+    };
+    let body = tsuburu_embed::embedder::request_body(&config, text);
+    let reply = state.fetcher.post_json(&config.url, &body).await.map_err(|err| ApiError {
+        error: ErrorKind::Network,
+        message: format!(
+            "could not reach the embedding server at {} ({err}). Start one and point \
+                 tsuburu at it.",
+            config.url
+        ),
+    })?;
+    tsuburu_embed::embedder::parse_embedding(&reply, dims)
+        .map_err(|e| ApiError { error: ErrorKind::Network, message: e.to_string() })
+}
+
+fn similarity_dir(grinder: &Grinder) -> Result<PathBuf, ApiError> {
+    grinder.store().artifact_dir()?.ok_or_else(|| ApiError {
+        error: ErrorKind::Unsupported,
+        message: "no embeddings are available; import artifact's llm-search-index first".into(),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PhraseParams {
+    pub q: String,
+    #[serde(default = "default_limit")]
+    pub limit: usize,
+}
+
+/// Scenes that mean something like the phrase given.
+pub async fn phrase(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<PhraseParams>,
+) -> Result<Json<Vec<SimilarHit>>, ApiError> {
+    let grinder = Arc::clone(grinder(&state)?);
+    if params.q.trim().is_empty() {
+        return Err(ApiError::bad_request("give a phrase to look for"));
+    }
+    let dir = similarity_dir(&grinder)?;
+    let settings = embedder_settings(&grinder);
+    let limit = params.limit.clamp(1, MAX_RESULTS);
+
+    let dims = {
+        let state = Arc::clone(&state);
+        let dir = dir.clone();
+        tokio::task::spawn_blocking(move || state.similarity.get(&dir).map(|s| s.dims()))
+            .await
+            .map_err(|e| storage_error(&e))?
+            .map_err(|message| ApiError { error: ErrorKind::Storage, message })?
+    };
+    let query = embed(&state, &settings, &params.q, dims).await?;
+
+    let hits = tokio::task::spawn_blocking(move || -> Result<Vec<SimilarHit>, String> {
+        let similarity = state.similarity.get(&dir)?;
+        let store = grinder.store();
+        let passage = |work: i32, page: u16| -> Option<Vec<u8>> {
+            let pages = store.text(work).ok().flatten()?;
+            let text = pages.into_iter().find(|p| p.page == page)?.lines.concat();
+            Some(tsuburu_dialogue::jamo::codes(&text))
+        };
+        Ok(similarity
+            .near_vector(&query, limit, &passage)
+            .into_iter()
+            .map(|m| SimilarHit {
+                gallery_id: m.gallery_id,
+                page: m.page,
+                score: m.score,
+                snippet: store
+                    .text(m.gallery_id)
+                    .ok()
+                    .flatten()
+                    .and_then(|pages| {
+                        pages
+                            .into_iter()
+                            .find(|p| p.page == m.page)
+                            .map(|p| p.lines.into_iter().take(3).collect::<Vec<_>>())
+                    })
+                    .unwrap_or_default(),
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| storage_error(&e))?
+    .map_err(|message| ApiError { error: ErrorKind::Storage, message })?;
+
+    Ok(Json(hits))
+}
+
+#[derive(Debug, Serialize)]
+pub struct PackCheck {
+    pub ok: bool,
+    /// How close the server's vector for a known passage is to the stored one.
+    pub cosine: f32,
+    pub sample_gallery: i32,
+    pub sample_page: u16,
+    pub note: String,
+}
+
+/// Checks the user's model really is the one that built the index.
+///
+/// A passage already in the corpus is sent to the server and the answer
+/// compared with the vector stored for it. Anything near 1 means the pack is
+/// right; a low number means a different model, or a different way of
+/// prompting it, and phrase search would return nonsense that looks fine.
+pub async fn check_pack(State(state): State<Arc<AppState>>) -> Result<Json<PackCheck>, ApiError> {
+    let grinder = Arc::clone(grinder(&state)?);
+    let dir = similarity_dir(&grinder)?;
+    let settings = embedder_settings(&grinder);
+
+    // Any indexed gallery will do; take the first one the corpus has.
+    let sample = grinder.store().done_ids()?.into_iter().min().ok_or_else(|| {
+        ApiError::bad_request("the corpus is empty, so there is nothing to check")
+    })?;
+    let pages = grinder
+        .store()
+        .text(sample)?
+        .ok_or_else(|| ApiError::bad_request("that gallery has no stored text"))?;
+    let page = pages.first().cloned().ok_or_else(|| ApiError::bad_request("no pages"))?;
+    let text = page.lines.join("\n");
+
+    let (dims, stored) = {
+        let state = Arc::clone(&state);
+        let dir = dir.clone();
+        let page_no = page.page;
+        tokio::task::spawn_blocking(move || {
+            state.similarity.get(&dir).map(|s| (s.dims(), s.stored_vector(sample, page_no)))
+        })
+        .await
+        .map_err(|e| storage_error(&e))?
+        .map_err(|message| ApiError { error: ErrorKind::Storage, message })?
+    };
+    let stored = stored.ok_or_else(|| ApiError::bad_request("that passage is not in the index"))?;
+
+    let fresh = embed(&state, &settings, &text, dims).await?;
+    let cosine = tsuburu_embed::embedder::cosine(&fresh, &stored);
+    let ok = cosine > 0.9;
+    Ok(Json(PackCheck {
+        ok,
+        cosine,
+        sample_gallery: sample,
+        sample_page: page.page,
+        note: if ok {
+            "the server's vectors line up with the index".into()
+        } else {
+            "the vectors do not line up: this is a different model, or it needs a different \
+             prompt. Phrase search would return plausible-looking nonsense."
+                .into()
+        },
+    }))
+}

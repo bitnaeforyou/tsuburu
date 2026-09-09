@@ -97,6 +97,24 @@ impl HttpFetcher {
         }
     }
 
+    /// Posts JSON and returns the body. Used for the embedding endpoint,
+    /// which is the user's own server rather than hitomi.
+    pub async fn post_json(&self, url: &str, body: &str) -> Result<String, FetchError> {
+        let response = self
+            .client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body.to_string())
+            .send()
+            .await
+            .map_err(|e| FetchError::Network(e.to_string()))?;
+        let status = response.status().as_u16();
+        if !(200..300).contains(&status) {
+            return Err(FetchError::Status(status));
+        }
+        response.text().await.map_err(|e| FetchError::Network(e.to_string()))
+    }
+
     /// 이미지처럼 캐시하지 않고 그대로 흘려보낼 응답. 서버의 프록시가 쓴다.
     pub async fn stream(&self, url: &str) -> Result<reqwest::Response, FetchError> {
         let response = self

@@ -10,6 +10,8 @@
 //! That answers "find scenes like this one", which is the question the
 //! embeddings are actually good at.
 
+pub mod embedder;
+
 use memmap2::Mmap;
 use std::fs::File;
 use std::path::{Path, PathBuf};

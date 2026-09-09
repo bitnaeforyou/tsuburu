@@ -88,6 +88,46 @@ impl Similarity {
     pub fn vectors(&self) -> usize {
         self.index.len()
     }
+
+    /// Passages nearest to a vector that came from outside the index.
+    pub fn near_vector(
+        &self,
+        query: &[f32],
+        limit: usize,
+        duplicate: &dyn Fn(i32, u16) -> Option<Vec<u8>>,
+    ) -> Vec<Match> {
+        let wanted = (limit * 8).clamp(limit, 400);
+        let neighbours = self.index.nearest(query, wanted, &|_| false);
+        let mut out = Vec::new();
+        let mut seen_work = std::collections::HashSet::new();
+        let mut seen_passage = std::collections::HashSet::new();
+        for neighbour in neighbours {
+            let Some((work, page)) = self.locator.locate(neighbour.chunk) else { continue };
+            if !seen_work.insert(work) {
+                continue;
+            }
+            if let Some(key) = duplicate(work, page)
+                && !seen_passage.insert(key)
+            {
+                continue;
+            }
+            out.push(Match { gallery_id: work, page, score: neighbour.score });
+            if out.len() >= limit {
+                break;
+            }
+        }
+        out
+    }
+
+    /// The stored vector for a passage, so a pack can be checked against it.
+    pub fn stored_vector(&self, gallery: i32, page: u16) -> Option<Vec<f32>> {
+        let chunk = self.locator.chunk_for(gallery, page)?;
+        self.index.vector(chunk).ok()
+    }
+
+    pub fn dims(&self) -> usize {
+        self.index.dims()
+    }
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize)]

@@ -2080,6 +2080,8 @@ name = "tsuburu-embed"
 version = "0.1.0"
 dependencies = [
  "memmap2",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tracing",

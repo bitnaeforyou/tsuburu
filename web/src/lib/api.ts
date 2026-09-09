@@ -362,3 +362,30 @@ export function unfollowArtist(name: string): Promise<{ following: boolean }> {
   return send('DELETE', `/api/artists/${encodeURIComponent(name)}/follow`)
 }
 
+// --- phrase search over the embeddings ---
+
+export type EmbedderSettings = { url: string; model: string }
+
+export function getPack(): Promise<EmbedderSettings> {
+  return request('/api/dialogue/pack')
+}
+
+export function setPack(settings: EmbedderSettings): Promise<EmbedderSettings> {
+  return send('PUT', '/api/dialogue/pack', settings)
+}
+
+export type PackCheck = {
+  ok: boolean
+  cosine: number
+  sample_gallery: number
+  sample_page: number
+  note: string
+}
+
+export function checkPack(): Promise<PackCheck> {
+  return request('/api/dialogue/pack/check')
+}
+
+export function phraseScenes(q: string, limit = 25): Promise<SimilarHit[]> {
+  return request(`/api/dialogue/phrase?${new URLSearchParams({ q, limit: String(limit) })}`)
+}

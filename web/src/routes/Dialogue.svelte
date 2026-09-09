@@ -28,6 +28,13 @@
   let hunt = $state({ q: '', language: 'korean', kind: 'doujinshi', limit: 500, force: false })
   let huntResult = $state<string | null>(null)
 
+  // Two ways to ask: the words as written, or what they mean.
+  let mode = $state<'words' | 'meaning'>('words')
+  let pack = $state<api.EmbedderSettings | null>(null)
+  let packCheck = $state<api.PackCheck | null>(null)
+  let packBusy = $state(false)
+  let packError = $state<string | null>(null)
+
   let similarFor = $state<string | null>(null)
   let similar = $state<api.SimilarHit[]>([])
   let similarError = $state<string | null>(null)
@@ -88,12 +95,36 @@
     searching = true
     searchError = null
     try {
-      const result = await api.dialogueSearch(query, 25, controller.signal)
-      hits = result.hits
+      if (mode === 'meaning') {
+        const found = await api.phraseScenes(query)
+        hits = found.map((h) => ({ ...h, exact: false, also: [] }))
+      } else {
+        const result = await api.dialogueSearch(query, 25, controller.signal)
+        hits = result.hits
+      }
     } catch (cause) {
       if ((cause as Error).name !== 'AbortError') searchError = cause
     } finally {
       searching = false
+    }
+  }
+
+  $effect(() => {
+    void api.getPack().then((p) => (pack = p)).catch(() => {})
+  })
+
+  async function savePack() {
+    if (!pack) return
+    packBusy = true
+    packError = null
+    packCheck = null
+    try {
+      pack = await api.setPack(pack)
+      packCheck = await api.checkPack()
+    } catch (cause) {
+      packError = cause instanceof Error ? cause.message : String(cause)
+    } finally {
+      packBusy = false
     }
   }
 
@@ -314,12 +345,25 @@
     <form class="searchbar" onsubmit={submit}>
       <input
         bind:value={input}
-        placeholder="A line you remember, in Korean"
+        placeholder={mode === 'meaning'
+          ? 'Describe the scene; the words need not appear'
+          : 'A line you remember, in Korean'}
         aria-label="Dialogue search"
         autocomplete="off"
       />
+      <select bind:value={mode} aria-label="How to match">
+        <option value="words">these words</option>
+        <option value="meaning">this meaning</option>
+      </select>
       <button type="submit" disabled={!input.trim()}>Find</button>
     </form>
+    {#if mode === 'meaning'}
+      <p class="muted small">
+        Matching by meaning needs the model that built the index
+        (Qwen3-Embedding-4B). tsuburu ships none; point it at a local
+        embedding server below.
+      </p>
+    {/if}
 
     {#if searchError}
       <ErrorNote error={searchError} onretry={search} />
@@ -450,6 +494,34 @@
           </p>
         {:else if artifactResult}
           <p class="muted small">{artifactResult}</p>
+        {/if}
+      </form>
+
+      <form onsubmit={(e) => { e.preventDefault(); void savePack() }}>
+        <strong>Meaning-search pack</strong>
+        <p class="muted small">
+          Run Qwen3-Embedding-4B yourself — llama.cpp's server, Ollama, anything
+          speaking the OpenAI shape — and give tsuburu its address. Checking
+          re-embeds a passage already in the index and compares: near 1 means the
+          pack matches, anything lower means a different model and answers that
+          look right but are not.
+        </p>
+        {#if pack}
+          <div class="row">
+            <input bind:value={pack.url} aria-label="Embedding server URL" />
+            <input bind:value={pack.model} aria-label="Model name" />
+            <button type="submit" disabled={packBusy}>Save and check</button>
+          </div>
+        {/if}
+        {#if packBusy}
+          <p class="muted small">Asking the server…</p>
+        {:else if packCheck}
+          <p class="muted small">
+            {packCheck.ok ? '✓' : '✗'} similarity {packCheck.cosine.toFixed(3)} against
+            gallery {packCheck.sample_gallery} page {packCheck.sample_page + 1} — {packCheck.note}
+          </p>
+        {:else if packError}
+          <p class="muted small">{packError}</p>
         {/if}
       </form>
 

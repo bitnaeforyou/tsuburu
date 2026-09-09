@@ -233,6 +233,15 @@ impl DialogueStore {
         self.set_setting("artifact_dir", &dir.display().to_string())
     }
 
+    /// Where to send a phrase to be embedded, if the user set one up.
+    pub fn embedder(&self) -> Result<Option<String>, DialogueError> {
+        self.setting("embedder")
+    }
+
+    pub fn set_embedder(&self, json: &str) -> Result<(), DialogueError> {
+        self.set_setting("embedder", json)
+    }
+
     // --- queue ---
 
     /// Adds galleries to the queue. Finished ones are skipped; a pending one
