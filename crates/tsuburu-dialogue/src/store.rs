@@ -521,7 +521,13 @@ impl DialogueStore {
         }
         merged.sort_unstable_by_key(|p| p.page);
 
-        let source = self.job(id)?.and_then(|j| j.source);
+        let previous_job = self.job(id)?;
+        let source = previous_job.as_ref().and_then(|j| j.source.clone());
+        // A work counts as collected by reading only when reading is why it
+        // is here at all. Adding a page to text that was imported or swept
+        // must not make the whole record something "delete what I read"
+        // would throw away.
+        let collected_by_reading = from_reading && previous_job.is_none();
         let encoded = Encoded::from_pages(&merged);
         let lines: usize = merged.iter().map(|p| p.lines.len()).sum();
         self.finish(
@@ -533,7 +539,7 @@ impl DialogueStore {
                 lines: lines as u32,
                 error: None,
                 source: source.as_deref(),
-                from_reading,
+                from_reading: collected_by_reading,
             },
         )?;
         Ok(added)
@@ -1171,12 +1177,18 @@ mod tests {
     }
 
     #[test]
-    fn a_swept_gallery_that_is_later_read_stays_marked_as_read() {
+    fn reading_a_page_of_an_indexed_work_does_not_make_it_deletable_as_read() {
         let (store, _dir) = store();
         store.complete(7, &[page(0, "배경 색인")]).unwrap();
-        assert!(!store.job(7).unwrap().unwrap().from_reading);
         store.merge_pages(7, &[page(1, "읽으면서")], true).unwrap();
-        assert!(store.job(7).unwrap().unwrap().from_reading);
+
+        // The page is kept, but the work still belongs to the sweep: it was
+        // not collected by reading, so forgetting what reading collected
+        // must not take the swept text with it.
+        assert_eq!(store.text(7).unwrap().unwrap().len(), 2);
+        assert!(!store.job(7).unwrap().unwrap().from_reading);
+        assert_eq!(store.forget_read().unwrap(), 0);
+        assert!(store.text(7).unwrap().is_some());
     }
 
     #[test]
