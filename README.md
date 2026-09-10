@@ -113,7 +113,7 @@ work, scored by TF-IDF over the dialogue it recognised. A few tens of
 megabytes, against the embedding index's 2.6 GB.
 
 ```
-tsuburu import-keywords /path/to/artifact/graph.csv   # ~16 s for 3.2M rows
+tsuburu import-keywords /path/to/artifact/graph.csv   # 106,000 works in 17 s
 ```
 
 A work then shows the words it is about, each a link to everything else those

@@ -32,6 +32,8 @@ pub const MAX_DOCUMENT_FREQUENCY: u32 = 20_000;
 pub const KEEP_PER_WORK: usize = 40;
 /// Scanned per word when looking for neighbours.
 const POSTINGS_PER_WORD: usize = 4_000;
+/// Neighbours are ranked this many deep before re-uploads are folded out.
+const FOLD_HEADROOM: usize = 4;
 
 #[derive(Debug, thiserror::Error)]
 pub enum KeywordError {
@@ -199,21 +201,42 @@ impl KeywordStore {
         }
 
         let mut ranked: Vec<(i32, f32)> = totals.into_iter().collect();
-        ranked.sort_unstable_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
-        ranked.truncate(limit);
-        Ok(ranked
-            .into_iter()
-            .map(|(other, score)| {
-                let mut words = shared.remove(&other).unwrap_or_default();
-                words.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
-                Neighbour {
-                    id: other,
-                    score,
-                    shared: words.into_iter().take(6).map(|(w, _)| w).collect(),
-                }
-            })
-            .collect())
+        // A tie is usually the same work under two ids; keep the newer.
+        ranked.sort_unstable_by(|a, b| b.1.total_cmp(&a.1).then(b.0.cmp(&a.0)));
+        ranked.truncate(limit * FOLD_HEADROOM);
+
+        // hitomi carries the same work under several ids, and re-uploads have
+        // the same words in the same order. Fold them rather than filling the
+        // answer with one work's copies.
+        let works = tx.open_table(WORKS).map_err(db_err)?;
+        let mut seen_upload = std::collections::HashSet::new();
+        let mut out = Vec::with_capacity(limit);
+        for (other, score) in ranked {
+            if let Some(raw) = works.get(other).map_err(db_err)?
+                && let Ok(fingerprint) = decode(raw.value()).map(|w| upload_key(&w))
+                && !seen_upload.insert(fingerprint)
+            {
+                continue;
+            }
+            let mut words = shared.remove(&other).unwrap_or_default();
+            words.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
+            out.push(Neighbour {
+                id: other,
+                score,
+                shared: words.into_iter().take(6).map(|(w, _)| w).collect(),
+            });
+            if out.len() >= limit {
+                break;
+            }
+        }
+        Ok(out)
     }
+}
+
+/// What a work's strongest words look like. Two uploads of one work read the
+/// same, so they produce the same key.
+fn upload_key(words: &[Scored]) -> String {
+    words.iter().take(12).map(|w| w.word.as_str()).collect::<Vec<_>>().join("\u{1}")
 }
 
 /// Scores are positive and rarely above a few tens; a thousandth is finer
@@ -324,6 +347,23 @@ mod tests {
         assert!(near[0].score > near[1].score);
         assert_eq!(near[0].shared, ["에미", "보스"]);
         assert_eq!(near[1].shared, ["보스"]);
+    }
+
+    #[test]
+    fn re_uploads_of_one_work_appear_once() {
+        let (_dir, store) = store();
+        let words = scored(&[("에미", 20.0), ("보스", 10.0)]);
+        store.put(1, &words).unwrap();
+        // Two ids, the same work.
+        store.put(2, &words).unwrap();
+        store.put(3, &words).unwrap();
+        store.put(4, &scored(&[("에미", 5.0), ("교사", 30.0)])).unwrap();
+
+        let near = store.near(1, 10).unwrap();
+        assert_eq!(near.len(), 2, "{near:?}");
+        // The newest of the copies stands for them.
+        assert_eq!(near[0].id, 3);
+        assert_eq!(near[1].id, 4);
     }
 
     #[test]
