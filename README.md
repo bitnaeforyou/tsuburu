@@ -162,8 +162,10 @@ already in the index needs nothing at all. Each dialogue result has a
 **Similar scenes** button that takes the vector stored for that passage and
 finds the nearest others, which answers "what else reads like this".
 
-The first query pulls the 2.6 GB index off disk and takes a few seconds; after
-that it is about 0.2 s.
+The first query pulls the 2.6 GB index off disk and takes about six seconds;
+after that it is 0.2 s. Asked from a page of the second volume of a series, it
+answers with the same scene in the first volume, and the third volume after
+that.
 
 ### Searching by meaning
 
@@ -178,7 +180,9 @@ A different model answers with perfectly plausible vectors and useless
 results, so the setting has a **Check** button: it embeds a passage that is
 already in the index and compares the answer with the vector stored for it.
 Anything below 0.9 is reported as the wrong model rather than left looking
-like a bad corpus.
+like a bad corpus. Against artifact's own index the right model scores 1.000,
+and a query takes a second or two — nearly all of it the model reading the
+phrase, not the search.
 
 ## Platforms
 
