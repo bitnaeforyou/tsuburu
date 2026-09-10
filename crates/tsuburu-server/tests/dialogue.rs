@@ -358,3 +358,79 @@ async fn downloads_are_listed_with_progress_and_can_be_removed() {
     assert_eq!(body["removed"], true);
     assert!(!downloads.has_image(&hash, "avif"), "its only page goes with it");
 }
+
+// --- pages recognised because they were read ---
+
+/// The factory is a plain fn pointer, so what it was asked for is recorded
+/// here rather than captured.
+static ASKED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+fn recording_ocr(options: tsuburu_ocr::OcrOptions) -> Option<Box<dyn tsuburu_ocr::Ocr>> {
+    ASKED.lock().unwrap().push(options.languages.join(","));
+    Some(Box::new(MockOcr {
+        lines: vec![tsuburu_ocr::Line {
+            text: "読んだ".into(),
+            confidence: 1.0,
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 0.1,
+        }],
+        fail: false,
+    }))
+}
+
+fn reading_grinder(dir: &tempfile::TempDir) -> (Arc<Grinder>, Arc<DialogueStore>) {
+    let store = Arc::new(DialogueStore::open(dir.path().join("dialogue.redb")).unwrap());
+    let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
+    let cfg =
+        Config { scheme: "http".into(), ltn_domain: "127.0.0.1:9".into(), ..Config::default() };
+    let grinder = Arc::new(Grinder::with_factory(
+        fetcher,
+        cfg,
+        Arc::clone(&store),
+        // The engine the grinder starts with answers for its own language;
+        // another language goes through the factory.
+        Arc::new(MockOcr {
+            lines: vec![tsuburu_ocr::Line {
+                text: "읽은 줄".into(),
+                confidence: 1.0,
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 0.1,
+            }],
+            fail: false,
+        }),
+        recording_ocr,
+    ));
+    (grinder, store)
+}
+
+#[tokio::test]
+async fn a_page_that_was_read_is_recognised_in_the_works_own_language() {
+    let dir = tempfile::tempdir().unwrap();
+    let (grinder, store) = reading_grinder(&dir);
+
+    grinder.recognise_read_page(42, 3, vec![1, 2, 3], "japanese").await;
+
+    assert_eq!(ASKED.lock().unwrap().last().map(String::as_str), Some("ja-JP"));
+    let text = store.text(42).unwrap().unwrap();
+    assert_eq!(text.len(), 1);
+    assert_eq!(text[0].page, 3);
+    assert_eq!(text[0].lines, ["読んだ"]);
+    assert!(store.job(42).unwrap().unwrap().from_reading);
+}
+
+#[tokio::test]
+async fn reading_the_same_page_again_does_not_double_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (grinder, store) = reading_grinder(&dir);
+
+    grinder.recognise_read_page(43, 0, vec![1], "korean").await;
+    grinder.recognise_read_page(43, 0, vec![1], "korean").await;
+    grinder.recognise_read_page(43, 1, vec![1], "korean").await;
+
+    let text = store.text(43).unwrap().unwrap();
+    assert_eq!(text.iter().map(|p| p.page).collect::<Vec<_>>(), [0, 1]);
+}

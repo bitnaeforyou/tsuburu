@@ -49,6 +49,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/dialogue/phrase", get(dialogue::phrase))
         .route("/api/dialogue/pack", get(dialogue::get_embedder).put(dialogue::set_embedder))
         .route("/api/dialogue/pack/check", get(dialogue::check_pack))
+        .route("/api/dialogue/stored", get(dialogue::stored).delete(dialogue::forget_read))
+        .route("/api/dialogue/stored/{id}", axum::routing::delete(dialogue::forget))
         .route("/api/dialogue/enqueue", post(dialogue::enqueue))
         .route("/api/dialogue/hunt", post(dialogue::hunt))
         .route("/api/dialogue/import-artifact", post(dialogue::import_artifact))

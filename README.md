@@ -55,6 +55,13 @@ tsuburu gallery 4170351          # inspect one gallery
 Search terms are combined with AND. Prefix a term with `-` to exclude it; quote
 the whole query so your shell does not read it as a flag.
 
+In the browser one box asks every source at once — hitomi's tags, the local
+titles, the recognised dialogue — and shows each in its own section as it
+arrives. They are not merged into one list: a tag intersection and a fuzzy
+line match cannot be ranked against each other, and pretending otherwise
+would put an arbitrary order on the answer. Each section links to itself for
+the full list.
+
 ## Reading offline
 
 Any work, or any single page, can be kept on disk. The reader has
@@ -132,11 +139,18 @@ remember, tsuburu has to read the pages itself: download them, run the
 operating system's text recognition, and keep the text. Images are discarded
 as soon as they are read.
 
-This is **off by default**. Turn it on from the Dialogue tab and it indexes in
-the background while the app is open, most popular Korean galleries first, so
-the works you are most likely to have read are covered soonest. The tab always
-shows how much is covered; a miss means "not indexed yet" as often as it means
-"not there".
+**Works you open are read as you go.** Their pages are already coming down to
+be displayed, so the image proxy hands what it is carrying to recognition
+instead of fetching it again: nothing extra is downloaded, and a work you have
+actually read becomes findable by a line from it. Pages that already have text
+are skipped, so re-reading costs nothing. The Dialogue tab lists what this has
+collected, with its size, and deletes any of it — or all of it — on request.
+
+The **background sweep** is a different thing and is **off by default**: it
+downloads galleries you have not opened. Turn it on from the Dialogue tab and
+it indexes while the app is open, most popular Korean galleries first. The tab
+always shows how much is covered; a miss means "not indexed yet" as often as
+it means "not there".
 
 Measured on an M4 Pro: recognition runs at about 11 pages/s, but the CDN
 delivers roughly 1.2 MB/s, so a gallery of 32 pages takes about 7 s. The whole

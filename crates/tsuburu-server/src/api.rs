@@ -260,6 +260,36 @@ fn from_download(stored: tsuburu_downloads::Download) -> GalleryResponse {
     }
 }
 
+/// Notes which of a work's pages have no text yet.
+///
+/// The reader is about to pull those pages through the image proxy, and the
+/// proxy can hand what it is already carrying to recognition. Pages that are
+/// already stored are left out, so re-reading a work costs nothing.
+async fn expect_unread_pages(state: &AppState, id: i32, gallery: &tsuburu_hitomi::Gallery) {
+    let Some(grinder) = state.grinder.as_ref() else { return };
+    if !grinder.settings().await.read_indexing {
+        return;
+    }
+    let known: std::collections::HashSet<u16> = grinder
+        .store()
+        .text(id)
+        .ok()
+        .flatten()
+        .map(|pages| pages.into_iter().map(|p| p.page).collect())
+        .unwrap_or_default();
+    let language = gallery.language.clone().unwrap_or_default();
+    let waiting = gallery.files.iter().enumerate().filter_map(|(at, file)| {
+        let page = u16::try_from(at).ok()?;
+        (!known.contains(&page)).then(|| {
+            (
+                file.hash.clone(),
+                crate::state::UnreadPage { gallery: id, page, language: language.clone() },
+            )
+        })
+    });
+    state.expect_pages(waiting).await;
+}
+
 /// Files a gallery fetched from hitomi into the local snapshot.
 ///
 /// Failing to write is not worth failing the request over; the snapshot is
@@ -325,6 +355,7 @@ pub async fn gallery(
         }
     };
     remember(&state, id, &gallery);
+    expect_unread_pages(&state, id, &gallery).await;
 
     let pages = gallery
         .files

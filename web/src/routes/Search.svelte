@@ -9,6 +9,8 @@
   import AppHeader from '../lib/AppHeader.svelte'
   import SearchBar from '../lib/SearchBar.svelte'
   import Terms from '../lib/Terms.svelte'
+  import AllResults from '../lib/AllResults.svelte'
+  import DialogueHitList from '../lib/DialogueHitList.svelte'
 
   let { params }: { params: SearchState } = $props()
 
@@ -21,13 +23,23 @@
   let error = $state<unknown>(null)
   let offset = $state(0)
 
+  let hits = $state<api.DialogueHit[]>([])
   let controller: AbortController | null = null
   let localAvailable = $state(false)
+  let dialogueAvailable = $state(false)
 
   $effect(() => {
     void library.load().catch(() => {})
     void api.metaStatus().then((s) => (localAvailable = s.available)).catch(() => {})
+    void api
+      .dialogueStatus()
+      .then((s) => (dialogueAvailable = s.supported && (s.counts?.done ?? 0) > 0))
+      .catch(() => {})
   })
+
+  // Every source at once needs something to look for; with an empty box the
+  // tag index is the one that can still browse.
+  const sectioned = $derived(params.scope === 'all' && params.query.trim().length > 0)
 
   $effect(() => {
     if (params.query) sessionStorage.setItem('tsuburu.lastSearch', location.hash)
@@ -39,11 +51,14 @@
     void key
     ids = []
     terms = []
+    hits = []
     total = 0
     offset = 0
     error = null
+    if (sectioned) return
     // Local scope needs something to search for; hitomi scope can browse.
     if (params.scope === 'local' && !params.query && params.language === 'all' && params.kind === 'all') return
+    if (params.scope === 'dialogue' && !params.query) return
     void load(0)
   })
 
@@ -53,6 +68,12 @@
     loading = true
     error = null
     try {
+      if (params.scope === 'dialogue') {
+        const found = await api.dialogueSearch(params.query, 50, controller.signal)
+        hits = found.hits
+        total = found.hits.length
+        return
+      }
       if (params.scope === 'local') {
         // The snapshot has no popularity data; results are newest first.
         const page = await api.metaSearch(
@@ -91,7 +112,7 @@
     location.hash = toSearch({ ...params, ...changes })
   }
 
-  const hasMore = $derived(ids.length < total)
+  const hasMore = $derived(params.scope !== 'dialogue' && ids.length < total)
   const filtering = $derived(
     params.language !== defaultSearch.language || params.kind !== defaultSearch.kind,
   )
@@ -100,13 +121,16 @@
 </script>
 
 <AppHeader active="search" />
-<SearchBar {params} onchange={go} {localAvailable} />
+<SearchBar {params} onchange={go} {localAvailable} {dialogueAvailable} />
 
 <main>
   {#if error}
     <ErrorNote {error} onretry={() => load(0)} />
   {/if}
 
+  {#if sectioned}
+    <AllResults {params} {localAvailable} {dialogueAvailable} />
+  {:else}
   <Terms {terms} />
 
   {#if total > 0}
@@ -125,11 +149,15 @@
     <p class="count">{t('search.slowSort')}</p>
   {/if}
 
-  <Grid>
-    {#each ids as id (id)}
-      <Card {id} />
-    {/each}
-  </Grid>
+  {#if params.scope === 'dialogue'}
+    <DialogueHitList {hits} />
+  {:else}
+    <Grid>
+      {#each ids as id (id)}
+        <Card {id} />
+      {/each}
+    </Grid>
+  {/if}
 
   {#if loading}
     <p class="count">{t('common.loading')}</p>
@@ -137,6 +165,7 @@
 
   {#if hasMore && !loading}
     <button class="more" onclick={() => load(offset)}>{t('common.loadMore')}</button>
+  {/if}
   {/if}
 </main>
 

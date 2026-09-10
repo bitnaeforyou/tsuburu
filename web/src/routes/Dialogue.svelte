@@ -31,6 +31,9 @@
 
   // Two ways to ask: the words as written, or what they mean.
   let mode = $state<'words' | 'meaning'>('words')
+  let cache = $state<{ items: api.Stored[]; total: number; bytes: number } | null>(null)
+  let cacheBusy = $state(false)
+  let forgetting = $state(false)
   let pack = $state<api.EmbedderSettings | null>(null)
   let packCheck = $state<api.PackCheck | null>(null)
   let packBusy = $state(false)
@@ -112,7 +115,37 @@
 
   $effect(() => {
     void api.getPack().then((p) => (pack = p)).catch(() => {})
+    void loadCache()
   })
+
+  async function loadCache() {
+    try {
+      cache = await api.stored(true, 24)
+    } catch {
+      cache = null
+    }
+  }
+
+  async function forgetOne(id: number) {
+    cacheBusy = true
+    try {
+      await api.forget(id)
+      await loadCache()
+    } finally {
+      cacheBusy = false
+    }
+  }
+
+  async function forgetEverything() {
+    cacheBusy = true
+    try {
+      await api.forgetRead()
+      await loadCache()
+      forgetting = false
+    } finally {
+      cacheBusy = false
+    }
+  }
 
   async function savePack() {
     if (!pack) return
@@ -330,6 +363,14 @@
               </label>
             {/each}
           </span>
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={settings.read_indexing}
+              onchange={(e) => updateSetting({ read_indexing: e.currentTarget.checked })}
+            />
+            {t('dialogue.readIndexing')}
+          </label>
           <label class="check">
             <input
               type="checkbox"
@@ -551,6 +592,47 @@
       </form>
 
       <div class="exchange">
+        <strong>{t('dialogue.cache')}</strong>
+        <p class="muted small">{t('dialogue.cacheNote')}</p>
+        {#if cache && cache.total > 0}
+          <div class="row">
+            <span class="muted small">
+              {t('dialogue.cacheSummary', {
+                works: cache.total.toLocaleString(),
+                size: formatBytes(cache.bytes),
+              })}
+            </span>
+            {#if forgetting}
+              <span class="muted small">{t('dialogue.forgetConfirm')}</span>
+              <button onclick={forgetEverything} disabled={cacheBusy}>
+                {t('history.confirmYes')}
+              </button>
+              <button onclick={() => (forgetting = false)}>{t('common.cancel')}</button>
+            {:else}
+              <button onclick={() => (forgetting = true)} disabled={cacheBusy}>
+                {t('dialogue.forgetAll')}
+              </button>
+            {/if}
+          </div>
+          <ul class="kept">
+            {#each cache.items as item (item.id)}
+              <li>
+                <div class="thumb"><Card id={item.id} /></div>
+                <span class="muted small">
+                  {t('common.pages', { n: item.pages })} &middot; {formatBytes(item.bytes)}
+                </span>
+                <button onclick={() => forgetOne(item.id)} disabled={cacheBusy}>
+                  {t('dialogue.forget')}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="muted small">{t('dialogue.cacheEmpty')}</p>
+        {/if}
+      </div>
+
+      <div class="exchange">
         <strong>{t('dialogue.share')}</strong>
         <p class="muted small">{t('dialogue.shareNote')}</p>
         <div class="row">
@@ -585,6 +667,20 @@
 </main>
 
 <style>
+  .kept {
+    list-style: none;
+    padding: 0;
+    margin: 0.6rem 0 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.8rem;
+  }
+  .kept li {
+    display: grid;
+    gap: 0.25rem;
+    align-content: start;
+  }
+
   main {
     padding: 1rem;
     max-width: 64rem;

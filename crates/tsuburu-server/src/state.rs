@@ -4,6 +4,7 @@
 //! 바뀌지 않으므로 TTL을 두고 캐시한다.
 
 use quick_cache::sync::Cache;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -25,6 +26,17 @@ impl<T> Cached<T> {
     }
 }
 
+/// A page waiting to be recognised, and what language to expect on it.
+///
+/// The work's own language, not the sweep's: reading a Japanese work should
+/// be recognised as Japanese even while the background sweep is on Korean.
+#[derive(Debug, Clone)]
+pub struct UnreadPage {
+    pub gallery: i32,
+    pub page: u16,
+    pub language: String,
+}
+
 pub struct AppState {
     pub fetcher: Arc<HttpFetcher>,
     pub cfg: Config,
@@ -39,6 +51,10 @@ pub struct AppState {
     pub meta: Option<Arc<tsuburu_meta::MetaStore>>,
     /// Embedding search, opened on first use.
     pub similarity: crate::similar::LazySimilarity,
+    /// Page hashes of works the reader has open whose text is missing, and
+    /// where each belongs. The proxy is already carrying those bytes, so it
+    /// can hand them to recognition instead of downloading them again.
+    pub unread_pages: RwLock<HashMap<String, UnreadPage>>,
     /// What works are about, if artifact's graph.csv was imported.
     pub keywords: Option<Arc<tsuburu_keywords::KeywordStore>>,
     /// Pages kept on disk. `None` if the store could not be opened.
@@ -78,6 +94,7 @@ impl AppState {
             shards_dir: None,
             meta: None,
             similarity: Default::default(),
+            unread_pages: RwLock::new(HashMap::new()),
             keywords: None,
             downloads: None,
             download_jobs: Default::default(),
@@ -95,6 +112,28 @@ impl AppState {
     pub fn with_meta(mut self, meta: Arc<tsuburu_meta::MetaStore>) -> Self {
         self.meta = Some(meta);
         self
+    }
+
+    /// Remembers where a work's un-recognised pages belong.
+    ///
+    /// Bounded rather than evicted one by one: a few works' worth is all the
+    /// reader can have open, and forgetting simply means a page is not read.
+    pub async fn expect_pages(&self, pages: impl IntoIterator<Item = (String, UnreadPage)>) {
+        let mut map = self.unread_pages.write().await;
+        if map.len() > 4096 {
+            map.clear();
+        }
+        map.extend(pages);
+    }
+
+    /// Where this page belongs, if it is one we are waiting to recognise.
+    pub async fn page_to_read(&self, hash: &str) -> Option<UnreadPage> {
+        self.unread_pages.read().await.get(hash).cloned()
+    }
+
+    /// Called once the page has been handed over, so it is not read twice.
+    pub async fn page_read(&self, hash: &str) {
+        self.unread_pages.write().await.remove(hash);
     }
 
     pub fn with_keywords(mut self, keywords: Arc<tsuburu_keywords::KeywordStore>) -> Self {

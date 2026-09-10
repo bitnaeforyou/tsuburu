@@ -44,6 +44,13 @@ pub async fn image(
 
     let gg = state.gg().await?;
     let url = tsuburu_hitomi::image_url(&state.cfg, &gg, &file)?;
+
+    // A page the reader is about to look at, that nothing has read yet: the
+    // bytes are coming down anyway, so hold them long enough to hand over.
+    if let Some(waiting) = state.page_to_read(hash).await {
+        return read_and_recognise(&state, &url, ext, hash, waiting).await;
+    }
+
     match stream(&state, &url, ext).await {
         Err(err) if err.error == ErrorKind::Network && err.message.contains("404") => {
             // 경로 접두사가 회전했을 가능성이 크다. 한 번만 새로 받아 재시도한다.
@@ -77,6 +84,41 @@ fn split_hash(file: &str) -> Result<(&str, &str), ApiError> {
         return Err(ApiError::bad_request("hash must be 64 hex characters"));
     }
     Ok((hash, ext))
+}
+
+/// Fetches the page whole, answers with it, and gives a copy to recognition.
+///
+/// Buffering one page costs a few hundred kilobytes and is the price of not
+/// downloading it a second time for the sake of reading its text.
+async fn read_and_recognise(
+    state: &Arc<AppState>,
+    url: &str,
+    ext: &str,
+    hash: &str,
+    waiting: crate::state::UnreadPage,
+) -> Result<Response, ApiError> {
+    let response = stream(state, url, ext).await?;
+    let bytes = match axum::body::to_bytes(response.into_body(), usize::MAX).await {
+        Ok(bytes) => bytes.to_vec(),
+        Err(err) => {
+            return Err(ApiError {
+                error: ErrorKind::Network,
+                message: format!("could not fetch the image ({err})"),
+            });
+        }
+    };
+
+    state.page_read(hash).await;
+    if let Some(grinder) = state.grinder.as_ref() {
+        let grinder = Arc::clone(grinder);
+        let copy = bytes.clone();
+        tokio::spawn(async move {
+            grinder
+                .recognise_read_page(waiting.gallery, waiting.page, copy, &waiting.language)
+                .await;
+        });
+    }
+    Ok(local_image(bytes, ext))
 }
 
 fn local_image(bytes: Vec<u8>, ext: &str) -> Response {

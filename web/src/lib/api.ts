@@ -150,6 +150,7 @@ export type GrinderSettings = {
   kinds: string[]
   bytes_per_second: number
   reindex_imported: boolean
+  read_indexing: boolean
 }
 
 export type GrinderStatus = {
@@ -411,4 +412,32 @@ export type KeywordSearch = { word: string; works: { id: number; score: number }
 export function keywordSearch(word: string, limit = 25): Promise<KeywordSearch> {
   const params = new URLSearchParams({ q: word, limit: String(limit) })
   return request(`/api/keywords/search?${params}`)
+}
+
+// --- what recognition has kept ---
+
+export type Stored = {
+  id: number
+  pages: number
+  lines: number
+  bytes: number
+  finished_at: number | null
+  from_reading: boolean
+  imported: boolean
+}
+
+export function stored(
+  readingOnly = true,
+  limit = 50,
+): Promise<{ items: Stored[]; total: number; bytes: number }> {
+  const params = new URLSearchParams({ reading_only: String(readingOnly), limit: String(limit) })
+  return request(`/api/dialogue/stored?${params}`)
+}
+
+export function forget(id: number): Promise<{ removed: boolean }> {
+  return send('DELETE', `/api/dialogue/stored/${id}`)
+}
+
+export function forgetRead(): Promise<{ removed: number }> {
+  return send('DELETE', '/api/dialogue/stored')
 }

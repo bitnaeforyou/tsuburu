@@ -97,6 +97,24 @@ pub struct JobRecord {
     /// `None` for text this machine recognised, otherwise where it came from.
     #[serde(default)]
     pub source: Option<String>,
+    /// True when the text was read off pages the user opened, rather than
+    /// swept in the background. Old records default to false, which is what
+    /// they were.
+    #[serde(default)]
+    pub from_reading: bool,
+}
+
+/// One gallery's stored text, as the cache screen sees it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Stored {
+    pub id: i32,
+    pub pages: u32,
+    pub lines: u32,
+    /// Compressed text and match codes together.
+    pub bytes: u64,
+    pub finished_at: Option<u64>,
+    pub from_reading: bool,
+    pub imported: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -133,6 +151,7 @@ struct Outcome<'a> {
     lines: u32,
     error: Option<&'a str>,
     source: Option<&'a str>,
+    from_reading: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -293,6 +312,7 @@ impl DialogueStore {
                     lines: 0,
                     error: None,
                     source: None,
+                    from_reading: false,
                 };
                 jobs.insert(id, serde_json::to_string(&record)?.as_str()).map_err(db_err)?;
                 queue.insert((priority.key(), now, id), ()).map_err(db_err)?;
@@ -334,6 +354,7 @@ impl DialogueStore {
                 lines: lines as u32,
                 error: None,
                 source: None,
+                from_reading: false,
             },
         )
     }
@@ -348,6 +369,7 @@ impl DialogueStore {
                 lines: 0,
                 error: Some(error),
                 source: None,
+                from_reading: false,
             },
         )
     }
@@ -373,7 +395,7 @@ impl DialogueStore {
         id: i32,
         outcome: Outcome<'_>,
     ) -> Result<(), DialogueError> {
-        let Outcome { status, text, pages, lines, error, source } = outcome;
+        let Outcome { status, text, pages, lines, error, source, from_reading } = outcome;
         {
             let previous: Option<JobRecord> = jobs
                 .get(id)
@@ -395,6 +417,7 @@ impl DialogueStore {
                 lines,
                 error: error.map(str::to_string),
                 source: source.map(str::to_string),
+                from_reading: from_reading || previous.as_ref().is_some_and(|j| j.from_reading),
             };
             jobs.insert(id, serde_json::to_string(&record)?.as_str()).map_err(db_err)?;
             if let Some(encoded) = text {
@@ -453,6 +476,124 @@ impl DialogueStore {
         Ok(out)
     }
 
+    /// Adds pages that are not stored yet, leaving alone any that are.
+    ///
+    /// A work being read hands its pages over one at a time, so the record
+    /// grows instead of being replaced, and text that came from an import is
+    /// not overwritten by a second reading of the same page.
+    pub fn merge_pages(
+        &self,
+        id: i32,
+        pages: &[PageText],
+        from_reading: bool,
+    ) -> Result<usize, DialogueError> {
+        let mut merged = self.text(id)?.unwrap_or_default();
+        let known: std::collections::HashSet<u16> = merged.iter().map(|p| p.page).collect();
+        let before = merged.len();
+        for page in pages {
+            if page.lines.is_empty() || known.contains(&page.page) {
+                continue;
+            }
+            merged.push(page.clone());
+        }
+        let added = merged.len() - before;
+        if added == 0 {
+            return Ok(0);
+        }
+        merged.sort_unstable_by_key(|p| p.page);
+
+        let source = self.job(id)?.and_then(|j| j.source);
+        let encoded = Encoded::from_pages(&merged);
+        let lines: usize = merged.iter().map(|p| p.lines.len()).sum();
+        self.finish(
+            id,
+            Outcome {
+                status: Status::Done,
+                text: Some(&encoded),
+                pages: merged.len() as u32,
+                lines: lines as u32,
+                error: None,
+                source: source.as_deref(),
+                from_reading,
+            },
+        )?;
+        Ok(added)
+    }
+
+    /// Removes everything stored for one gallery.
+    pub fn forget(&self, id: i32) -> Result<bool, DialogueError> {
+        let tx = self.db.begin_write().map_err(db_err)?;
+        let existed = {
+            let mut jobs = tx.open_table(JOBS).map_err(db_err)?;
+            let mut queue = tx.open_table(QUEUE).map_err(db_err)?;
+            let mut texts = tx.open_table(TEXT).map_err(db_err)?;
+            let mut codes = tx.open_table(CODES).map_err(db_err)?;
+            let previous: Option<JobRecord> = jobs
+                .get(id)
+                .map_err(db_err)?
+                .map(|v| serde_json::from_str(v.value()))
+                .transpose()?;
+            if let Some(job) = previous.as_ref() {
+                queue.remove((job.priority.key(), job.added_at, id)).map_err(db_err)?;
+            }
+            texts.remove(id).map_err(db_err)?;
+            codes.remove(id).map_err(db_err)?;
+            jobs.remove(id).map_err(db_err)?;
+            previous.is_some()
+        };
+        tx.commit().map_err(db_err)?;
+        Ok(existed)
+    }
+
+    /// Forgets every gallery whose text was read off pages the user opened.
+    pub fn forget_read(&self) -> Result<usize, DialogueError> {
+        let ids: Vec<i32> =
+            self.stored(true, usize::MAX)?.into_iter().map(|entry| entry.id).collect();
+        let mut gone = 0;
+        for id in ids {
+            if self.forget(id)? {
+                gone += 1;
+            }
+        }
+        Ok(gone)
+    }
+
+    /// What this machine is keeping, newest first.
+    ///
+    /// `reading_only` narrows it to what was picked up from pages the user
+    /// opened, which is the part worth offering to delete: the rest is either
+    /// an import or a sweep the user asked for.
+    pub fn stored(&self, reading_only: bool, limit: usize) -> Result<Vec<Stored>, DialogueError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let jobs = tx.open_table(JOBS).map_err(db_err)?;
+        let texts = tx.open_table(TEXT).map_err(db_err)?;
+        let codes = tx.open_table(CODES).map_err(db_err)?;
+
+        let mut out = Vec::new();
+        for entry in jobs.iter().map_err(db_err)? {
+            let (key, value) = entry.map_err(db_err)?;
+            let job: JobRecord = serde_json::from_str(value.value())?;
+            if job.status != Status::Done || (reading_only && !job.from_reading) {
+                continue;
+            }
+            let id = key.value();
+            let bytes = texts.get(id).map_err(db_err)?.map(|v| v.value().len()).unwrap_or(0)
+                + codes.get(id).map_err(db_err)?.map(|v| v.value().len()).unwrap_or(0);
+            out.push(Stored {
+                id,
+                pages: job.pages,
+                lines: job.lines,
+                bytes: bytes as u64,
+                finished_at: job.finished_at,
+                from_reading: job.from_reading,
+                imported: job.source.is_some(),
+            });
+        }
+        out.sort_unstable_by(|a, b| b.finished_at.cmp(&a.finished_at).then(b.id.cmp(&a.id)));
+        out.truncate(limit);
+        Ok(out)
+    }
+
     pub fn text(&self, id: i32) -> Result<Option<Vec<PageText>>, DialogueError> {
         let tx = self.db.begin_read().map_err(db_err)?;
         let texts = tx.open_table(TEXT).map_err(db_err)?;
@@ -503,6 +644,7 @@ impl DialogueStore {
                             lines,
                             error: None,
                             source: Some(source),
+                            from_reading: false,
                         },
                     )?;
                 }
@@ -600,6 +742,7 @@ impl DialogueStore {
                     lines: lines as u32,
                     error: None,
                     source: Some("import"),
+                    from_reading: false,
                 },
             )?;
             summary.added += 1;
@@ -939,6 +1082,65 @@ fn now_millis() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    fn page(n: u16, line: &str) -> PageText {
+        PageText { page: n, lines: vec![line.to_string()] }
+    }
+
+    #[test]
+    fn reading_a_page_adds_it_without_touching_the_rest() {
+        let (store, _dir) = store();
+        assert_eq!(store.merge_pages(7, &[page(0, "첫 줄")], true).unwrap(), 1);
+        assert_eq!(store.merge_pages(7, &[page(2, "셋째 줄")], true).unwrap(), 1);
+        // The same page again changes nothing.
+        assert_eq!(store.merge_pages(7, &[page(0, "다른 인식")], true).unwrap(), 0);
+
+        let text = store.text(7).unwrap().unwrap();
+        assert_eq!(text.iter().map(|p| p.page).collect::<Vec<_>>(), [0, 2]);
+        assert_eq!(text[0].lines, ["첫 줄"]);
+        assert!(store.job(7).unwrap().unwrap().from_reading);
+    }
+
+    #[test]
+    fn a_swept_gallery_that_is_later_read_stays_marked_as_read() {
+        let (store, _dir) = store();
+        store.complete(7, &[page(0, "배경 색인")]).unwrap();
+        assert!(!store.job(7).unwrap().unwrap().from_reading);
+        store.merge_pages(7, &[page(1, "읽으면서")], true).unwrap();
+        assert!(store.job(7).unwrap().unwrap().from_reading);
+    }
+
+    #[test]
+    fn forgetting_a_gallery_leaves_nothing_behind() {
+        let (store, _dir) = store();
+        store.merge_pages(7, &[page(0, "좋아해")], true).unwrap();
+        assert!(!store.search("좋아해", 5).unwrap().is_empty());
+
+        assert!(store.forget(7).unwrap());
+        assert_eq!(store.text(7).unwrap(), None);
+        assert!(store.job(7).unwrap().is_none());
+        assert!(store.search("좋아해", 5).unwrap().is_empty());
+        // Forgetting what is not there is not an error.
+        assert!(!store.forget(7).unwrap());
+    }
+
+    #[test]
+    fn only_what_reading_produced_is_offered_for_deletion() {
+        let (store, _dir) = store();
+        store.complete(1, &[page(0, "배경")]).unwrap();
+        store.merge_pages(2, &[page(0, "읽은 것")], true).unwrap();
+        store.merge_pages(3, &[page(0, "읽은 것")], true).unwrap();
+
+        let all = store.stored(false, 10).unwrap();
+        assert_eq!(all.len(), 3);
+        let read = store.stored(true, 10).unwrap();
+        assert_eq!(read.iter().map(|s| s.id).collect::<Vec<_>>(), [3, 2]);
+        assert!(read[0].bytes > 0);
+
+        assert_eq!(store.forget_read().unwrap(), 2);
+        assert_eq!(store.stored(false, 10).unwrap().len(), 1);
+        assert_eq!(store.stored(false, 10).unwrap()[0].id, 1);
+    }
+
     use super::*;
 
     fn store() -> (DialogueStore, tempfile::TempDir) {

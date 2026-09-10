@@ -9,11 +9,14 @@
     params,
     onchange,
     localAvailable = false,
+    dialogueAvailable = false,
   }: {
     params: SearchState
     onchange: (changes: Partial<SearchState>) => void
     /** Whether a metadata snapshot is loaded; enables the local scope. */
     localAvailable?: boolean
+    /** Whether anything has been recognised; enables the dialogue scope. */
+    dialogueAvailable?: boolean
   } = $props()
 
   const SORTS: { value: Sort; key: Key }[] = [
@@ -65,17 +68,19 @@
   </form>
 
   <div class="filters">
-    {#if localAvailable}
+    {#if localAvailable || dialogueAvailable}
       <label>
         <span>{t('search.in')}</span>
         <select value={params.scope} onchange={(e) => onchange({ scope: e.currentTarget.value as Scope })}>
+          <option value="all">{t('search.scopeAll')}</option>
           <option value="hitomi">{t('search.scopeHitomi')}</option>
-          <option value="local">{t('search.scopeLocal')}</option>
+          {#if localAvailable}<option value="local">{t('search.scopeLocal')}</option>{/if}
+          {#if dialogueAvailable}<option value="dialogue">{t('nav.dialogue')}</option>{/if}
         </select>
       </label>
     {/if}
     <!-- The snapshot has no popularity data, so sorting only applies to hitomi. -->
-    {#if params.scope !== 'local'}
+    {#if params.scope === 'hitomi'}
       <label>
         <span>{t('search.sort')}</span>
         <select value={params.sort} onchange={(e) => onchange({ sort: e.currentTarget.value as Sort })}>

@@ -22,6 +22,9 @@ use tsuburu_ocr::{Ocr, reading_order};
 
 /// Vision saturates the Neural Engine; more than this just queues.
 const OCR_WORKERS: usize = 3;
+/// Pages of a work being read that are recognised at once. Reading has to
+/// stay smooth, so this is smaller than the sweep's.
+const READ_WORKERS: usize = 2;
 /// Pages buffered between the downloader and recognition.
 const PIPELINE_DEPTH: usize = 4;
 /// Page fetches in flight. The CDN throttles each connection to roughly
@@ -50,6 +53,18 @@ pub struct GrinderSettings {
     /// as indexing them from nothing.
     #[serde(default)]
     pub reindex_imported: bool,
+    /// Recognise the pages of works the reader opens.
+    ///
+    /// On by default, unlike the sweep: those pages are already coming down
+    /// the wire to be looked at, so this costs no download at all - only the
+    /// recognition itself, which is what makes a work you have read findable
+    /// by a line you remember.
+    #[serde(default = "yes")]
+    pub read_indexing: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl Default for GrinderSettings {
@@ -60,6 +75,7 @@ impl Default for GrinderSettings {
             kinds: vec!["doujinshi".into(), "manga".into()],
             bytes_per_second: 3 * 1024 * 1024,
             reindex_imported: false,
+            read_indexing: true,
         }
     }
 }
@@ -98,6 +114,8 @@ pub struct Grinder {
     ocr_language: RwLock<String>,
     /// How to build one; `None` where the platform has no recognition.
     make_ocr: fn(tsuburu_ocr::OcrOptions) -> Option<Box<dyn Ocr>>,
+    /// Bounds recognition of pages the reader is looking at.
+    read_permits: Arc<Semaphore>,
     settings: RwLock<GrinderSettings>,
     status: RwLock<GrinderStatus>,
     stop: AtomicBool,
@@ -137,6 +155,7 @@ impl Grinder {
             fetcher,
             cfg,
             store,
+            read_permits: Arc::new(Semaphore::new(READ_WORKERS)),
             ocr_language: RwLock::new(settings.language.clone()),
             ocr: RwLock::new(ocr),
             make_ocr,
@@ -218,6 +237,43 @@ impl Grinder {
 
     pub async fn settings(&self) -> GrinderSettings {
         self.settings.read().await.clone()
+    }
+
+    /// Recognises one page the reader just looked at and files it.
+    ///
+    /// The bytes have already been fetched to be displayed, so nothing is
+    /// downloaded here. Recognition is bounded by the same permit count as
+    /// the sweep so that reading stays smooth.
+    pub async fn recognise_read_page(
+        self: &Arc<Self>,
+        gallery: i32,
+        page: u16,
+        bytes: Vec<u8>,
+        language: &str,
+    ) {
+        let Ok(permit) = Arc::clone(&self.read_permits).acquire_owned().await else { return };
+        let ocr = self.ocr_for(language).await;
+        let store = Arc::clone(&self.store);
+        let recognised = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            ocr.recognize(&bytes).map(|mut lines| {
+                reading_order(&mut lines);
+                lines.into_iter().map(|l| l.text).collect::<Vec<_>>()
+            })
+        })
+        .await;
+
+        match recognised {
+            Ok(Ok(lines)) if !lines.is_empty() => {
+                let pages = vec![PageText { page, lines }];
+                if let Err(err) = store.merge_pages(gallery, &pages, true) {
+                    tracing::debug!(gallery, page, %err, "could not file a read page");
+                }
+            }
+            Ok(Ok(_)) => {}
+            Ok(Err(err)) => tracing::debug!(gallery, page, %err, "read page recognition failed"),
+            Err(err) => tracing::debug!(gallery, page, %err, "read page task failed"),
+        }
     }
 
     /// Swaps in an engine for `language` if the current one is for another.

@@ -607,6 +607,73 @@ pub struct PackCheck {
 /// compared with the vector stored for it. Anything near 1 means the pack is
 /// right; a low number means a different model, or a different way of
 /// prompting it, and phrase search would return nonsense that looks fine.
+#[derive(Debug, Deserialize)]
+pub struct StoredParams {
+    /// Only what reading produced. That is the part the reader did not ask
+    /// for explicitly, so it is the part worth offering to delete.
+    #[serde(default = "yes")]
+    pub reading_only: bool,
+    #[serde(default = "default_stored_limit")]
+    pub limit: usize,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn default_stored_limit() -> usize {
+    50
+}
+
+#[derive(Debug, Serialize)]
+pub struct StoredResponse {
+    pub items: Vec<tsuburu_dialogue::Stored>,
+    /// Everything matching, not just the page returned.
+    pub total: usize,
+    pub bytes: u64,
+}
+
+/// What this machine is keeping, newest first.
+pub async fn stored(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<StoredParams>,
+) -> Result<Json<StoredResponse>, ApiError> {
+    let grinder = Arc::clone(grinder(&state)?);
+    let limit = params.limit.clamp(1, 500);
+    let all = tokio::task::spawn_blocking(move || {
+        grinder.store().stored(params.reading_only, usize::MAX)
+    })
+    .await
+    .map_err(|e| storage_error(&e))??;
+
+    let total = all.len();
+    let bytes = all.iter().map(|s| s.bytes).sum();
+    Ok(Json(StoredResponse { items: all.into_iter().take(limit).collect(), total, bytes }))
+}
+
+/// Forgets one gallery's text.
+pub async fn forget(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i32>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let grinder = Arc::clone(grinder(&state)?);
+    let removed = tokio::task::spawn_blocking(move || grinder.store().forget(id))
+        .await
+        .map_err(|e| storage_error(&e))??;
+    Ok(Json(serde_json::json!({ "removed": removed })))
+}
+
+/// Forgets everything reading produced.
+pub async fn forget_read(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let grinder = Arc::clone(grinder(&state)?);
+    let removed = tokio::task::spawn_blocking(move || grinder.store().forget_read())
+        .await
+        .map_err(|e| storage_error(&e))??;
+    Ok(Json(serde_json::json!({ "removed": removed })))
+}
+
 pub async fn check_pack(State(state): State<Arc<AppState>>) -> Result<Json<PackCheck>, ApiError> {
     let grinder = Arc::clone(grinder(&state)?);
     let dir = similarity_dir(&grinder)?;
