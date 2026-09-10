@@ -320,9 +320,7 @@ async fn serve(
     }
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        .with_graceful_shutdown(stop_signal())
         .await
         .context("the server stopped unexpectedly")?;
 
@@ -330,6 +328,34 @@ async fn serve(
         grinder.shutdown();
     }
     Ok(())
+}
+
+/// Ctrl-C, or the TERM a process manager sends.
+///
+/// Both have to be caught: redb repairs a file that was not closed, and on a
+/// corpus this size that costs half a minute and two gigabytes of memory the
+/// next time the program starts. Waiting on Ctrl-C alone meant every `kill`
+/// left the databases dirty.
+async fn stop_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        match signal(SignalKind::terminate()) {
+            Ok(mut term) => {
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = term.recv() => {}
+                }
+            }
+            Err(_) => {
+                let _ = tokio::signal::ctrl_c().await;
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }
 
 /// 원하는 포트가 이미 쓰이고 있으면 아무 빈 포트나 잡는다. 일반 사용자에게
