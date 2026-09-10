@@ -28,6 +28,13 @@ export const en = {
   'error.storage': 'The local database could not be read.',
   'error.badRequest': 'That request was not something tsuburu can answer.',
   'error.unsupported': 'That is not available here.',
+  'error.code.import_meta': 'Import artifact\'s data.db to search titles and artists offline.',
+  'error.code.import_keywords': 'Import artifact\'s graph.csv to see what a work is about.',
+  'error.code.import_artifact': 'Import artifact\'s llm-search-index to search by scene.',
+  'error.code.no_library': 'The local library could not be opened, so favorites, history and following are off.',
+  'error.code.no_recognition': 'This platform has no text recognition, so nothing new can be read.',
+  'error.code.embedder_unreachable': 'The embedding server is not answering. Start it, or correct its address in the Dialogue tab.',
+  'error.code.corpus_empty': 'Nothing has been recognised yet, so there is nothing to check against.',
   'error.changedHint': 'Retrying will not help until tsuburu is updated.',
 
   'terms.noTranslation': 'no translation',
@@ -110,6 +117,7 @@ export const en = {
   'downloads.delete': 'Delete',
 
   'keyword.about': 'Works this word runs through.',
+  'keyword.tooCommon': 'That word runs through {n} works, so it says nothing about any of them and was left out.',
   'keyword.empty': 'No work is about that word.',
   'keyword.title': 'What it is about',
   'keyword.near': 'About the same things',
@@ -145,6 +153,7 @@ export const en = {
   'dialogue.cache': 'Kept from reading',
   'dialogue.cacheNote': 'Pages you open are already coming down to be looked at, so their text is recognised on the way past and kept here. Nothing extra is downloaded. Delete any of it whenever you like.',
   'dialogue.cacheSummary': '{works} works · {size}',
+  'dialogue.cacheVectors': '{n} passages searchable by meaning',
   'dialogue.cacheEmpty': 'Nothing yet. Open a work and its pages will be read as you go.',
   'dialogue.forgetAll': 'Delete all of it',
   'dialogue.forget': 'Delete',
@@ -174,6 +183,11 @@ export const en = {
   'dialogue.importHistoryNote':
     'Paste hitomi URLs or gallery ids from your browser history or an old artifact database. They are indexed before anything else.',
   'dialogue.readAgain': 'Read them again even if they already have text',
+  'dialogue.importQueued': '{found} ids found, {added} queued ahead of everything else.',
+  'dialogue.huntQueued': '{found} galleries matched, {added} queued.',
+  'dialogue.artifactStarted': 'Importing {chunks} chunks from {directory}',
+  'dialogue.exported': '{files} files written to {directory}',
+  'dialogue.shardImported': '{file}: {added} added, {skipped} already here',
   'dialogue.queue': 'Queue',
   'dialogue.hunt': 'Hunt',
   'dialogue.huntNote':

@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
-  import { t, type Key } from '../lib/i18n.svelte'
+  import { t, type Key, number } from '../lib/i18n.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import Card from '../lib/Card.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
@@ -31,7 +31,12 @@
 
   // Two ways to ask: the words as written, or what they mean.
   let mode = $state<'words' | 'meaning'>('words')
-  let cache = $state<{ items: api.Stored[]; total: number; bytes: number } | null>(null)
+  let cache = $state<{
+    items: api.Stored[]
+    total: number
+    bytes: number
+    vectors: number
+  } | null>(null)
   let cacheBusy = $state(false)
   let forgetting = $state(false)
   let pack = $state<api.EmbedderSettings | null>(null)
@@ -201,7 +206,7 @@
     importResult = null
     try {
       const r = await api.enqueueDialogue(importText, importForce)
-      importResult = `${r.found} ids found, ${r.added} queued ahead of everything else.`
+      importResult = t('dialogue.importQueued', { found: r.found, added: r.added })
       importText = ''
       await refreshStatus()
     } catch (cause) {
@@ -220,7 +225,7 @@
         limit: hunt.limit,
         force: hunt.force,
       })
-      huntResult = `${r.found} galleries matched, ${r.added} queued.`
+      huntResult = t('dialogue.huntQueued', { found: r.found, added: r.added })
       await refreshStatus()
     } catch (cause) {
       huntResult = cause instanceof Error ? cause.message : String(cause)
@@ -232,7 +237,10 @@
     artifactResult = null
     try {
       const p = await api.importArtifact(artifactDir)
-      artifactResult = `Importing ${p.chunks_total.toLocaleString()} chunks from ${p.directory}`
+      artifactResult = t('dialogue.artifactStarted', {
+        chunks: number(p.chunks_total),
+        directory: p.directory,
+      })
       await refreshStatus()
     } catch (cause) {
       artifactResult = cause instanceof Error ? cause.message : String(cause)
@@ -244,7 +252,10 @@
     exchangeResult = null
     try {
       shards = await api.exportShards(backgroundOnly)
-      exchangeResult = `${shards.files.length} file(s) written to ${shards.directory}`
+      exchangeResult = t('dialogue.exported', {
+        files: shards.files.length,
+        directory: shards.directory,
+      })
     } catch (cause) {
       exchangeResult = cause instanceof Error ? cause.message : String(cause)
     } finally {
@@ -262,7 +273,13 @@
     for (const file of files) {
       try {
         const r = await api.importShard(file)
-        lines.push(`${file.name}: ${r.added} added, ${r.skipped} already here`)
+        lines.push(
+          t('dialogue.shardImported', {
+            file: file.name,
+            added: r.added,
+            skipped: r.skipped,
+          }),
+        )
       } catch (cause) {
         lines.push(`${file.name}: ${cause instanceof Error ? cause.message : String(cause)}`)
       }
@@ -306,13 +323,13 @@
                 percent: percent(coverage.top_10k, coverage.top_10k_total),
               })} ·
               {t('dialogue.coverageAll', {
-                done: coverage.done.toLocaleString(),
-                total: coverage.total.toLocaleString(),
+                done: number(coverage.done),
+                total: number(coverage.total),
               })}
             </span>
           {:else if status?.counts}
             <span class="muted">
-              {t('dialogue.indexed', { n: status.counts.done.toLocaleString() })}
+              {t('dialogue.indexed', { n: number(status.counts.done) })}
             </span>
           {:else}
             <span class="muted">{t('dialogue.loadingIndex')}</span>
@@ -339,7 +356,7 @@
           {/if}
           {#if status?.counts}
             · {t('dialogue.queued', {
-              queue: status.counts.pending.toLocaleString(),
+              queue: number(status.counts.pending),
               failed: status.counts.failed,
             })}
           {/if}
@@ -426,7 +443,7 @@
       {#if searching}
         <p class="muted">
           {status?.counts?.done
-            ? t('dialogue.searchingCount', { n: status.counts.done.toLocaleString() })
+            ? t('dialogue.searchingCount', { n: number(status.counts.done) })
             : t('dialogue.searching')}
         </p>
       {:else if hits.length === 0}
@@ -549,13 +566,13 @@
         {#if status?.import}
           <p class="muted small">
             {#if status.import.running}
-              {t('dialogue.importing', { n: status.import.works_seen.toLocaleString() })}
+              {t('dialogue.importing', { n: number(status.import.works_seen) })}
             {:else if status.import.error}
               {t('dialogue.importFailed', { error: status.import.error })}
             {:else}
               {t('dialogue.imported', {
-                added: status.import.added.toLocaleString(),
-                skipped: status.import.skipped.toLocaleString(),
+                added: number(status.import.added),
+                skipped: number(status.import.skipped),
               })}
             {/if}
           </p>
@@ -598,9 +615,11 @@
           <div class="row">
             <span class="muted small">
               {t('dialogue.cacheSummary', {
-                works: cache.total.toLocaleString(),
+                works: number(cache.total),
                 size: formatBytes(cache.bytes),
-              })}
+              })}{cache.vectors > 0
+                ? ` · ${t('dialogue.cacheVectors', { n: number(cache.vectors) })}`
+                : ''}
             </span>
             {#if forgetting}
               <span class="muted small">{t('dialogue.forgetConfirm')}</span>

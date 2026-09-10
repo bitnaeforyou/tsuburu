@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
-  import { t } from '../lib/i18n.svelte'
+  import { t, number } from '../lib/i18n.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -61,7 +61,7 @@
       <h1>{artist}</h1>
       {#if info}
         <p class="muted">
-          {t('artist.works', { n: info.total.toLocaleString() })}
+          {t('artist.works', { n: number(info.total) })}
           {#if info.languages.length}
             &middot; {info.languages.map(([l, n]) => `${l} ${n}`).join(' · ')}
           {/if}

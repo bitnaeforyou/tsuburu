@@ -16,6 +16,7 @@ fn store(state: &AppState) -> Result<&Store, ApiError> {
     state.store.as_ref().ok_or_else(|| ApiError {
         error: ErrorKind::Storage,
         message: "the local library is unavailable, so favorites and history are disabled".into(),
+        code: Some("no_library"),
     })
 }
 

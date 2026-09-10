@@ -28,11 +28,22 @@ pub enum ErrorKind {
 pub struct ApiError {
     pub error: ErrorKind,
     pub message: String,
+    /// Names the few failures a reader can do something about, so the
+    /// interface can say what to do in their own language. The message
+    /// beside it stays English: it is a diagnostic, not an instruction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<&'static str>,
 }
 
 impl ApiError {
     pub fn bad_request(message: impl Into<String>) -> Self {
-        Self { error: ErrorKind::BadRequest, message: message.into() }
+        Self { error: ErrorKind::BadRequest, message: message.into(), code: None }
+    }
+
+    /// The same error, named so the interface can translate it.
+    pub fn coded(mut self, code: &'static str) -> Self {
+        self.code = Some(code);
+        self
     }
 
     fn status(&self) -> StatusCode {
@@ -56,7 +67,7 @@ impl From<tsuburu_hitomi::SearchError> for ApiError {
     fn from(err: tsuburu_hitomi::SearchError) -> Self {
         let error =
             if err.is_format_error() { ErrorKind::FormatChanged } else { ErrorKind::Network };
-        Self { error, message: describe(error, &err.to_string()) }
+        Self { error, message: describe(error, &err.to_string()), code: None }
     }
 }
 
@@ -64,13 +75,17 @@ impl From<tsuburu_hitomi::GalleryFetchError> for ApiError {
     fn from(err: tsuburu_hitomi::GalleryFetchError) -> Self {
         let error =
             if err.is_format_error() { ErrorKind::FormatChanged } else { ErrorKind::Network };
-        Self { error, message: describe(error, &err.to_string()) }
+        Self { error, message: describe(error, &err.to_string()), code: None }
     }
 }
 
 impl From<tsuburu_hitomi::FetchError> for ApiError {
     fn from(err: tsuburu_hitomi::FetchError) -> Self {
-        Self { error: ErrorKind::Network, message: describe(ErrorKind::Network, &err.to_string()) }
+        Self {
+            error: ErrorKind::Network,
+            message: describe(ErrorKind::Network, &err.to_string()),
+            code: None,
+        }
     }
 }
 
@@ -79,6 +94,7 @@ impl From<tsuburu_hitomi::ImageError> for ApiError {
         Self {
             error: ErrorKind::FormatChanged,
             message: describe(ErrorKind::FormatChanged, &err.to_string()),
+            code: None,
         }
     }
 }
@@ -99,18 +115,30 @@ fn describe(kind: ErrorKind, detail: &str) -> String {
 
 impl From<tsuburu_downloads::DownloadError> for ApiError {
     fn from(err: tsuburu_downloads::DownloadError) -> Self {
-        Self { error: ErrorKind::Storage, message: describe(ErrorKind::Storage, &err.to_string()) }
+        Self {
+            error: ErrorKind::Storage,
+            message: describe(ErrorKind::Storage, &err.to_string()),
+            code: None,
+        }
     }
 }
 
 impl From<tsuburu_dialogue::DialogueError> for ApiError {
     fn from(err: tsuburu_dialogue::DialogueError) -> Self {
-        Self { error: ErrorKind::Storage, message: describe(ErrorKind::Storage, &err.to_string()) }
+        Self {
+            error: ErrorKind::Storage,
+            message: describe(ErrorKind::Storage, &err.to_string()),
+            code: None,
+        }
     }
 }
 
 impl From<tsuburu_store::StoreError> for ApiError {
     fn from(err: tsuburu_store::StoreError) -> Self {
-        Self { error: ErrorKind::Storage, message: describe(ErrorKind::Storage, &err.to_string()) }
+        Self {
+            error: ErrorKind::Storage,
+            message: describe(ErrorKind::Storage, &err.to_string()),
+            code: None,
+        }
     }
 }

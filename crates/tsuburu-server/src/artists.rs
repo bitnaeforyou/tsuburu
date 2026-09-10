@@ -20,6 +20,7 @@ fn library(state: &AppState) -> Result<&tsuburu_store::Store, ApiError> {
     state.store.as_ref().ok_or_else(|| ApiError {
         error: ErrorKind::Storage,
         message: "the local library is unavailable, so following is disabled".into(),
+        code: Some("no_library"),
     })
 }
 
@@ -27,6 +28,7 @@ fn meta(state: &AppState) -> Result<&Arc<tsuburu_meta::MetaStore>, ApiError> {
     state.meta.as_ref().ok_or_else(|| ApiError {
         error: ErrorKind::Unsupported,
         message: "no metadata snapshot has been imported (tsuburu import-meta <data.db>)".into(),
+        code: Some("import_meta"),
     })
 }
 
@@ -174,5 +176,5 @@ pub async fn unfollow(
 }
 
 fn storage(err: impl std::fmt::Display) -> ApiError {
-    ApiError { error: ErrorKind::Storage, message: err.to_string() }
+    ApiError { error: ErrorKind::Storage, message: err.to_string(), code: None }
 }

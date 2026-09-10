@@ -130,7 +130,8 @@ words, not shared meaning — but it costs almost nothing to keep and answers
 without a model.
 
 Words held by more than 20,000 works are dropped on import: they cost the most
-to store and say the least about any single work.
+to store and say the least about any single work. Searching for one says so,
+rather than implying the word appears nowhere.
 
 ## Dialogue search
 
@@ -180,6 +181,10 @@ The first query pulls the 2.6 GB index off disk and takes about six seconds;
 after that it is 0.2 s. Asked from a page of the second volume of a series, it
 answers with the same scene in the first volume, and the third volume after
 that.
+
+Passages read on this machine are embedded too, when a pack is configured, and
+scanned beside the imported index — so meaning search and **Similar scenes**
+reach the works you have read, not just artifact's corpus.
 
 ### Searching by meaning
 
@@ -235,9 +240,11 @@ first run and remembers the choice after that; the switch sits at the end of
 the navigation bar.
 
 Only the wording around the content is translated. Titles, tags and dialogue
-stay in whatever language hitomi holds them in, and the server's diagnostic
-detail on an error stays in English — the sentence above it, which is the part
-that says what to do, does not.
+stay in whatever language hitomi holds them in. Numbers are grouped the way
+the chosen language does, not the browser. An error keeps its English
+diagnostic, but the sentence above it — the part that says what to do about
+it — is translated, and the failures a reader can act on are named by the
+server so that sentence can be specific.
 
 Adding a language is one file under `web/src/lib/locales/`, typed against the
 English one so a missing message is a build error rather than an English word

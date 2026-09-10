@@ -45,6 +45,7 @@ pub fn import(
     }
 
     let mut totals = Imported::default();
+    let mut common: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
     let mut pending: Vec<(i32, Vec<Scored>)> = Vec::new();
     let mut current: Option<(i32, Vec<Scored>)> = None;
 
@@ -53,6 +54,7 @@ pub fn import(
         let Some(row) = parse_row(&line) else { continue };
         if row.document_frequency > MAX_DOCUMENT_FREQUENCY {
             totals.too_common += 1;
+            common.insert(row.keyword, row.document_frequency);
             continue;
         }
         match &mut current {
@@ -77,6 +79,9 @@ pub fn import(
         pending.push(done);
     }
     totals = write_batch(store, &mut pending, totals)?;
+    for (word, works) in common {
+        store.note_common(&word, works)?;
+    }
     Ok(totals)
 }
 
@@ -183,6 +188,9 @@ mod tests {
             store.of(1).unwrap().unwrap(),
             vec![Scored { word: "에미".into(), score: 20.0 }]
         );
+        // Searching for it later can say why, rather than "nowhere".
+        assert_eq!(store.common("그래서").unwrap(), Some(common));
+        assert_eq!(store.common("에미").unwrap(), None);
     }
 
     #[test]

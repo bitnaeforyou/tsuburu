@@ -5,6 +5,10 @@ import { en } from './locales/en'
 import { ko } from './locales/ko'
 import { ja } from './locales/ja'
 
+/// The English catalogue doubles as the list of keys that exist, so a code
+/// the server invents without a translation falls back rather than showing
+/// the key itself.
+export const MESSAGES = en
 export type Key = keyof typeof en
 /// Values are plain strings: the English file is `as const` so that its keys
 /// are exact, not so that its wording becomes a type.
@@ -51,6 +55,11 @@ class I18n {
 }
 
 export const i18n = new I18n()
+
+/// Groups digits the way the interface language does, not the browser.
+export function number(value: number): string {
+  return value.toLocaleString(i18n.locale)
+}
 
 export function t(key: Key, values?: Record<string, string | number>): string {
   const message: string = CATALOGUE[i18n.locale][key]

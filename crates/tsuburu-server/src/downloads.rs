@@ -23,6 +23,7 @@ fn store(state: &AppState) -> Result<&Arc<DownloadStore>, ApiError> {
     state.downloads.as_ref().ok_or_else(|| ApiError {
         error: ErrorKind::Storage,
         message: "downloads are unavailable: the store could not be opened".into(),
+        code: None,
     })
 }
 

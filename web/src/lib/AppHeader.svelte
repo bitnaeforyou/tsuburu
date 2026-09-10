@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import { toDialogue, toSearch } from './router'
-  import { LOCALES, i18n, t, type Locale } from './i18n.svelte'
+  import { t } from './i18n.svelte'
+  import LocalePicker from './LocalePicker.svelte'
 
   // 화면 이동은 전부 여기 모은다. 예전에는 검색 실행 버튼과 Search 탭이 나란히
   // 붙어 있어서, 생김새가 같은 두 개가 서로 다른 일을 했다. 위 줄은 이동만,
@@ -36,16 +37,7 @@
         {t(tab.key)}
       </a>
     {/each}
-    <select
-      class="locale"
-      aria-label={t('nav.locale')}
-      value={i18n.locale}
-      onchange={(e) => i18n.set(e.currentTarget.value as Locale)}
-    >
-      {#each Object.entries(LOCALES) as [code, name] (code)}
-        <option value={code}>{name}</option>
-      {/each}
-    </select>
+    <LocalePicker />
   </nav>
 </header>
 
@@ -81,16 +73,8 @@
     gap: 0.15rem;
   }
 
-  /* The language belongs with the navigation, but it is not a place to go. */
-  .locale {
+  nav :global(.locale) {
     margin-left: 0.5rem;
-    font: inherit;
-    font-size: 0.85rem;
-    color: var(--muted);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.2rem 0.3rem;
   }
 
   nav a {

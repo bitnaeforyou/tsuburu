@@ -6,6 +6,7 @@
   import { toArtist, toKeyword, toSearch } from '../lib/router'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
+  import LocalePicker from '../lib/LocalePicker.svelte'
 
   let { id, startPage = null }: { id: number; startPage?: number | null } = $props()
 
@@ -213,6 +214,7 @@
   {#if gallery}
     <span class="counter">{current + 1} / {gallery.pages.length}</span>
   {/if}
+  <LocalePicker />
 </header>
 
 <main>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
-  import { t } from '../lib/i18n.svelte'
+  import { t, number } from '../lib/i18n.svelte'
   import { defaultSearch, toSearch, type SearchState } from '../lib/router'
   import { library } from '../lib/library.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
@@ -135,7 +135,7 @@
 
   {#if total > 0}
     <p class="count">
-      {t('search.results', { n: total.toLocaleString() })}
+      {t('search.results', { n: number(total) })}
       {#if params.scope === 'local'}&middot; {t('search.fromSnapshot')}{/if}
       {#if !params.query && !filtering}&middot; {t('search.browsingAll')}{/if}
     </p>

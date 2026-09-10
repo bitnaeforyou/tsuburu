@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
-  import { t } from '../lib/i18n.svelte'
+  import { number, t } from '../lib/i18n.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -9,6 +9,7 @@
   let { word }: { word: string } = $props()
 
   let ids = $state<number[]>([])
+  let tooCommon = $state<number | null>(null)
   let loading = $state(true)
   let error = $state<unknown>(null)
 
@@ -22,6 +23,7 @@
     try {
       const found = await api.keywordSearch(term, 50)
       ids = found.works.map((w) => w.id)
+      tooCommon = found.too_common ?? null
     } catch (cause) {
       error = cause
     } finally {
@@ -49,7 +51,11 @@
   {#if loading}
     <p class="muted">{t('common.loading')}</p>
   {:else if ids.length === 0 && !error}
-    <p class="muted">{t('keyword.empty')}</p>
+    <p class="muted">
+      {tooCommon === null
+        ? t('keyword.empty')
+        : t('keyword.tooCommon', { n: number(tooCommon) })}
+    </p>
   {/if}
 </main>
 

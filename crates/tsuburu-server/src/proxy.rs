@@ -104,6 +104,7 @@ async fn read_and_recognise(
             return Err(ApiError {
                 error: ErrorKind::Network,
                 message: format!("could not fetch the image ({err})"),
+                code: None,
             });
         }
     };
@@ -134,6 +135,7 @@ async fn stream(state: &AppState, url: &str, ext: &str) -> Result<Response, ApiE
     let upstream = state.fetcher.stream(url).await.map_err(|err| ApiError {
         error: ErrorKind::Network,
         message: format!("could not fetch the image ({err})"),
+        code: None,
     })?;
 
     let mut headers = HeaderMap::new();

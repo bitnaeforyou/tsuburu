@@ -130,6 +130,45 @@ impl Similarity {
     }
 }
 
+/// Passages this machine embedded itself, scored against a query.
+///
+/// artifact's index is a fixed file: it holds its corpus and nothing read
+/// since. These are kept beside it and scanned linearly, which costs
+/// nothing at the sizes reading produces.
+pub fn near_local(
+    store: &tsuburu_dialogue::DialogueStore,
+    query: &[f32],
+    limit: usize,
+    exclude: Option<i32>,
+) -> Vec<Match> {
+    let mut found: Vec<Match> = Vec::new();
+    let scan = store.each_vector(|gallery, page, vector| {
+        if Some(gallery) == exclude || vector.len() != query.len() {
+            return;
+        }
+        let score = query.iter().zip(vector).map(|(a, b)| a * b).sum();
+        found.push(Match { gallery_id: gallery, page, score });
+    });
+    if let Err(err) = scan {
+        tracing::debug!(%err, "could not scan the passages read here");
+        return Vec::new();
+    }
+    found.sort_unstable_by(|a, b| b.score.total_cmp(&a.score));
+    found.dedup_by_key(|m| m.gallery_id);
+    found.truncate(limit);
+    found
+}
+
+/// Two ranked lists as one, best per work.
+pub fn merge(mut left: Vec<Match>, right: Vec<Match>, limit: usize) -> Vec<Match> {
+    left.extend(right);
+    left.sort_unstable_by(|a, b| b.score.total_cmp(&a.score));
+    let mut seen = std::collections::HashSet::new();
+    left.retain(|m| seen.insert(m.gallery_id));
+    left.truncate(limit);
+    left
+}
+
 #[derive(Debug, Clone, Copy, serde::Serialize)]
 pub struct Match {
     pub gallery_id: i32,

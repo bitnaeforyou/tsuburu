@@ -28,6 +28,13 @@ export const ja: Messages = {
   'error.storage': 'ローカルのデータベースを読めませんでした。',
   'error.badRequest': 'tsuburu が答えられる要求ではありません。',
   'error.unsupported': 'ここでは使えない機能です。',
+  'error.code.import_meta': 'タイトルや作家をオフラインで探すには artifact の data.db を取り込んでください。',
+  'error.code.import_keywords': '何についての作品かを見るには artifact の graph.csv を取り込んでください。',
+  'error.code.import_artifact': '場面で探すには artifact の llm-search-index を取り込んでください。',
+  'error.code.no_library': 'ローカルのライブラリを開けないため、お気に入り・履歴・フォローが無効です。',
+  'error.code.no_recognition': 'このプラットフォームには文字認識がないため、新しく読めません。',
+  'error.code.embedder_unreachable': '埋め込みサーバーが応答しません。起動するか、セリフタブで住所を直してください。',
+  'error.code.corpus_empty': 'まだ何も認識していないため、比べる相手がありません。',
   'error.changedHint': 'tsuburu が更新されるまで、やり直しても直りません。',
 
   'terms.noTranslation': '訳語なし',
@@ -110,6 +117,7 @@ export const ja: Messages = {
   'downloads.delete': '削除',
 
   'keyword.about': 'この語が貫く作品。',
+  'keyword.tooCommon': 'その語は{n}件にまたがって現れ、どの作品も説明しません。そのため索引から外しています。',
   'keyword.empty': 'その語を扱う作品はありません。',
   'keyword.title': '何についての作品か',
   'keyword.near': '似た話',
@@ -145,6 +153,7 @@ export const ja: Messages = {
   'dialogue.cache': '読みながら集めたもの',
   'dialogue.cacheNote': '開いたページはどのみち表示のために降りてきます。その通り道でセリフを読み、ここに置いておきます。追加で受け取るものはなく、いつでも消せます。',
   'dialogue.cacheSummary': '{works}件 · {size}',
+  'dialogue.cacheVectors': '{n}節は意味でも探せます',
   'dialogue.cacheEmpty': 'まだありません。作品を開けば、見たそばから読み取ります。',
   'dialogue.forgetAll': 'すべて消す',
   'dialogue.forget': '消す',
@@ -174,6 +183,11 @@ export const ja: Messages = {
   'dialogue.importHistoryNote':
     'ブラウザの履歴や以前の artifact データベースから hitomi の URL か ID を貼り付けてください。ほかより先に索引します。',
   'dialogue.readAgain': 'すでにテキストがあっても読み直す',
+  'dialogue.importQueued': '{found}件を見つけ、{added}件を先頭に入れました。',
+  'dialogue.huntQueued': '{found}件が該当し、{added}件を入れました。',
+  'dialogue.artifactStarted': '{directory} からチャンク{chunks}個を取り込み中',
+  'dialogue.exported': '{directory} にファイル{files}個を書きました',
+  'dialogue.shardImported': '{file}: {added}件追加、{skipped}件はすでにありました',
   'dialogue.queue': '待ち行列に入れる',
   'dialogue.hunt': '絞って取り込む',
   'dialogue.huntNote':

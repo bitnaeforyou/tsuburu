@@ -265,14 +265,56 @@ impl Grinder {
 
         match recognised {
             Ok(Ok(lines)) if !lines.is_empty() => {
+                let text = lines.join("\n");
                 let pages = vec![PageText { page, lines }];
-                if let Err(err) = store.merge_pages(gallery, &pages, true) {
-                    tracing::debug!(gallery, page, %err, "could not file a read page");
+                match store.merge_pages(gallery, &pages, true) {
+                    Ok(0) => {}
+                    Ok(_) => self.embed_read_page(gallery, page, &text).await,
+                    Err(err) => tracing::debug!(gallery, page, %err, "could not file a read page"),
                 }
             }
             Ok(Ok(_)) => {}
             Ok(Err(err)) => tracing::debug!(gallery, page, %err, "read page recognition failed"),
             Err(err) => tracing::debug!(gallery, page, %err, "read page task failed"),
+        }
+    }
+
+    /// Embeds a passage this machine read, if a pack is configured.
+    ///
+    /// artifact's index covers its own corpus and stops there. A page read
+    /// afterwards is scanned beside it, so meaning search reaches what you
+    /// have actually read. Without a pack there is nothing to embed with and
+    /// this quietly does nothing.
+    async fn embed_read_page(&self, gallery: i32, page: u16, text: &str) {
+        let Ok(Some(json)) = self.store.embedder() else { return };
+        // The setting holds the address and the model; the width is the
+        // index's, which is what the default carries.
+        #[derive(serde::Deserialize)]
+        struct Saved {
+            url: String,
+            model: String,
+        }
+        let Ok(saved) = serde_json::from_str::<Saved>(&json) else { return };
+        let config = tsuburu_embed::embedder::EmbedderConfig {
+            url: saved.url,
+            model: saved.model,
+            ..Default::default()
+        };
+        let body = tsuburu_embed::embedder::request_body(&config, text);
+        let reply = match self.fetcher.post_json(&config.url, &body).await {
+            Ok(reply) => reply,
+            Err(err) => {
+                tracing::debug!(gallery, page, %err, "no embedding server for a read page");
+                return;
+            }
+        };
+        match tsuburu_embed::embedder::parse_embedding(&reply, config.dims) {
+            Ok(vector) => {
+                if let Err(err) = self.store.put_vector(gallery, page, &vector) {
+                    tracing::debug!(gallery, page, %err, "could not keep a read page's vector");
+                }
+            }
+            Err(err) => tracing::debug!(gallery, page, %err, "read page could not be embedded"),
         }
     }
 

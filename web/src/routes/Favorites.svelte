@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
-  import { t } from '../lib/i18n.svelte'
+  import { t, number } from '../lib/i18n.svelte'
   import { library } from '../lib/library.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -46,7 +46,7 @@
         {#each artists as artist (artist.name)}
           <li>
             <a href={toArtist(artist.name)}>{artist.name}</a>
-            <span class="count">{artist.works.toLocaleString()}</span>
+            <span class="count">{number(artist.works)}</span>
           </li>
         {/each}
       </ul>

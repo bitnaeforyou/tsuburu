@@ -28,6 +28,13 @@ export const ko: Messages = {
   'error.storage': '로컬 데이터베이스를 읽지 못했습니다.',
   'error.badRequest': 'tsuburu가 답할 수 있는 요청이 아닙니다.',
   'error.unsupported': '여기서는 쓸 수 없는 기능입니다.',
+  'error.code.import_meta': '제목·작가를 오프라인에서 찾으려면 artifact의 data.db를 가져오세요.',
+  'error.code.import_keywords': '무엇에 관한 작품인지 보려면 artifact의 graph.csv를 가져오세요.',
+  'error.code.import_artifact': '장면으로 찾으려면 artifact의 llm-search-index를 가져오세요.',
+  'error.code.no_library': '로컬 라이브러리를 열지 못해 즐겨찾기·기록·팔로우가 꺼져 있습니다.',
+  'error.code.no_recognition': '이 플랫폼에는 텍스트 인식이 없어 새로 읽을 수 없습니다.',
+  'error.code.embedder_unreachable': '임베딩 서버가 응답하지 않습니다. 띄우거나, 대사 탭에서 주소를 고치세요.',
+  'error.code.corpus_empty': '아직 인식된 것이 없어 견줄 대상이 없습니다.',
   'error.changedHint': 'tsuburu가 갱신되기 전에는 다시 시도해도 소용이 없습니다.',
 
   'terms.noTranslation': '번역 없음',
@@ -110,6 +117,7 @@ export const ko: Messages = {
   'downloads.delete': '삭제',
 
   'keyword.about': '이 낱말이 관통하는 작품들.',
+  'keyword.tooCommon': '그 낱말은 {n}편에 걸쳐 나와서 어느 작품도 설명하지 못합니다. 그래서 색인에서 뺐습니다.',
   'keyword.empty': '그 낱말을 다루는 작품이 없습니다.',
   'keyword.title': '무엇에 관한 작품인가',
   'keyword.near': '비슷한 이야기',
@@ -145,6 +153,7 @@ export const ko: Messages = {
   'dialogue.cache': '읽으면서 모은 것',
   'dialogue.cacheNote': '열어본 페이지는 어차피 보여주려고 내려옵니다. 지나가는 길에 대사를 읽어 여기에 담아둡니다. 추가로 받는 것은 없고, 언제든 지울 수 있습니다.',
   'dialogue.cacheSummary': '{works}편 · {size}',
+  'dialogue.cacheVectors': '{n}구절은 의미로도 찾힙니다',
   'dialogue.cacheEmpty': '아직 없습니다. 작품을 열면 보는 대로 읽어둡니다.',
   'dialogue.forgetAll': '전부 지우기',
   'dialogue.forget': '지우기',
@@ -174,6 +183,11 @@ export const ko: Messages = {
   'dialogue.importHistoryNote':
     '브라우저 기록이나 예전 artifact 데이터베이스에서 hitomi 주소나 번호를 붙여 넣으세요. 다른 것보다 먼저 색인합니다.',
   'dialogue.readAgain': '이미 텍스트가 있어도 다시 읽기',
+  'dialogue.importQueued': '{found}개를 찾아 {added}개를 맨 앞에 담았습니다.',
+  'dialogue.huntQueued': '{found}편이 걸려 {added}편을 담았습니다.',
+  'dialogue.artifactStarted': '{directory}에서 청크 {chunks}개를 가져오는 중',
+  'dialogue.exported': '{directory}에 파일 {files}개를 썼습니다',
+  'dialogue.shardImported': '{file}: {added}편 추가, {skipped}편은 이미 있었습니다',
   'dialogue.queue': '대기열에 담기',
   'dialogue.hunt': '골라 담기',
   'dialogue.huntNote':

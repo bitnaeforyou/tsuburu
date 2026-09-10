@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ApiError } from './api'
-  import { t, type Key } from './i18n.svelte'
+  import { MESSAGES, t, type Key } from './i18n.svelte'
 
   let { error, onretry }: { error: unknown; onretry?: () => void } = $props()
 
@@ -14,11 +14,14 @@
     bad_request: 'error.badRequest',
     unsupported: 'error.unsupported',
   }
-  const explanation = $derived(
-    error instanceof ApiError && !formatChanged && KINDS[error.kind]
-      ? t(KINDS[error.kind])
-      : null,
-  )
+  // A named failure says what to do about it; otherwise the kind says what
+  // kind of thing went wrong.
+  const explanation = $derived.by(() => {
+    if (!(error instanceof ApiError) || formatChanged) return null
+    const named = error.code ? (`error.code.${error.code}` as Key) : null
+    if (named && named in MESSAGES) return t(named)
+    return KINDS[error.kind] ? t(KINDS[error.kind]) : null
+  })
   const detail = $derived(error instanceof Error ? error.message : String(error))
 </script>
 

@@ -10,7 +10,7 @@
 //! decoded without JSON, decompressed with LZ4 rather than deflate, scored
 //! without allocating per candidate, and split across threads.
 
-use redb::{Database, ReadableTable, TableDefinition};
+use redb::{Database, ReadableTable, ReadableTableMetadata, TableDefinition};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -28,6 +28,10 @@ const TEXT: TableDefinition<i32, &[u8]> = TableDefinition::new("text");
 /// gallery id -> LZ4 of the match codes alone (see `encode_codes`). A scan
 /// reads only this table; text is fetched for the few pages that hit.
 const CODES: TableDefinition<i32, &[u8]> = TableDefinition::new("codes");
+/// (gallery, page) -> the passage's embedding, for pages this machine read
+/// itself. artifact's index covers its own corpus and nothing after it; these
+/// are scanned beside it so a work you read is findable by meaning too.
+const VECTORS: TableDefinition<(i32, u16), &[u8]> = TableDefinition::new("vectors");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 
 /// 2: LZ4 binary pages. 3: match codes beside the text. 4: codes in their
@@ -202,6 +206,7 @@ impl DialogueStore {
             tx.open_table(QUEUE).map_err(db_err)?;
             tx.open_table(TEXT).map_err(db_err)?;
             tx.open_table(CODES).map_err(db_err)?;
+            tx.open_table(VECTORS).map_err(db_err)?;
             let mut meta = tx.open_table(META).map_err(db_err)?;
             let existing = meta.get("schema").map_err(db_err)?.map(|v| v.value().to_string());
             match existing {
@@ -520,6 +525,50 @@ impl DialogueStore {
         Ok(added)
     }
 
+    /// Remembers the embedding of one passage this machine read.
+    pub fn put_vector(&self, id: i32, page: u16, vector: &[f32]) -> Result<(), DialogueError> {
+        let mut raw = Vec::with_capacity(vector.len() * 4);
+        for value in vector {
+            raw.extend_from_slice(&value.to_le_bytes());
+        }
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut table = tx.open_table(VECTORS).map_err(db_err)?;
+            table.insert((id, page), raw.as_slice()).map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn vector(&self, id: i32, page: u16) -> Result<Option<Vec<f32>>, DialogueError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let table = tx.open_table(VECTORS).map_err(db_err)?;
+        Ok(table.get((id, page)).map_err(db_err)?.map(|v| decode_vector(v.value())))
+    }
+
+    /// Every passage this machine embedded, for scanning beside the index.
+    pub fn each_vector(
+        &self,
+        mut visit: impl FnMut(i32, u16, &[f32]),
+    ) -> Result<usize, DialogueError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let table = tx.open_table(VECTORS).map_err(db_err)?;
+        let mut seen = 0;
+        for entry in table.iter().map_err(db_err)? {
+            let (key, value) = entry.map_err(db_err)?;
+            let (id, page) = key.value();
+            visit(id, page, &decode_vector(value.value()));
+            seen += 1;
+        }
+        Ok(seen)
+    }
+
+    /// How many passages have an embedding here.
+    pub fn vector_count(&self) -> Result<u64, DialogueError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        tx.open_table(VECTORS).map_err(db_err)?.len().map_err(db_err)
+    }
+
     /// Removes everything stored for one gallery.
     pub fn forget(&self, id: i32) -> Result<bool, DialogueError> {
         let tx = self.db.begin_write().map_err(db_err)?;
@@ -539,6 +588,9 @@ impl DialogueStore {
             texts.remove(id).map_err(db_err)?;
             codes.remove(id).map_err(db_err)?;
             jobs.remove(id).map_err(db_err)?;
+            // Vectors are keyed per page, so they go by range.
+            let mut vectors = tx.open_table(VECTORS).map_err(db_err)?;
+            vectors.retain_in((id, 0)..=(id, u16::MAX), |_, _| false).map_err(db_err)?;
             previous.is_some()
         };
         tx.commit().map_err(db_err)?;
@@ -887,6 +939,10 @@ impl DialogueStore {
 }
 
 /// Codes only: repeated `u16 page, u32 len, bytes`.
+fn decode_vector(raw: &[u8]) -> Vec<f32> {
+    raw.as_chunks::<4>().0.iter().copied().map(f32::from_le_bytes).collect()
+}
+
 pub fn encode_codes(pages: &[PageText]) -> Vec<u8> {
     let mut out = Vec::new();
     let mut codes = Vec::new();
@@ -1107,6 +1163,37 @@ mod tests {
         assert!(!store.job(7).unwrap().unwrap().from_reading);
         store.merge_pages(7, &[page(1, "읽으면서")], true).unwrap();
         assert!(store.job(7).unwrap().unwrap().from_reading);
+    }
+
+    #[test]
+    fn a_passage_embedded_here_is_kept_and_scanned() {
+        let (store, _dir) = store();
+        store.merge_pages(7, &[page(0, "좋아해")], true).unwrap();
+        store.put_vector(7, 0, &[0.5, 0.5, 0.5, 0.5]).unwrap();
+        store.put_vector(8, 2, &[1.0, 0.0, 0.0, 0.0]).unwrap();
+
+        assert_eq!(store.vector(7, 0).unwrap(), Some(vec![0.5, 0.5, 0.5, 0.5]));
+        assert_eq!(store.vector(7, 1).unwrap(), None);
+        assert_eq!(store.vector_count().unwrap(), 2);
+
+        let mut seen = Vec::new();
+        store.each_vector(|id, page, v| seen.push((id, page, v.len()))).unwrap();
+        assert_eq!(seen, [(7, 0, 4), (8, 2, 4)]);
+    }
+
+    #[test]
+    fn forgetting_a_gallery_takes_its_vectors_with_it() {
+        let (store, _dir) = store();
+        store.merge_pages(7, &[page(0, "좋아해")], true).unwrap();
+        store.put_vector(7, 0, &[1.0, 0.0]).unwrap();
+        store.put_vector(7, 1, &[0.0, 1.0]).unwrap();
+        store.put_vector(9, 0, &[1.0, 1.0]).unwrap();
+
+        store.forget(7).unwrap();
+        assert_eq!(store.vector(7, 0).unwrap(), None);
+        assert_eq!(store.vector(7, 1).unwrap(), None);
+        // A different work is untouched.
+        assert_eq!(store.vector(9, 0).unwrap(), Some(vec![1.0, 1.0]));
     }
 
     #[test]

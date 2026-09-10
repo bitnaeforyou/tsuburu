@@ -18,11 +18,12 @@ fn store(state: &AppState) -> Result<&Arc<tsuburu_keywords::KeywordStore>, ApiEr
     state.keywords.as_ref().ok_or_else(|| ApiError {
         error: ErrorKind::Unsupported,
         message: "no keywords have been imported (tsuburu import-keywords <graph.csv>)".into(),
+        code: Some("import_keywords"),
     })
 }
 
 fn storage(err: impl std::fmt::Display) -> ApiError {
-    ApiError { error: ErrorKind::Storage, message: err.to_string() }
+    ApiError { error: ErrorKind::Storage, message: err.to_string(), code: None }
 }
 
 #[derive(Debug, Serialize)]
@@ -104,6 +105,11 @@ fn default_search_limit() -> usize {
 pub struct SearchResponse {
     pub word: String,
     pub works: Vec<Hit>,
+    /// How many works held this word, when it was left out of the index for
+    /// being in too many of them. A reader who gets nothing back deserves to
+    /// know the difference between "nowhere" and "everywhere".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub too_common: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -124,12 +130,18 @@ pub async fn search(
     }
     let limit = params.limit.clamp(1, MAX_RESULTS);
     let looked = word.clone();
-    let works = tokio::task::spawn_blocking(move || store.search(&looked, limit))
-        .await
-        .map_err(|e| storage(&e))?
-        .map_err(storage)?;
+    let (works, too_common) = tokio::task::spawn_blocking(move || {
+        let works = store.search(&looked, limit)?;
+        // Only worth asking when the answer is empty.
+        let too_common = if works.is_empty() { store.common(&looked)? } else { None };
+        Ok::<_, tsuburu_keywords::KeywordError>((works, too_common))
+    })
+    .await
+    .map_err(|e| storage(&e))?
+    .map_err(storage)?;
     Ok(Json(SearchResponse {
         word,
         works: works.into_iter().map(|(id, score)| Hit { id, score }).collect(),
+        too_common,
     }))
 }

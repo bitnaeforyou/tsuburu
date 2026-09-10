@@ -27,6 +27,7 @@ fn grinder(state: &AppState) -> Result<&Arc<Grinder>, ApiError> {
         error: ErrorKind::Unsupported,
         message: "dialogue search needs text recognition, which this platform does not provide"
             .into(),
+        code: Some("no_recognition"),
     })
 }
 
@@ -139,7 +140,11 @@ pub async fn search(
     let query = params.q.clone();
     let hits = tokio::task::spawn_blocking(move || store_grinder.store().search(&query, limit))
         .await
-        .map_err(|e| ApiError { error: ErrorKind::Storage, message: e.to_string() })??;
+        .map_err(|e| ApiError {
+            error: ErrorKind::Storage,
+            message: e.to_string(),
+            code: None,
+        })??;
     Ok(Json(SearchResponse { hits, counts: grinder.store().counts()? }))
 }
 
@@ -249,6 +254,7 @@ fn shards_dir(state: &AppState) -> Result<&PathBuf, ApiError> {
     state.shards_dir.as_ref().ok_or_else(|| ApiError {
         error: ErrorKind::Storage,
         message: "no directory is configured for dialogue shards".into(),
+        code: None,
     })
 }
 
@@ -371,7 +377,7 @@ pub async fn import(
 }
 
 fn storage_error(err: &dyn std::fmt::Display) -> ApiError {
-    ApiError { error: ErrorKind::Storage, message: err.to_string() }
+    ApiError { error: ErrorKind::Storage, message: err.to_string(), code: None }
 }
 
 // --- similar scenes ---
@@ -405,6 +411,7 @@ pub async fn similar(
     let dir = grinder.store().artifact_dir()?.ok_or_else(|| ApiError {
         error: ErrorKind::Unsupported,
         message: "no embeddings are available; import artifact's llm-search-index first".into(),
+        code: Some("import_artifact"),
     })?;
 
     let limit = params.limit.clamp(1, MAX_RESULTS);
@@ -419,7 +426,25 @@ pub async fn similar(
             let text = pages.into_iter().find(|p| p.page == page)?.lines.concat();
             Some(tsuburu_dialogue::jamo::codes(&text))
         };
-        let matches = similarity.near(id, page, limit, &passage)?;
+        // The passage is in artifact's index, or only in what was read here.
+        // Either way it supplies the query, and both sides are searched: a
+        // work read on this machine still has the whole corpus to match
+        // against.
+        let in_index = similarity.stored_vector(id, page);
+        let Some(query) = (match in_index {
+            Some(vector) => Some(vector),
+            None => store.vector(id, page).map_err(|e| e.to_string())?,
+        }) else {
+            return Err(format!("gallery {id} has no embedding to compare with"));
+        };
+        let from_index = if similarity.stored_vector(id, page).is_some() {
+            // Its own chapters are excluded by work rather than by score.
+            similarity.near(id, page, limit, &passage)?
+        } else {
+            similarity.near_vector(&query, limit, &passage)
+        };
+        let from_here = crate::similar::near_local(store, &query, limit, Some(id));
+        let matches = crate::similar::merge(from_index, from_here, limit);
         Ok(matches
             .into_iter()
             .map(|m| SimilarHit {
@@ -443,7 +468,7 @@ pub async fn similar(
     })
     .await
     .map_err(|e| storage_error(&e))?
-    .map_err(|message| ApiError { error: ErrorKind::Storage, message })?;
+    .map_err(|message| ApiError { error: ErrorKind::Storage, message, code: None })?;
 
     Ok(Json(hits))
 }
@@ -513,15 +538,20 @@ async fn embed(
                  tsuburu at it.",
             config.url
         ),
+        code: Some("embedder_unreachable"),
     })?;
-    tsuburu_embed::embedder::parse_embedding(&reply, dims)
-        .map_err(|e| ApiError { error: ErrorKind::Network, message: e.to_string() })
+    tsuburu_embed::embedder::parse_embedding(&reply, dims).map_err(|e| ApiError {
+        error: ErrorKind::Network,
+        message: e.to_string(),
+        code: None,
+    })
 }
 
 fn similarity_dir(grinder: &Grinder) -> Result<PathBuf, ApiError> {
     grinder.store().artifact_dir()?.ok_or_else(|| ApiError {
         error: ErrorKind::Unsupported,
         message: "no embeddings are available; import artifact's llm-search-index first".into(),
+        code: None,
     })
 }
 
@@ -551,7 +581,7 @@ pub async fn phrase(
         tokio::task::spawn_blocking(move || state.similarity.get(&dir).map(|s| s.dims()))
             .await
             .map_err(|e| storage_error(&e))?
-            .map_err(|message| ApiError { error: ErrorKind::Storage, message })?
+            .map_err(|message| ApiError { error: ErrorKind::Storage, message, code: None })?
     };
     let query = embed(&state, &settings, &params.q, dims).await?;
 
@@ -563,8 +593,9 @@ pub async fn phrase(
             let text = pages.into_iter().find(|p| p.page == page)?.lines.concat();
             Some(tsuburu_dialogue::jamo::codes(&text))
         };
-        Ok(similarity
-            .near_vector(&query, limit, &passage)
+        let from_index = similarity.near_vector(&query, limit, &passage);
+        let from_here = crate::similar::near_local(store, &query, limit, None);
+        Ok(crate::similar::merge(from_index, from_here, limit)
             .into_iter()
             .map(|m| SimilarHit {
                 gallery_id: m.gallery_id,
@@ -586,7 +617,7 @@ pub async fn phrase(
     })
     .await
     .map_err(|e| storage_error(&e))?
-    .map_err(|message| ApiError { error: ErrorKind::Storage, message })?;
+    .map_err(|message| ApiError { error: ErrorKind::Storage, message, code: None })?;
 
     Ok(Json(hits))
 }
@@ -631,6 +662,8 @@ pub struct StoredResponse {
     /// Everything matching, not just the page returned.
     pub total: usize,
     pub bytes: u64,
+    /// Passages that also have an embedding, so meaning search reaches them.
+    pub vectors: u64,
 }
 
 /// What this machine is keeping, newest first.
@@ -640,15 +673,19 @@ pub async fn stored(
 ) -> Result<Json<StoredResponse>, ApiError> {
     let grinder = Arc::clone(grinder(&state)?);
     let limit = params.limit.clamp(1, 500);
-    let all = tokio::task::spawn_blocking(move || {
-        grinder.store().stored(params.reading_only, usize::MAX)
+    let (all, vectors) = tokio::task::spawn_blocking(move || {
+        let store = grinder.store();
+        Ok::<_, tsuburu_dialogue::DialogueError>((
+            store.stored(params.reading_only, usize::MAX)?,
+            store.vector_count()?,
+        ))
     })
     .await
     .map_err(|e| storage_error(&e))??;
 
     let total = all.len();
     let bytes = all.iter().map(|s| s.bytes).sum();
-    Ok(Json(StoredResponse { items: all.into_iter().take(limit).collect(), total, bytes }))
+    Ok(Json(StoredResponse { items: all.into_iter().take(limit).collect(), total, bytes, vectors }))
 }
 
 /// Forgets one gallery's text.
@@ -682,6 +719,7 @@ pub async fn check_pack(State(state): State<Arc<AppState>>) -> Result<Json<PackC
     // Any indexed gallery will do; take the first one the corpus has.
     let sample = grinder.store().done_ids()?.into_iter().min().ok_or_else(|| {
         ApiError::bad_request("the corpus is empty, so there is nothing to check")
+            .coded("corpus_empty")
     })?;
     let pages = grinder
         .store()
@@ -699,7 +737,7 @@ pub async fn check_pack(State(state): State<Arc<AppState>>) -> Result<Json<PackC
         })
         .await
         .map_err(|e| storage_error(&e))?
-        .map_err(|message| ApiError { error: ErrorKind::Storage, message })?
+        .map_err(|message| ApiError { error: ErrorKind::Storage, message, code: None })?
     };
     let stored = stored.ok_or_else(|| ApiError::bad_request("that passage is not in the index"))?;
 

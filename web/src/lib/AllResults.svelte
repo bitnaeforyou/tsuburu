@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as api from './api'
-  import { t } from './i18n.svelte'
+  import { t, number } from './i18n.svelte'
   import { toSearch, type SearchState } from './router'
   import Card from './Card.svelte'
   import DialogueHitList from './DialogueHitList.svelte'
@@ -129,8 +129,8 @@
     {:else if section.total > 0}
       <span class="muted">
         {section.capped
-          ? t('search.atLeast', { n: section.total.toLocaleString() })
-          : t('search.results', { n: section.total.toLocaleString() })}
+          ? t('search.atLeast', { n: number(section.total) })
+          : t('search.results', { n: number(section.total) })}
       </span>
       <a class="more" {href}>{t('search.narrow')}</a>
     {/if}

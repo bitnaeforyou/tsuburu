@@ -4,6 +4,12 @@ export class ApiError extends Error {
   constructor(
     readonly kind: ApiErrorKind,
     message: string,
+    /**
+     * Names the few failures the reader can act on, so the interface can
+     * say what to do in their language. The message stays English: it is
+     * the diagnostic underneath.
+     */
+    readonly code?: string,
   ) {
     super(message)
   }
@@ -23,6 +29,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(
       body?.error ?? 'network',
       body?.message ?? `request failed with ${response.status}`,
+      body?.code,
     )
   }
   return response.json() as Promise<T>
@@ -407,7 +414,12 @@ export function nearWorks(id: number, limit = 12): Promise<NearWork[]> {
   return request(`/api/keywords/${id}/near?limit=${limit}`)
 }
 
-export type KeywordSearch = { word: string; works: { id: number; score: number }[] }
+export type KeywordSearch = {
+  word: string
+  works: { id: number; score: number }[]
+  /** Set when the word was left out for being in this many works. */
+  too_common?: number
+}
 
 export function keywordSearch(word: string, limit = 25): Promise<KeywordSearch> {
   const params = new URLSearchParams({ q: word, limit: String(limit) })
@@ -429,7 +441,7 @@ export type Stored = {
 export function stored(
   readingOnly = true,
   limit = 50,
-): Promise<{ items: Stored[]; total: number; bytes: number }> {
+): Promise<{ items: Stored[]; total: number; bytes: number; vectors: number }> {
   const params = new URLSearchParams({ reading_only: String(readingOnly), limit: String(limit) })
   return request(`/api/dialogue/stored?${params}`)
 }

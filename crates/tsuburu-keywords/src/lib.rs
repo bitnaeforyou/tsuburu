@@ -23,8 +23,13 @@ const WORKS: TableDefinition<i32, &[u8]> = TableDefinition::new("works");
 /// ascending order over the value walks the strongest works first and a
 /// query can stop early.
 const WORDS: MultimapTableDefinition<&str, (u32, i32)> = MultimapTableDefinition::new("words");
+/// A word dropped for being everywhere, and how many works held it. Kept so
+/// that a search for it can say why there is nothing rather than implying
+/// the word appears nowhere.
+const COMMON: TableDefinition<&str, u32> = TableDefinition::new("common");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
-const SCHEMA_VERSION: &str = "1";
+/// 2: words dropped as too common are remembered.
+const SCHEMA_VERSION: &str = "2";
 
 /// A word held by more works than this says nothing about any of them.
 pub const MAX_DOCUMENT_FREQUENCY: u32 = 20_000;
@@ -45,6 +50,8 @@ pub enum KeywordError {
     Corrupt,
     #[error("this keyword index was written by a newer tsuburu (schema {found})")]
     NewerSchema { found: String },
+    #[error("this keyword index uses an old layout (schema {found}); import it again")]
+    OlderSchema { found: String },
     #[error("could not read {0}: {1}")]
     Io(String, String),
     #[error("{0} is not artifact's graph.csv: {1}")]
@@ -87,6 +94,7 @@ impl KeywordStore {
         {
             tx.open_table(WORKS).map_err(db_err)?;
             tx.open_multimap_table(WORDS).map_err(db_err)?;
+            tx.open_table(COMMON).map_err(db_err)?;
             let mut meta = tx.open_table(META).map_err(db_err)?;
             let found = meta.get("schema").map_err(db_err)?.map(|v| v.value().to_string());
             match found {
@@ -94,6 +102,9 @@ impl KeywordStore {
                     meta.insert("schema", SCHEMA_VERSION).map_err(db_err)?;
                 }
                 Some(found) if found == SCHEMA_VERSION => {}
+                Some(found) if found.as_str() < SCHEMA_VERSION => {
+                    return Err(KeywordError::OlderSchema { found });
+                }
                 Some(found) => return Err(KeywordError::NewerSchema { found }),
             }
         }
@@ -146,6 +157,24 @@ impl KeywordStore {
             index.insert(word.word.as_str(), (rank_key(word.score), id)).map_err(db_err)?;
         }
         Ok(())
+    }
+
+    /// Records a word left out for being in too many works.
+    pub fn note_common(&self, word: &str, works: u32) -> Result<(), KeywordError> {
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut table = tx.open_table(COMMON).map_err(db_err)?;
+            table.insert(word, works).map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(())
+    }
+
+    /// How many works held this word, if it was dropped for being everywhere.
+    pub fn common(&self, word: &str) -> Result<Option<u32>, KeywordError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let table = tx.open_table(COMMON).map_err(db_err)?;
+        Ok(table.get(word).map_err(db_err)?.map(|v| v.value()))
     }
 
     /// The words of one work, strongest first.
