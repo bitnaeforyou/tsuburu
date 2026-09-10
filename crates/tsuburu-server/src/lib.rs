@@ -7,6 +7,7 @@ pub mod dialogue;
 pub mod downloads;
 pub mod error;
 pub mod grinder;
+pub mod keywords;
 pub mod library;
 pub mod meta;
 pub mod proxy;
@@ -35,6 +36,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/artists/following", get(artists::following))
         .route("/api/artists/{name}", get(artists::works))
         .route("/api/artists/{name}/follow", put(artists::follow).delete(artists::unfollow))
+        .route("/api/keywords/search", get(keywords::search))
+        .route("/api/keywords/{id}", get(keywords::of))
+        .route("/api/keywords/{id}/near", get(keywords::near))
         .route("/api/meta/status", get(meta::status))
         .route("/api/meta/search", get(meta::search))
         .route("/api/meta/suggest", get(meta::suggest))

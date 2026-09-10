@@ -106,6 +106,25 @@ Dialogue tab can queue any gallery to be read again, and "re-read imported
 galleries" makes the background sweep go over the whole imported corpus. That
 costs as much as indexing from nothing, so it is off by default.
 
+## What a work is about
+
+artifact also publishes `graph.csv`: the words it found running through each
+work, scored by TF-IDF over the dialogue it recognised. A few tens of
+megabytes, against the embedding index's 2.6 GB.
+
+```
+tsuburu import-keywords /path/to/artifact/graph.csv   # ~16 s for 3.2M rows
+```
+
+A work then shows the words it is about, each a link to everything else those
+words run through, and a **About the same things** row underneath the reader that
+names what the two have in common. It is coarser than the embeddings — shared
+words, not shared meaning — but it costs almost nothing to keep and answers
+without a model.
+
+Words held by more than 20,000 works are dropped on import: they cost the most
+to store and say the least about any single work.
+
 ## Dialogue search
 
 hitomi's index only knows titles and tags. To find a work by a line you
@@ -278,6 +297,7 @@ crates/tsuburu-dialogue recognised text, matching, shards, artifact import
 crates/tsuburu-meta     local metadata snapshot and its search
 crates/tsuburu-embed    nearest-neighbour search over artifact's embeddings
 crates/tsuburu-downloads pages kept on disk, shared by content hash
+crates/tsuburu-keywords what each work is about, from artifact's graph.csv
 crates/tsuburu-text     multi-script matching shared by the searchable stores
 crates/tsuburu          CLI and server entry point
 web/                    Svelte 5 + Vite frontend

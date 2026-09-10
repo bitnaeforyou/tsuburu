@@ -24,6 +24,7 @@ export type Route =
   | { name: 'dialogue'; query: string }
   | { name: 'artist'; artist: string }
   | { name: 'downloads' }
+  | { name: 'keyword'; word: string }
 
 const SORTS: Sort[] = ['date', 'today', 'week', 'month', 'year']
 
@@ -51,6 +52,8 @@ export function parse(hash: string): Route {
   if (head === '/downloads') return { name: 'downloads' }
   const artist = /^\/artist\/(.+)$/.exec(head)
   if (artist) return { name: 'artist', artist: decodeURIComponent(artist[1]) }
+  const keyword = /^\/keyword\/(.+)$/.exec(head)
+  if (keyword) return { name: 'keyword', word: decodeURIComponent(keyword[1]) }
 
   const sort = params.get('sort') as Sort | null
   return {
@@ -81,6 +84,10 @@ export function toGallery(id: number, page?: number): string {
 
 export function toArtist(name: string): string {
   return `#/artist/${encodeURIComponent(name)}`
+}
+
+export function toKeyword(word: string): string {
+  return `#/keyword/${encodeURIComponent(word)}`
 }
 
 export function toDialogue(query = ''): string {

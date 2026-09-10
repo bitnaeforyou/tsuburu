@@ -39,6 +39,8 @@ pub struct AppState {
     pub meta: Option<Arc<tsuburu_meta::MetaStore>>,
     /// Embedding search, opened on first use.
     pub similarity: crate::similar::LazySimilarity,
+    /// What works are about, if artifact's graph.csv was imported.
+    pub keywords: Option<Arc<tsuburu_keywords::KeywordStore>>,
     /// Pages kept on disk. `None` if the store could not be opened.
     pub downloads: Option<Arc<tsuburu_downloads::DownloadStore>>,
     pub download_jobs: Arc<crate::downloads::Jobs>,
@@ -76,6 +78,7 @@ impl AppState {
             shards_dir: None,
             meta: None,
             similarity: Default::default(),
+            keywords: None,
             downloads: None,
             download_jobs: Default::default(),
             version: RwLock::new(None),
@@ -91,6 +94,11 @@ impl AppState {
 
     pub fn with_meta(mut self, meta: Arc<tsuburu_meta::MetaStore>) -> Self {
         self.meta = Some(meta);
+        self
+    }
+
+    pub fn with_keywords(mut self, keywords: Arc<tsuburu_keywords::KeywordStore>) -> Self {
+        self.keywords = Some(keywords);
         self
     }
 

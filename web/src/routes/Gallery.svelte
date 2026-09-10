@@ -3,7 +3,9 @@
   import { t } from '../lib/i18n.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import { library } from '../lib/library.svelte'
-  import { toArtist, toSearch } from '../lib/router'
+  import { toArtist, toKeyword, toSearch } from '../lib/router'
+  import Card from '../lib/Card.svelte'
+  import Grid from '../lib/Grid.svelte'
 
   let { id, startPage = null }: { id: number; startPage?: number | null } = $props()
 
@@ -17,6 +19,8 @@
   let current = $state(0)
   let resumeAt = $state<number | null>(null)
   let elements = $state<(HTMLImageElement | null)[]>([])
+  let keywords = $state<api.Keyword[]>([])
+  let near = $state<api.NearWork[]>([])
   let download = $state<api.DownloadItem | null>(null)
   let downloadError = $state<string | null>(null)
 
@@ -65,6 +69,21 @@
       downloadError = cause instanceof Error ? cause.message : String(cause)
     }
   }
+
+  // Keywords come from an optional import; their absence is not an error.
+  $effect(() => {
+    void id
+    keywords = []
+    near = []
+    void api
+      .keywords(id)
+      .then((found) => (keywords = found.words.slice(0, 12)))
+      .catch(() => {})
+    void api
+      .nearWorks(id, 12)
+      .then((found) => (near = found))
+      .catch(() => {})
+  })
 
   async function load() {
     error = null
@@ -243,6 +262,15 @@
       <p class="tags">{gallery.tags.join(' · ')}</p>
     {/if}
 
+    {#if keywords.length}
+      <p class="keywords">
+        <span class="muted">{t('keyword.title')}</span>
+        {#each keywords as keyword (keyword.word)}
+          <a href={toKeyword(keyword.word)}>{keyword.word}</a>
+        {/each}
+      </p>
+    {/if}
+
     <div class="reader">
       {#each gallery.pages as p, i (p.src)}
         <img
@@ -267,6 +295,20 @@
       </button>
     </nav>
     <p class="hint">{t('gallery.hint')}</p>
+
+    {#if near.length}
+      <section class="near">
+        <strong>{t('keyword.near')}</strong>
+        <Grid>
+          {#each near as other (other.id)}
+            <div>
+              <Card id={other.id} />
+              <p class="shared">{other.shared.join(' · ')}</p>
+            </div>
+          {/each}
+        </Grid>
+      </section>
+    {/if}
   {/if}
 </main>
 
@@ -331,6 +373,34 @@
   }
   .credits a {
     margin-right: 0.5rem;
+  }
+
+  .keywords {
+    margin: 0 0 1rem;
+    font-size: 0.85rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: baseline;
+  }
+  .keywords a {
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.1rem 0.55rem;
+  }
+
+  .near {
+    margin: 2rem 0 1rem;
+  }
+  .near strong {
+    display: block;
+    margin-bottom: 0.6rem;
+  }
+  .shared {
+    margin: 0.25rem 0 0;
+    font-size: 0.75rem;
+    color: var(--muted);
   }
 
   .keep {

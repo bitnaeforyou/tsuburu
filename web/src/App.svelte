@@ -7,6 +7,7 @@
   import Dialogue from './routes/Dialogue.svelte'
   import Artist from './routes/Artist.svelte'
   import Downloads from './routes/Downloads.svelte'
+  import Keyword from './routes/Keyword.svelte'
   import AgeGate from './lib/AgeGate.svelte'
   import { i18n } from './lib/i18n.svelte'
 
@@ -39,6 +40,8 @@
   <Artist artist={route.artist} />
 {:else if route.name === 'downloads'}
   <Downloads />
+{:else if route.name === 'keyword'}
+  <Keyword word={route.word} />
 {:else}
   <Search params={route} />
 {/if}

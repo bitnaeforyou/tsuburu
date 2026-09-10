@@ -105,6 +105,12 @@ export const ko: Messages = {
   'downloads.failed': '{n}건 실패',
   'downloads.delete': '삭제',
 
+  'keyword.about': '이 낱말이 관통하는 작품들.',
+  'keyword.empty': '그 낱말을 다루는 작품이 없습니다.',
+  'keyword.title': '무엇에 관한 작품인가',
+  'keyword.near': '비슷한 이야기',
+  'keyword.nearNone': '같은 이야기를 하는 작품이 없습니다.',
+
   'artist.works': '{n}편',
   'artist.follow': '팔로우',
   'artist.following': '팔로우 중',

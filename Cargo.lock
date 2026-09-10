@@ -2039,6 +2039,7 @@ dependencies = [
  "tsuburu-downloads",
  "tsuburu-fetch",
  "tsuburu-hitomi",
+ "tsuburu-keywords",
  "tsuburu-meta",
  "tsuburu-ocr",
  "tsuburu-server",
@@ -2112,6 +2113,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsuburu-keywords"
+version = "0.1.0"
+dependencies = [
+ "lz4_flex",
+ "redb",
+ "tempfile",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "tsuburu-korean"
 version = "0.1.0"
 dependencies = [
@@ -2169,6 +2181,7 @@ dependencies = [
  "tsuburu-embed",
  "tsuburu-fetch",
  "tsuburu-hitomi",
+ "tsuburu-keywords",
  "tsuburu-korean",
  "tsuburu-meta",
  "tsuburu-ocr",

@@ -105,6 +105,12 @@ export const ja: Messages = {
   'downloads.failed': '{n}件失敗',
   'downloads.delete': '削除',
 
+  'keyword.about': 'この語が貫く作品。',
+  'keyword.empty': 'その語を扱う作品はありません。',
+  'keyword.title': '何についての作品か',
+  'keyword.near': '似た話',
+  'keyword.nearNone': '同じ話をしている作品はありません。',
+
   'artist.works': '{n}件',
   'artist.follow': 'フォロー',
   'artist.following': 'フォロー中',

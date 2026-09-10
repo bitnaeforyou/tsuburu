@@ -105,6 +105,12 @@ export const en = {
   'downloads.failed': '{n} failed',
   'downloads.delete': 'Delete',
 
+  'keyword.about': 'Works this word runs through.',
+  'keyword.empty': 'No work is about that word.',
+  'keyword.title': 'What it is about',
+  'keyword.near': 'About the same things',
+  'keyword.nearNone': 'Nothing else is about the same things.',
+
   'artist.works': '{n} works',
   'artist.follow': 'Follow',
   'artist.following': 'Following',

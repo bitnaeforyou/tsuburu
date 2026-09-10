@@ -18,6 +18,7 @@ tsuburu-dialogue = { path = "../tsuburu-dialogue" }
 tsuburu-ocr = { path = "../tsuburu-ocr" }
 tsuburu-meta = { path = "../tsuburu-meta" }
 tsuburu-downloads = { path = "../tsuburu-downloads" }
+tsuburu-keywords = { path = "../tsuburu-keywords" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 open = "5"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "net"] }

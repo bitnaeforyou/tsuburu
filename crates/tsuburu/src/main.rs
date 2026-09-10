@@ -53,6 +53,8 @@ enum Command {
         #[arg(long)]
         all: bool,
     },
+    /// artifact의 `graph.csv`에서 작품별 키워드를 가져온다. 서버를 먼저 끈다.
+    ImportKeywords { csv: std::path::PathBuf },
     /// 갤러리 한 편의 메타데이터와 이미지 URL을 출력한다.
     Gallery {
         id: i32,
@@ -160,6 +162,26 @@ async fn main() -> Result<()> {
             eprintln!("done in {:?}: {} works", started.elapsed(), summary.works);
         }
 
+        Command::ImportKeywords { csv } => {
+            let path = tsuburu_store::data_dir()?.join("keywords.redb");
+            let store = tsuburu_keywords::KeywordStore::open(&path)
+                .map_err(|e| anyhow::anyhow!("{e} (is the server running? stop it first)"))?;
+            let started = Instant::now();
+            eprintln!("reading {}", csv.display());
+            let done = tsuburu_keywords::graph::import(&store, &csv, &mut |p| {
+                if p.works % 20_000 == 0 {
+                    eprintln!("  {} works, {:?}", p.works, started.elapsed());
+                }
+            })?;
+            eprintln!(
+                "done in {:?}: {} works, {} words ({} too common to keep)",
+                started.elapsed(),
+                done.works,
+                done.words,
+                done.too_common
+            );
+        }
+
         Command::Gallery { id, images } => {
             let gallery = tsuburu_hitomi::fetch_gallery(&fetcher, &cfg, id)
                 .await
@@ -257,6 +279,13 @@ async fn serve(
                 app_state = app_state.with_downloads(Arc::new(downloads));
             }
             Err(err) => eprintln!("downloads are disabled: {err}"),
+        }
+        let keywords_path = dir.join("keywords.redb");
+        if keywords_path.is_file() {
+            match tsuburu_keywords::KeywordStore::open(&keywords_path) {
+                Ok(keywords) => app_state = app_state.with_keywords(Arc::new(keywords)),
+                Err(err) => eprintln!("keywords are unavailable: {err}"),
+            }
         }
         let meta_path = dir.join("meta.redb");
         if meta_path.is_file() {

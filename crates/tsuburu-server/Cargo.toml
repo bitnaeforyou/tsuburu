@@ -15,6 +15,7 @@ tsuburu-ocr = { path = "../tsuburu-ocr" }
 tsuburu-meta = { path = "../tsuburu-meta" }
 tsuburu-embed = { path = "../tsuburu-embed" }
 tsuburu-downloads = { path = "../tsuburu-downloads" }
+tsuburu-keywords = { path = "../tsuburu-keywords" }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
 tower-http = { version = "0.6", default-features = false, features = ["trace"] }
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }

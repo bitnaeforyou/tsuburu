@@ -391,3 +391,24 @@ export function checkPack(): Promise<PackCheck> {
 export function phraseScenes(q: string, limit = 25): Promise<SimilarHit[]> {
   return request(`/api/dialogue/phrase?${new URLSearchParams({ q, limit: String(limit) })}`)
 }
+
+// --- keywords, out of artifact's graph.csv ---
+
+export type Keyword = { word: string; score: number }
+
+export function keywords(id: number): Promise<{ id: number; words: Keyword[] }> {
+  return request(`/api/keywords/${id}`)
+}
+
+export type NearWork = { id: number; score: number; shared: string[] }
+
+export function nearWorks(id: number, limit = 12): Promise<NearWork[]> {
+  return request(`/api/keywords/${id}/near?limit=${limit}`)
+}
+
+export type KeywordSearch = { word: string; works: { id: number; score: number }[] }
+
+export function keywordSearch(word: string, limit = 25): Promise<KeywordSearch> {
+  const params = new URLSearchParams({ q: word, limit: String(limit) })
+  return request(`/api/keywords/search?${params}`)
+}
