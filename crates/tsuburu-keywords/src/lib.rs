@@ -30,6 +30,9 @@ const COMMON: TableDefinition<&str, u32> = TableDefinition::new("common");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 /// 2: words dropped as too common are remembered.
 const SCHEMA_VERSION: &str = "2";
+/// Page cache. Posting lists are small and revisited, so this is mostly
+/// enough to keep the hot words resident.
+const CACHE_BYTES: usize = 64 * 1024 * 1024;
 
 /// A word held by more works than this says nothing about any of them.
 pub const MAX_DOCUMENT_FREQUENCY: u32 = 20_000;
@@ -83,7 +86,10 @@ pub struct KeywordStore {
 
 impl KeywordStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, KeywordError> {
-        let db = Database::create(path).map_err(|e| KeywordError::Open(e.to_string()))?;
+        let db = Database::builder()
+            .set_cache_size(CACHE_BYTES)
+            .create(path)
+            .map_err(|e| KeywordError::Open(e.to_string()))?;
         let store = Self { db };
         store.init_schema()?;
         Ok(store)

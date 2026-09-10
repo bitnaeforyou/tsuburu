@@ -27,6 +27,8 @@ const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 /// 2: titles stored as match codes. 3: those codes keep Latin word bounds.
 /// 4: they cover scripts other than Hangul.
 const SCHEMA_VERSION: &str = "4";
+/// Page cache; the title scan streams rather than revisiting.
+const CACHE_BYTES: usize = 128 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MetaError {
@@ -150,7 +152,10 @@ pub struct MetaStore {
 impl MetaStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, MetaError> {
         let path = path.as_ref().to_path_buf();
-        let db = Database::create(&path).map_err(|e| MetaError::Open(e.to_string()))?;
+        let db = Database::builder()
+            .set_cache_size(CACHE_BYTES)
+            .create(&path)
+            .map_err(|e| MetaError::Open(e.to_string()))?;
         let store = Self { db, path };
         store.init_schema()?;
         Ok(store)

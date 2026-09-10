@@ -37,6 +37,13 @@ const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 /// 2: LZ4 binary pages. 3: match codes beside the text. 4: codes in their
 /// own table. 5: codes cover scripts other than Hangul.
 const SCHEMA_VERSION: &str = "5";
+/// Page cache.
+///
+/// A search reads the whole codes table, so this is sized to hold it: with
+/// less, every query pays for the same pages again. redb otherwise sizes the
+/// cache from the machine's memory, which left a gigabyte and a half
+/// resident on a large one.
+const CACHE_BYTES: usize = 256 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DialogueError {
@@ -189,7 +196,14 @@ pub struct DialogueStore {
 impl DialogueStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, DialogueError> {
         let path = path.as_ref().to_path_buf();
-        let db = Database::create(&path).map_err(|e| DialogueError::Open(e.to_string()))?;
+        // redb sizes its page cache from the machine's memory, which for a
+        // corpus this large means a search leaves a gigabyte resident. The
+        // scan reads the codes table straight through, so a cache big enough
+        // to hold a working set is all it can use.
+        let db = Database::builder()
+            .set_cache_size(CACHE_BYTES)
+            .create(&path)
+            .map_err(|e| DialogueError::Open(e.to_string()))?;
         let store = Self { db, path };
         store.init_schema()?;
         Ok(store)
