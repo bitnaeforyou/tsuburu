@@ -34,6 +34,11 @@ jobs:
         with:
           # The whole history, or the rewrite below would produce a stump.
           fetch-depth: 0
+          # checkout otherwise leaves its own credentials in the git config,
+          # as a header for github.com, and that header wins over the token
+          # in the push URL: the push would go out as the Actions bot and be
+          # refused by the other account.
+          persist-credentials: false
 
       - name: Rewrite the authorship
         if: steps.configured.outputs.yes == 'true'
