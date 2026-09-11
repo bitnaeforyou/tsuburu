@@ -214,7 +214,7 @@ export const ko: Messages = {
   'dialogue.packResult': '유사도 {cosine} — {gallery} {page}쪽 기준 — {note}',
   'dialogue.share': '색인 나누기',
   'dialogue.shareNote':
-    '인식된 텍스트는 작고 이미지는 큽니다. 이 컴퓨터가 읽어둔 것을 샤드 파일로 내보내 건네주거나, 남의 것을 가져올 수 있습니다. 파일은 이름에 든 해시로 검증합니다.',
+    '인식된 텍스트는 작고 이미지는 큽니다. 이 컴퓨터가 읽어둔 것을 샤드 파일로 내보내 건네주거나, 남의 것을 가져올 수 있습니다. 파일은 이름에 든 해시로 검증합니다. 가져온 코퍼스의 텍스트는 절대 들어가지 않습니다 — 샤드는 이 기계가 읽은 것입니다.',
   'dialogue.exportSwept': '배경 색인으로 읽은 것만 (직접 고른 작품은 파일에서 뺍니다)',
   'dialogue.export': '내보내기',
   'dialogue.importShards': '.tsd 파일 가져오기',

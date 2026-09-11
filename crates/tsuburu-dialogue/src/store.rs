@@ -751,6 +751,11 @@ impl DialogueStore {
     /// `background_only` leaves out galleries that were indexed because the
     /// user asked for them (imported history, hunts): those reveal what the
     /// user read, and a shared file must not.
+    /// Packs what this machine recognised into shard files.
+    ///
+    /// Imported text is left out whatever `background_only` says: a shard is
+    /// this machine's own reading, not a copy of a corpus someone else
+    /// published.
     pub fn export_shards(
         &self,
         range_size: i32,
@@ -765,16 +770,20 @@ impl DialogueStore {
         for row in texts.iter().map_err(db_err)? {
             let (key, value) = row.map_err(db_err)?;
             let id = key.value();
-            if background_only {
-                let job: Option<JobRecord> = jobs
-                    .get(id)
-                    .map_err(db_err)?
-                    .map(|v| serde_json::from_str(v.value()))
-                    .transpose()?;
-                let personal = job.is_some_and(|j| j.priority != Priority::Background);
-                if personal {
-                    continue;
-                }
+            let job: Option<JobRecord> = jobs
+                .get(id)
+                .map_err(db_err)?
+                .map(|v| serde_json::from_str(v.value()))
+                .transpose()?;
+            // Text that came from someone else's corpus is never passed on.
+            // A shard says "this machine read these pages"; forwarding an
+            // import would be handing on work that is not ours to hand on,
+            // and the recipient can fetch that corpus themselves.
+            if job.as_ref().is_some_and(|j| j.source.is_some()) {
+                continue;
+            }
+            if background_only && job.is_some_and(|j| j.priority != Priority::Background) {
+                continue;
             }
             let pages = decode_pages(&decompress(value.value())?)?;
             let first_id = (id / range_size) * range_size;
@@ -1220,6 +1229,20 @@ mod tests {
         assert_eq!(store.vector(7, 1).unwrap(), None);
         // A different work is untouched.
         assert_eq!(store.vector(9, 0).unwrap(), Some(vec![1.0, 1.0]));
+    }
+
+    #[test]
+    fn an_imported_corpus_is_never_exported() {
+        let (store, _dir) = store();
+        store.complete(1, &[page(0, "이 기계가 읽은 것")]).unwrap();
+        store.import_works(vec![(2, pages(&[&["남의 코퍼스"]]))], "artifact", 10, |_| {}).unwrap();
+
+        for background_only in [true, false] {
+            let shards = store.export_shards(1_000_000, background_only).unwrap();
+            let ids: Vec<i32> =
+                shards.iter().flat_map(|s| s.entries.iter().map(|e| e.gallery_id)).collect();
+            assert_eq!(ids, [1], "background_only={background_only}");
+        }
     }
 
     #[test]

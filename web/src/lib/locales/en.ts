@@ -214,7 +214,7 @@ export const en = {
   'dialogue.packResult': 'similarity {cosine} against gallery {gallery} page {page} — {note}',
   'dialogue.share': 'Share the index',
   'dialogue.shareNote':
-    'Recognised text is small; the images are not. Export what this machine has read as shard files and hand them to someone else, or import theirs. Files are verified against the hash in their name.',
+    'Recognised text is small; the images are not. Export what this machine has read as shard files and hand them to someone else, or import theirs. Files are verified against the hash in their name. Text that came from an imported corpus is never included - a shard is your own reading.',
   'dialogue.exportSwept':
     'Only background-indexed galleries (keeps what you chose to read out of the file)',
   'dialogue.export': 'Export',
