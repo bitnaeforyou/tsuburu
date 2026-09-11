@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """한국어 -> 영어 검색어 사전을 만든다.
 
-출처: project-artifact/tag-info (Unlicense, 퍼블릭 도메인)
+출처: 퍼블릭 도메인으로 공개된 태그 대응표. 주소는 인자로 준다.
 출력: crates/tsuburu-korean/data/korean.tsv
 
 hitomi의 갤러리 B-tree 인덱스는 네임스페이스가 붙은 형태를 받지 않는다.
@@ -9,15 +9,16 @@ hitomi의 갤러리 B-tree 인덱스는 네임스페이스가 붙은 형태를 �
 모두에서 접두사를 떼어낸다.
 
 재생성:
-    python3 tools/build-korean-dictionary.py
+    python3 tools/build-korean-dictionary.py <태그표의 기준 URL>
 """
 import json
+import os
 import re
 import sys
 import urllib.request
 from pathlib import Path
 
-BASE = "https://raw.githubusercontent.com/project-artifact/tag-info/master"
+BASE = os.environ.get("TAG_INFO_BASE") or sys.argv[1]
 
 # 앞에 오는 것이 후보 순서에서 우선한다. 태그가 검색에 가장 쓸모 있다.
 SOURCES = [

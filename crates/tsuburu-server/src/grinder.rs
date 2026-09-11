@@ -48,7 +48,7 @@ pub struct GrinderSettings {
     pub bytes_per_second: u64,
     /// Recognise galleries whose text was imported from elsewhere.
     ///
-    /// artifact's corpus has gaps: bubbles its OCR missed that Vision reads.
+    /// An imported corpus has gaps: bubbles its OCR missed that Vision reads.
     /// Off by default because re-reading 108,000 galleries costs the same
     /// as indexing them from nothing.
     #[serde(default)]
@@ -80,7 +80,7 @@ impl Default for GrinderSettings {
     }
 }
 
-/// Progress of a bulk import from artifact's artefact.
+/// Progress of a bulk import from a published corpus.
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct ImportProgress {
     pub running: bool,
@@ -173,7 +173,7 @@ impl Grinder {
         self.import.lock().ok().and_then(|g| g.clone())
     }
 
-    /// Starts importing artifact's `llm-search-index` directory in the
+    /// Starts importing an `llm-search-index` directory in the
     /// background. Returns an error if one is already running.
     pub fn start_artifact_import(self: &Arc<Self>, dir: PathBuf) -> Result<(), String> {
         let reader = ChunkReader::open(&dir).map_err(|e| e.to_string())?;
@@ -202,7 +202,7 @@ impl Grinder {
                 Ok(work) => Some(work),
                 Err(err) => {
                     // One bad record must not lose the rest of the corpus.
-                    tracing::warn!(%err, "skipping a artifact record");
+                    tracing::warn!(%err, "skipping an unreadable record");
                     None
                 }
             });
@@ -281,7 +281,7 @@ impl Grinder {
 
     /// Embeds a passage this machine read, if a pack is configured.
     ///
-    /// artifact's index covers its own corpus and stops there. A page read
+    /// An imported index covers its own corpus and stops there. A page read
     /// afterwards is scanned beside it, so meaning search reaches what you
     /// have actually read. Without a pack there is nothing to embed with and
     /// this quietly does nothing.
@@ -509,7 +509,7 @@ impl Grinder {
             .collect();
 
         // Downloader feeds a bounded channel; recognition drains it on
-        // blocking threads. Both sides overlap, like artifact's pipeline.
+        // blocking threads. Both sides overlap.
         let (tx, mut rx) = mpsc::channel::<(u16, Vec<u8>)>(PIPELINE_DEPTH);
         let fetcher = Arc::clone(&self.fetcher);
         let cap = self.settings.read().await.bytes_per_second.max(64 * 1024);

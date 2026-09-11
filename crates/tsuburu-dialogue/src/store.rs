@@ -1,11 +1,11 @@
 //! Where recognised text and the work queue live.
 //!
 //! One redb file. Text is stored per gallery in a compact binary form
-//! behind LZ4, and searched by scanning, the way artifact's message search
+//! behind LZ4, and searched by scanning, the way the message search that inspired it
 //! does; there is no inverted index to build or rebuild. The queue is a
 //! separate table keyed so that the next job is always the first key.
 //!
-//! The scan is what has to stay fast. With artifact's Korean corpus imported
+//! The scan is what has to stay fast. With a Korean corpus imported
 //! (108k works, 1.5 GB of text) a query touches everything, so pages are
 //! decoded without JSON, decompressed with LZ4 rather than deflate, scored
 //! without allocating per candidate, and split across threads.
@@ -29,7 +29,7 @@ const TEXT: TableDefinition<i32, &[u8]> = TableDefinition::new("text");
 /// reads only this table; text is fetched for the few pages that hit.
 const CODES: TableDefinition<i32, &[u8]> = TableDefinition::new("codes");
 /// (gallery, page) -> the passage's embedding, for pages this machine read
-/// itself. artifact's index covers its own corpus and nothing after it; these
+/// itself. an imported index covers its own corpus and nothing after it; these
 /// are scanned beside it so a work you read is findable by meaning too.
 const VECTORS: TableDefinition<(i32, u16), &[u8]> = TableDefinition::new("vectors");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
@@ -261,7 +261,7 @@ impl DialogueStore {
         Ok(())
     }
 
-    /// Where artifact's artefact directory was last imported from, so the
+    /// Where the corpus directory was last imported from, so the
     /// embeddings can be opened without asking again.
     pub fn artifact_dir(&self) -> Result<Option<PathBuf>, DialogueError> {
         Ok(self.setting("artifact_dir")?.map(PathBuf::from))
@@ -478,7 +478,7 @@ impl DialogueStore {
 
     /// Ids this machine recognised itself, as opposed to imported text.
     ///
-    /// Imported corpora have gaps: artifact's OCR missed bubbles that Vision
+    /// Imported corpora have gaps: their OCR missed bubbles that Vision
     /// reads. The sweep can be told to go over them again, and this is how
     /// it knows which it has already redone.
     pub fn locally_indexed_ids(&self) -> Result<std::collections::HashSet<i32>, DialogueError> {

@@ -41,10 +41,10 @@ enum Command {
         #[arg(short, long, default_value_t = 25)]
         limit: usize,
     },
-    /// artifact의 `llm-search-index` 디렉터리에서 대사 텍스트를 가져온다.
+    /// `llm-search-index` 디렉터리에서 대사 텍스트를 가져온다.
     /// 서버가 떠 있으면 저장소가 잠겨 있으므로 먼저 끄거나 UI에서 실행한다.
     ImportArtifact { dir: std::path::PathBuf },
-    /// artifact의 `data.db`(SQLite)에서 갤러리 메타데이터 스냅샷을 가져온다.
+    /// `data.db`(SQLite)에서 갤러리 메타데이터 스냅샷을 가져온다.
     /// `sqlite3` 명령으로 읽으므로 그 명령이 있어야 한다. 서버를 먼저 끈다.
     ImportMeta {
         db: std::path::PathBuf,
@@ -53,7 +53,7 @@ enum Command {
         #[arg(long)]
         all: bool,
     },
-    /// artifact의 `graph.csv`에서 작품별 키워드를 가져온다. 서버를 먼저 끈다.
+    /// `graph.csv`에서 작품별 키워드를 가져온다. 서버를 먼저 끈다.
     ImportKeywords { csv: std::path::PathBuf },
     /// 갤러리 한 편의 메타데이터와 이미지 URL을 출력한다.
     Gallery {
@@ -398,7 +398,7 @@ fn init_tracing(verbose: bool) {
     tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).init();
 }
 
-/// Reading artifact's `data.db` through the `sqlite3` command.
+/// Reading a `data.db` through the `sqlite3` command.
 ///
 /// The file is a SQLite database with FTS5 virtual tables. Linking a SQL
 /// engine into the binary would either bring in C or a large Rust crate for

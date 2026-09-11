@@ -1,6 +1,6 @@
 //! 한국어 검색어를 hitomi가 이해하는 영어로 보정한다.
 //!
-//! 사전은 `project-artifact/tag-info`(퍼블릭 도메인)에서 만들었고
+//! 사전은 퍼블릭 도메인으로 공개된 태그 대응표에서 만들었고
 //! `tools/build-korean-dictionary.py`로 재생성한다.
 //!
 //! # 한계

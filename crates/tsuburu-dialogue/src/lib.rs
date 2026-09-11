@@ -6,10 +6,10 @@
 
 pub use tsuburu_text as jamo;
 
+pub mod artifact;
 pub mod matcher;
 pub mod shard;
 pub mod store;
-pub mod artifact;
 
 pub use matcher::{Match, Query};
 pub use shard::{Shard, ShardEntry, ShardError};

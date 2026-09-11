@@ -77,11 +77,11 @@ pub async fn status(State(state): State<Arc<AppState>>) -> Result<Json<StatusRes
 
 #[derive(Debug, Deserialize)]
 pub struct ImportArtifactBody {
-    /// Path to artifact's `llm-search-index` directory on this machine.
+    /// Path to the `llm-search-index` directory on this machine.
     pub dir: String,
 }
 
-/// Loads artifact's recognised Korean corpus. Runs in the background;
+/// Loads a recognised Korean corpus. Runs in the background;
 /// `status` reports progress.
 pub async fn import_artifact(
     State(state): State<Arc<AppState>>,
@@ -401,7 +401,7 @@ pub struct SimilarHit {
 
 /// Passages closest in meaning to the one being read.
 ///
-/// The neighbours come from artifact's embeddings; the text shown beside them
+/// The neighbours come from the imported embeddings; the text shown beside them
 /// comes from the local corpus, so nothing is fetched.
 pub async fn similar(
     State(state): State<Arc<AppState>>,
@@ -426,7 +426,7 @@ pub async fn similar(
             let text = pages.into_iter().find(|p| p.page == page)?.lines.concat();
             Some(tsuburu_dialogue::jamo::codes(&text))
         };
-        // The passage is in artifact's index, or only in what was read here.
+        // The passage is in the imported index, or only in what was read here.
         // Either way it supplies the query, and both sides are searched: a
         // work read on this machine still has the whole corpus to match
         // against.

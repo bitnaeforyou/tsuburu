@@ -296,8 +296,9 @@ impl ChunkLocator {
                 .filter(|_| page_count > 0)
                 .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
                 .unwrap_or(1);
-            let id = i32::try_from(work_id)
-                .map_err(|_| ArtifactError::Corrupt(i, format!("work id {work_id} out of range")))?;
+            let id = i32::try_from(work_id).map_err(|_| {
+                ArtifactError::Corrupt(i, format!("work id {work_id} out of range"))
+            })?;
             entries.push((id, first.saturating_sub(1).min(u16::MAX as u32) as u16));
         }
         Ok(Self { entries })

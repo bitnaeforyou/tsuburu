@@ -1,4 +1,4 @@
-//! Nearest-neighbour search over artifact's embeddings.
+//! Nearest-neighbour search over an imported embedding index.
 //!
 //! The artefact ships a FAISS `IndexScalarQuantizer` holding one 1024
 //! dimension vector per chunk of recognised text, quantised to a byte per

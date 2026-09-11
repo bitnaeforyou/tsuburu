@@ -55,7 +55,7 @@ pub struct AppState {
     /// where each belongs. The proxy is already carrying those bytes, so it
     /// can hand them to recognition instead of downloading them again.
     pub unread_pages: RwLock<HashMap<String, UnreadPage>>,
-    /// What works are about, if artifact's graph.csv was imported.
+    /// What works are about, if a graph.csv was imported.
     pub keywords: Option<Arc<tsuburu_keywords::KeywordStore>>,
     /// Pages kept on disk. `None` if the store could not be opened.
     pub downloads: Option<Arc<tsuburu_downloads::DownloadStore>>,

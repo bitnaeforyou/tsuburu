@@ -7,15 +7,15 @@
 hitomi.la를 검색하고 열람하는 데스크톱 애플리케이션. 실행 파일 하나를 받아
 실행하면 로컬 서버가 뜨고 브라우저가 열린다. 별도 설치나 설정이 없다.
 
-기준점이 되는 기존 프로젝트는 `project-artifact/artifact`이다. 초기 artifact은
-Flutter 기반 모바일 앱이었고(조직 내 `libartifact`은 Rust로 작성된
+기준점이 되는 기존 프로젝트는 기존 구현이다. 초기 그 구현은
+Flutter 기반 모바일 앱이었고(조직 내 `그 조직의 Rust 라이브러리`은 Rust로 작성된
 android/ios 다운로더, `p7zip`은 flutter 바인딩), 현재의 "next gen" 리포지터리는
 Docker Compose로 7개 남짓의 서비스(수집, OCR, 검색 인덱스, 키워드 그래프,
 웹 뷰어)를 띄우는 TypeScript 자기호스팅 툴킷으로 전환되었다.
 
 tsuburu는 그 반대편을 노린다.
 
-| | artifact (next gen) | tsuburu |
+| | 기존 구현 (차세대) | tsuburu |
 |---|---|---|
 | 배포 단위 | docker compose, 다중 서비스 | 실행 파일 1개 |
 | 대상 사용자 | 개발자 | 일반 사용자 |
@@ -35,7 +35,7 @@ tsuburu는 그 반대편을 노린다.
   되지만 지원 대상으로 삼지 않는다.
 - 외부 접속, 인증, 다중 사용자.
 - 전체 메타데이터 스냅샷 다운로드. v1 범위 밖(11절 참고).
-- OCR, 키워드 그래프, 추천 등 artifact의 분석 기능.
+- OCR, 키워드 그래프, 추천 등 그 구현의 분석 기능.
 
 ## 2. 형태
 

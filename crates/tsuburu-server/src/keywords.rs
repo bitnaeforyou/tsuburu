@@ -1,6 +1,6 @@
 //! What a work is about, and what else is about the same thing.
 //!
-//! These come from artifact's `graph.csv`, which is a few tens of megabytes
+//! These come from a published `graph.csv`, which is a few tens of megabytes
 //! rather than the embedding index's 2.6 GB. The answers are coarser - shared
 //! words, not shared meaning - but they cost nothing to keep.
 

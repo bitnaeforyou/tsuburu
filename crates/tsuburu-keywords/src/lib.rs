@@ -1,6 +1,6 @@
-//! The words a work is about, out of artifact's `graph.csv`.
+//! The words a work is about, out of a published `graph.csv`.
 //!
-//! artifact ran TF-IDF over the dialogue it recognised and kept each work's
+//! Someone ran TF-IDF over the dialogue they recognised and kept each work's
 //! hundred strongest words. That is a much smaller thing than an embedding -
 //! a few tens of megabytes against 2.6 GB - and it answers two questions the
 //! embeddings otherwise answer: what is this work about, and what else reads
@@ -36,7 +36,7 @@ const CACHE_BYTES: usize = 64 * 1024 * 1024;
 
 /// A word held by more works than this says nothing about any of them.
 pub const MAX_DOCUMENT_FREQUENCY: u32 = 20_000;
-/// Kept per work. artifact writes a hundred; the tail is noise from one page.
+/// Kept per work. The file carries a hundred; the tail is noise from one page.
 pub const KEEP_PER_WORK: usize = 40;
 /// Scanned per word when looking for neighbours.
 const POSTINGS_PER_WORD: usize = 4_000;
@@ -57,7 +57,7 @@ pub enum KeywordError {
     OlderSchema { found: String },
     #[error("could not read {0}: {1}")]
     Io(String, String),
-    #[error("{0} is not artifact's graph.csv: {1}")]
+    #[error("{0} is not a keyword graph: {1}")]
     NotGraphCsv(String, String),
 }
 

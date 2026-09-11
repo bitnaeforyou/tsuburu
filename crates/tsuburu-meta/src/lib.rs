@@ -1,7 +1,7 @@
 //! A local snapshot of gallery metadata.
 //!
 //! The first design deliberately avoided downloading a metadata snapshot
-//! (hundreds of megabytes, periodic syncing). artifact's `data.db` is exactly
+//! (hundreds of megabytes, periodic syncing). A published `data.db` is exactly
 //! that snapshot, and when the user already has it, keeping it locally turns
 //! cards into a lookup instead of a 200 KB fetch and makes Korean titles,
 //! artists, series and characters searchable offline.

@@ -1,4 +1,4 @@
-//! Reading artifact's `graph.csv`.
+//! Reading a published `graph.csv`.
 //!
 //! One row per word: `article_id,rank,keyword,score,tf,df,total_pages,
 //! dialogue_count,char_count`. Rows for a work are together and already in

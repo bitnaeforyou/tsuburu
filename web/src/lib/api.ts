@@ -400,7 +400,7 @@ export function phraseScenes(q: string, limit = 25): Promise<SimilarHit[]> {
   return request(`/api/dialogue/phrase?${new URLSearchParams({ q, limit: String(limit) })}`)
 }
 
-// --- keywords, out of artifact's graph.csv ---
+// --- keywords, out of an imported graph.csv ---
 
 export type Keyword = { word: string; score: number }
 

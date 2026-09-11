@@ -15,18 +15,20 @@ English: [README.md](README.md)
 
 ## 왜
 
-[`project-artifact/artifact`](https://github.com/project-artifact/artifact)은 같은 일을
-Docker Compose로 묶인 서비스 일곱 개로 한다. 색인도 직접 만든다. 뭔가 하나
+이 사이트를 오프라인에서 검색하는 보통의 방법은 색인을 직접 만드는 것이다.
+크롤링하고 저장하고 서빙하는 서비스 대여섯 개를 컨테이너로 묶는다. 뭔가 하나
 찾아보려는 사람에게 요구하기에는 큰 장치다.
 
 tsuburu는 **hitomi가 이미 서빙하고 있는 색인을** HTTP 범위 요청으로 몇 킬로바이트씩
-읽는다. 만들 색인도, 맞출 동기화도 없다. artifact이 배포하는 데이터가 있다면
-가져와서 아래의 거의 모든 것이 빨라지고 오프라인에서도 되지만, 검색하고 읽는 데
-필수는 아니다.
+읽는다. 만들 색인도, 맞출 동기화도 없다.
+
+이 사이트의 인식된 텍스트와 메타데이터를 만들어 배포하는 사람들이 있다. 그런
+코퍼스가 있다면 가져와서 아래의 거의 모든 것이 빨라지고 오프라인에서도 되지만,
+검색하고 읽는 데 필수는 아니다.
 
 ## 무엇을 얼마나 먹나
 
-M4 Pro(macOS 26.5, 24 GB), 가정용 회선에서 측정. artifact의 코퍼스·메타 스냅샷·
+M4 Pro(macOS 26.5, 24 GB), 가정용 회선에서 측정. 코퍼스·메타 스냅샷·
 키워드 그래프를 모두 가져온 상태다.
 
 ### 프로그램
@@ -68,7 +70,7 @@ hitomi 검색. 대부분이 네트워크 왕복이다.
 | 인기순 정렬 | 0.7초 |
 | 검색 한 번에 오간 양 | 받음 **5.3 KB**, 보냄 1 KB — 헤더와 TLS 포함 |
 
-artifact 데이터를 가져온 뒤, 로컬에서:
+코퍼스를 가져온 뒤, 로컬에서:
 
 | | |
 |---|---|
@@ -94,7 +96,7 @@ artifact 데이터를 가져온 뒤, 로컬에서:
 |---|---|
 | 텍스트 인식 | **초당 7.4쪽** |
 | 페이지 내려받기 | 1.7 MB/s, 초당 2.5쪽 |
-| artifact 대사 코퍼스 가져오기 | 31초 (대부분 이미 있으면 11초) |
+| 대사 코퍼스 가져오기 | 31초 (대부분 이미 있으면 11초) |
 | 메타데이터 스냅샷 가져오기 | 4분 |
 | 키워드 그래프 가져오기 | 25초 |
 
@@ -140,15 +142,15 @@ tsuburu gallery 4170351          # 갤러리 하나를 살펴본다
 
 작가 페이지는 스냅샷에서 나오므로 `import-meta`를 먼저 돌려야 한다.
 
-## artifact 아티팩트 쓰기
+## 공개된 코퍼스 쓰기
 
-artifact이 배포하는 데이터가 있다면 명령 셋으로 들어가고, 무거운 일의 대부분이
-사라진다.
+이 사이트의 인식된 텍스트·메타데이터 스냅샷·키워드 그래프는 공개돼 있다. 그것들이
+있다면 명령 셋으로 들어가고, 무거운 일의 대부분이 사라진다.
 
 ```
-tsuburu import-artifact   /path/to/llm-search-index   # 인식된 한국어 텍스트, 31초
-tsuburu import-meta     /path/to/artifact/data.db   # 146만 편, 4분
-tsuburu import-keywords /path/to/artifact/graph.csv # 10만 6천 편, 25초
+tsuburu import-artifact  /path/to/llm-search-index  # 인식된 한국어 텍스트, 31초
+tsuburu import-meta      /path/to/data.db           # 146만 편, 4분
+tsuburu import-keywords  /path/to/graph.csv         # 10만 6천 편, 25초
 ```
 
 서버를 먼저 끈다(redb는 한 프로세스만 연다). `import-meta`는 SQLite 파일을
@@ -168,7 +170,7 @@ Windows는 sqlite.org의 `sqlite3.exe`가 `PATH`에 있어야 한다.
 
 ## 무엇에 관한 작품인가
 
-artifact은 `graph.csv`도 배포한다. 인식한 대사에 TF-IDF를 돌려 작품마다 관통하는
+`graph.csv`도 함께 공개돼 있다. 인식한 대사에 TF-IDF를 돌려 작품마다 관통하는
 낱말을 뽑아둔 것이다. 임베딩 인덱스가 2.6 GB인데 이건 수십 MB다.
 
 작품 화면에 그 낱말들이 뜨고, 각각이 그 낱말이 관통하는 다른 작품들로 이어진다.
@@ -199,7 +201,7 @@ hitomi의 색인은 제목과 태그만 안다. 기억나는 대사로 작품을
 
 좁히는 방법 둘:
 
-- **읽은 기록 가져오기.** 브라우저 기록이나 예전 artifact 데이터베이스의 hitomi
+- **읽은 기록 가져오기.** 브라우저 기록이나 예전에 쓰던 데이터베이스의 hitomi
   주소·번호를 붙여 넣으면 다른 것보다 먼저 색인한다.
 - **골라 담기.** 태그·언어·종류로 좁혀 그것만 담는다.
 
@@ -219,7 +221,7 @@ hitomi의 색인은 제목과 태그만 안다. 기억나는 대사로 작품을
 어떤 시리즈 2권의 한 쪽에서 물으면 1권의 같은 장면이 1위, 3권이 2위로 나온다.
 
 이 컴퓨터에서 읽은 구절도 팩이 설정돼 있으면 함께 임베딩해서 가져온 인덱스와
-나란히 훑는다. 그래서 의미 검색과 비슷한 장면이 artifact의 코퍼스뿐 아니라 **내가
+나란히 훑는다. 그래서 의미 검색과 비슷한 장면이 가져온 코퍼스뿐 아니라 **내가
 읽은 작품에도 닿는다.**
 
 ### 의미로 찾기
@@ -237,8 +239,8 @@ llama-server -m Qwen3-Embedding-4B-Q8_0.gguf --embedding --pooling last \
 
 다른 모델은 그럴듯한 벡터를 주고 결과만 쓸모없어진다. 그래서 설정에 **확인**
 버튼이 있다. 색인에 이미 있는 구절을 다시 임베딩해 저장된 벡터와 비교한다.
-0.9 아래면 코퍼스가 나쁜 것처럼 두지 않고 모델이 다르다고 말한다. artifact의 진짜
-인덱스에 맞는 모델을 물리면 1.000이 나오고, 질의 하나가 1~3초 걸리는데 그 대부분이
+0.9 아래면 코퍼스가 나쁜 것처럼 두지 않고 모델이 다르다고 말한다. 그 인덱스를 만든
+모델을 물리면 1.000이 나오고, 질의 하나가 1~3초 걸리는데 그 대부분이
 검색이 아니라 모델이 문구를 읽는 시간이다.
 
 ## 표시 언어
@@ -346,11 +348,11 @@ crates/tsuburu-server   JSON API, 이미지 프록시, 배경 색인기
 crates/tsuburu-store    즐겨찾기·읽은 기록·팔로우한 작가 (redb)
 crates/tsuburu-korean   한국어 검색어 사전
 crates/tsuburu-ocr      트레이트 뒤의 텍스트 인식 (Vision, WinRT, tesseract)
-crates/tsuburu-dialogue 인식된 텍스트, 매칭, 샤드, artifact 가져오기
+crates/tsuburu-dialogue 인식된 텍스트, 매칭, 샤드, 코퍼스 가져오기
 crates/tsuburu-meta     로컬 메타데이터 스냅샷과 그 검색
-crates/tsuburu-embed    artifact 임베딩 위의 최근접 탐색
+crates/tsuburu-embed    가져온 임베딩 인덱스 위의 최근접 탐색
 crates/tsuburu-downloads 디스크에 남긴 페이지, 내용 해시로 공유
-crates/tsuburu-keywords artifact graph.csv에서 온 작품별 낱말
+crates/tsuburu-keywords 가져온 graph.csv에서 온 작품별 낱말
 crates/tsuburu-text     검색 가능한 저장소들이 공유하는 다중 문자 매칭
 crates/tsuburu          CLI와 서버 진입점
 web/                    Svelte 5 + Vite 프론트엔드

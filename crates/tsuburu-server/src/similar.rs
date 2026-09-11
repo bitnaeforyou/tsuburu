@@ -1,4 +1,4 @@
-//! "Scenes like this one", over artifact's embeddings.
+//! "Scenes like this one", over the imported embeddings.
 //!
 //! No model is loaded. The query is a vector already in the index — the one
 //! stored for the passage the user is looking at — so the whole thing is a
@@ -132,7 +132,7 @@ impl Similarity {
 
 /// Passages this machine embedded itself, scored against a query.
 ///
-/// artifact's index is a fixed file: it holds its corpus and nothing read
+/// The imported index is a fixed file: it holds its corpus and nothing read
 /// since. These are kept beside it and scanned linearly, which costs
 /// nothing at the sizes reading produces.
 pub fn near_local(

@@ -15,21 +15,21 @@ press ctrl+c to stop
 
 ## Why
 
-[`project-artifact/artifact`](https://github.com/project-artifact/artifact) covers the
-same ground with a Docker Compose stack of seven services that build their own
-search index. That is a lot of machinery to ask of someone who wants to look
-something up.
+The usual way to search this site offline is to build your own index: a
+container stack of half a dozen services that crawls, stores and serves it.
+That is a lot of machinery to ask of someone who wants to look something up.
 
 tsuburu reads the search index hitomi already serves, over HTTP range requests,
-a few kilobytes at a time. There is nothing to index and nothing to sync. If
-you also have the data artifact publishes, tsuburu will load it and everything
-below gets faster and works offline — but none of it is required to search and
-read.
+a few kilobytes at a time. There is nothing to index and nothing to sync.
+
+Corpora of recognised text and metadata are published for this site by others.
+If you have one, tsuburu loads it and everything below gets faster and works
+offline — but none of it is required to search and read.
 
 ## What it costs
 
 Measured on an M4 Pro (macOS 26.5, 24 GB) over a residential connection, with
-artifact's corpus, metadata snapshot and keyword graph all imported.
+a corpus, a metadata snapshot and a keyword graph all imported.
 
 ### Footprint
 
@@ -71,7 +71,7 @@ Searching hitomi, which is mostly network latency:
 | Sorted by popularity | 0.7 s |
 | Transferred, per search | **5.3 KB** in, 1 KB out — headers and TLS included |
 
-Locally, once artifact's data is imported:
+Locally, once a corpus is imported:
 
 | | |
 |---|---|
@@ -97,7 +97,7 @@ Reading and indexing:
 |---|---|
 | Text recognition | **7.4 pages/s** |
 | Downloading pages | 1.7 MB/s, 2.5 pages/s |
-| Importing artifact's dialogue corpus | 31 s (11 s when most of it is already there) |
+| Importing a dialogue corpus | 31 s (11 s when most of it is already there) |
 | Importing the metadata snapshot | 4 min |
 | Importing the keyword graph | 25 s |
 
@@ -147,15 +147,16 @@ Favorites tab lists the ones you follow with how much each has.
 
 Artist pages come from the snapshot, so they need `import-meta` to have run.
 
-## Using artifact's artifacts
+## Using a published corpus
 
-If you have the data artifact publishes, three commands load it and most of the
-heavy work disappears:
+Recognised text, a metadata snapshot and a keyword graph are published for
+this site. If you have them, three commands load them and most of the heavy
+work disappears:
 
 ```
-tsuburu import-artifact   /path/to/llm-search-index   # recognised Korean text, 31 s
-tsuburu import-meta     /path/to/artifact/data.db   # 1.46M galleries, 4 min
-tsuburu import-keywords /path/to/artifact/graph.csv # 106,000 works, 25 s
+tsuburu import-artifact  /path/to/llm-search-index  # recognised Korean text, 31 s
+tsuburu import-meta      /path/to/data.db           # 1.46M galleries, 4 min
+tsuburu import-keywords  /path/to/graph.csv         # 106,000 works, 25 s
 ```
 
 Stop the server first; each database is opened by one process at a time.
@@ -177,7 +178,7 @@ embedding index is read where it sits, so keep the directory where it is.
 
 ## What a work is about
 
-artifact also publishes `graph.csv`: the words it found running through each
+A keyword graph is published alongside: the words found running through each
 work, scored by TF-IDF over the dialogue it recognised. A few tens of
 megabytes, against the embedding index's 2.6 GB.
 
@@ -215,7 +216,7 @@ it means "not there".
 Two shortcuts narrow it:
 
 - **Import history.** Paste hitomi URLs or ids from your browser history or an
-  old artifact database; they are indexed before anything else.
+  older database; they are indexed before anything else.
 - **Hunt.** Narrow with tags, language and type, and queue only those.
 
 ### Sharing what has been read
@@ -227,7 +228,7 @@ export can leave out the galleries you chose to read yourself.
 
 ### Similar scenes
 
-The artifact also carries an embedding per passage, produced by a 4B model.
+The corpus also carries an embedding per passage, produced by a 4B model.
 Searching it by a phrase would need that model; searching it by a passage
 already in the index needs nothing at all. Each dialogue result has a
 **Similar scenes** button that takes the vector stored for that passage and
@@ -238,7 +239,7 @@ scene in the first volume, and the third volume after that.
 
 Passages read on this machine are embedded too, when a pack is configured, and
 scanned beside the imported index — so meaning search and Similar scenes reach
-the works you have read, not just artifact's corpus.
+the works you have read, not just the imported corpus.
 
 ### Searching by meaning
 
@@ -258,7 +259,7 @@ A different model answers with perfectly plausible vectors and useless
 results, so the setting has a **Check** button: it embeds a passage that is
 already in the index and compares the answer with the vector stored for it.
 Anything below 0.9 is reported as the wrong model rather than left looking
-like a bad corpus. Against artifact's own index the right model scores 1.000,
+like a bad corpus. Against the index it was made for the right model scores 1.000,
 and a query takes a second or two — nearly all of it the model reading the
 phrase, not the search.
 
@@ -380,11 +381,11 @@ crates/tsuburu-server   JSON API, image proxy, background indexer
 crates/tsuburu-store    favorites, reading history, followed artists (redb)
 crates/tsuburu-korean   Korean search-term dictionary
 crates/tsuburu-ocr      text recognition behind a trait (Vision, WinRT, tesseract)
-crates/tsuburu-dialogue recognised text, matching, shards, artifact import
+crates/tsuburu-dialogue recognised text, matching, shards, corpus import
 crates/tsuburu-meta     local metadata snapshot and its search
-crates/tsuburu-embed    nearest-neighbour search over artifact's embeddings
+crates/tsuburu-embed    nearest-neighbour search over an imported embedding index
 crates/tsuburu-downloads pages kept on disk, shared by content hash
-crates/tsuburu-keywords what each work is about, from artifact's graph.csv
+crates/tsuburu-keywords what each work is about, from an imported graph.csv
 crates/tsuburu-text     multi-script matching shared by the searchable stores
 crates/tsuburu          CLI and server entry point
 web/                    Svelte 5 + Vite frontend
