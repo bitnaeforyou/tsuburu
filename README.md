@@ -1,361 +1,306 @@
+<div align="center">
+
 # tsuburu
 
-A lightweight desktop client for searching and reading hitomi.la.
+**A lightweight desktop client for searching and reading hitomi.la.**
 
-Download one file, run it, and a browser opens. No Docker, no runtime to
-install, no initial index download.
+One 3.9 MB file. No Docker, no runtime to install, no index to download.
 
-```
+[한국어](README.ko.md) · [Releases](../../releases/latest) · MIT
+
+</div>
+
+```console
 $ tsuburu
 tsuburu is running at http://127.0.0.1:8420/
 press ctrl+c to stop
 ```
 
-한국어 문서: [README.ko.md](README.ko.md)
+- **Search** hitomi's own index, in Korean or English — nothing is built or synced
+- **Read** at full resolution, and **keep** works or single pages for offline
+- **Find a work by a line you remember** — pages you open are recognised as they arrive
+- **Follow artists**, keep favorites, resume where you stopped
+- With a published corpus: **1.46M titles offline**, **what a work is about**, **scenes like this one**, and **search by meaning**
+- Interface in **한국어 / English / 日本語**
 
-## Why
+---
 
-The usual way to search this site offline is to build your own index: a
-container stack of half a dozen services that crawls, stores and serves it.
-That is a lot of machinery to ask of someone who wants to look something up.
+## Install
 
-tsuburu reads the search index hitomi already serves, over HTTP range requests,
-a few kilobytes at a time. There is nothing to index and nothing to sync.
+Download the archive for your machine from the [latest release](../../releases/latest),
+unpack it, run the one file inside.
 
-Corpora of recognised text and metadata are published for this site by others.
-If you have one, tsuburu loads it and everything below gets faster and works
-offline — but none of it is required to search and read.
+<details open>
+<summary><b>macOS</b></summary>
 
-## What it costs
+The release is unsigned, so Gatekeeper stops it the first time.
 
-Measured on an M4 Pro (macOS 26.5, 24 GB) over a residential connection, with
-a corpus, a metadata snapshot and a keyword graph all imported.
-
-### Footprint
-
-| | |
-|---|---|
-| Binary | **3.9 MB** (the frontend is inside it) |
-| Frontend bundle | 136 kB of JavaScript, 14 kB of CSS — 47 kB gzipped |
-| Start to first response | **0.4 s** |
-| Memory, idle | **22 MB** |
-| Memory, while searching the dialogue corpus | ~540 MB |
-| Memory, with the embedding index open | 2.5 GB — a memory-mapped file, reclaimable |
-
-Nothing is loaded until it is used. The 22 MB is the whole program with five
-databases open; the numbers above it are what a particular search touches
-while it runs.
-
-### Disk
-
-Only what you choose to import:
-
-| | |
-|---|---|
-| Nothing imported | ~2 MB (favorites, history, settings) |
-| Recognised dialogue, 108,340 works | 1.8 GB |
-| Metadata snapshot, 1,464,390 works | 1.1 GB |
-| Keyword graph, 106,155 works | 174 MB |
-| Embedding index, 2,537,826 passages | 2.6 GB — read where it sits, never copied |
-| Downloaded pages | what you keep; ~15 MB for a 23-page work |
-
-### Speed
-
-Searching hitomi, which is mostly network latency:
-
-| | |
-|---|---|
-| A term not searched before | **1.6 s** |
-| The same search again | **0.7 ms** |
-| Two terms intersected | 3.8 s |
-| Sorted by popularity | 0.7 s |
-| Transferred, per search | **5.3 KB** in, 1 KB out — headers and TLS included |
-
-Locally, once a corpus is imported:
-
-| | |
-|---|---|
-| Title, artist, series or character | **0.19 s** over 1.46M works |
-| Tag suggestion while typing | 0.8 ms |
-| One artist's works, with a count per language | 47 ms |
-| What a work is about | 1 ms |
-| Works about the same things | 2–18 ms |
-| Every work a word runs through | 1 ms |
-
-Dialogue, over 108,340 works and 1.5 GB of recognised text:
-
-| | |
-|---|---|
-| A line you remember, exact | **1.2 s** |
-| The same, allowing for misremembering | 0.7 s |
-| Scenes like this one | 4.3 s first, **0.20 s** after |
-| By meaning, with a pack running | 1.5–3.4 s — nearly all of it the model reading the phrase |
-
-Reading and indexing:
-
-| | |
-|---|---|
-| Text recognition | **7.4 pages/s** |
-| Downloading pages | 1.7 MB/s, 2.5 pages/s |
-| Importing a dialogue corpus | 31 s (11 s when most of it is already there) |
-| Importing the metadata snapshot | 4 min |
-| Importing the keyword graph | 25 s |
-
-Most of a hitomi search is latency, not computation: the index is a B-tree six
-or seven levels deep and each level is a dependent round trip. tsuburu
-prefetches the upper levels in the background at startup, which removes about
-70 % of the cost. Result lists are read only as far as the current page needs.
-
-## Getting started
-
-Download the archive for your machine from the
-[latest release](https://github.com/byeolki/tsuburu/releases/latest), unpack
-it, and run the one file inside. Nothing is installed and nothing else is
-needed.
-
-**macOS** — the release is unsigned, so Gatekeeper stops it the first time.
-
-```
-tar xzf tsuburu-aarch64-apple-darwin.tar.gz    # or x86_64 on an Intel Mac
-xattr -d com.apple.quarantine tsuburu          # or: right-click → Open, once
+```console
+tar xzf tsuburu-aarch64-apple-darwin.tar.gz   # x86_64 on an Intel Mac
+xattr -d com.apple.quarantine tsuburu         # or right-click → Open, once
 ./tsuburu
 ```
+</details>
 
-**Windows** — unpack the `.tar.gz` (Explorer handles it, or `tar -xf` in a
-terminal) and run `tsuburu.exe`. SmartScreen warns about an unknown
-publisher: *More info → Run anyway*.
+<details>
+<summary><b>Windows</b></summary>
 
-**Linux**
+Unpack the archive (Explorer handles `.tar.gz`, or `tar -xf` in a terminal) and
+run `tsuburu.exe`. SmartScreen warns about an unknown publisher —
+*More info → Run anyway*.
+</details>
 
-```
+<details>
+<summary><b>Linux</b></summary>
+
+```console
 tar xzf tsuburu-x86_64-unknown-linux-gnu.tar.gz
 chmod +x tsuburu
 ./tsuburu
 ```
 
-A browser opens at `http://127.0.0.1:8420/`. If it does not, open that
-address yourself. Confirm you are an adult once and the search screen appears.
+For dialogue search, install the two tools it calls:
 
-### What works immediately
+```console
+sudo apt install tesseract-ocr tesseract-ocr-kor ffmpeg
+```
+</details>
 
-Everything below needs nothing beyond the file you just ran:
+A browser opens at `http://127.0.0.1:8420/`. Confirm you are an adult once and
+the search screen appears.
 
-- **Search** hitomi's tags, in Korean or English. `-term` excludes.
-- **Read** any work, at full resolution, with the arrow keys.
-- **Favorites** and **reading history**, kept on this machine.
-- **Download** a work or a single page and read it offline afterwards.
-- **Dialogue search over what you have read.** Opening a work recognises its
-  pages as they arrive — no extra download — so a work you have read becomes
-  findable by a line you remember. This is on by default and needs no setup on
-  macOS or Windows; on Linux install `tesseract-ocr` and `ffmpeg` first.
+### Out of the box
 
-### What you have to bring
+Nothing beyond the file you just ran:
 
-Three optional files make the program much more capable. They are large, they
-are not distributed with tsuburu, and everything above keeps working without
-them.
+| | What you get |
+| :-- | :-- |
+| **Search** | hitomi's tags, Korean or English. `-term` excludes. |
+| **Read** | full resolution, arrow keys, resumes where you stopped |
+| **Keep** | a work or a single page, then read it with hitomi unreachable |
+| **Remember** | favorites and history, on this machine only |
+| **Dialogue search** | over every work you open — see [below](#dialogue-search) |
+
+### What you bring
+
+Three files make it much more capable. They are large, they are not shipped
+with tsuburu, and everything above works without them. Corpora of this kind
+are published for this site by others; tsuburu reads them.
 
 | To get | You need | Size | Import |
-|---|---|---|---|
-| Dialogue search over a large corpus without reading it yourself | a recognised-text corpus (`llm-search-index`) | 3.9 GB | `tsuburu import-artifact <dir>` |
-| Titles, artists and characters searchable offline | a metadata snapshot (`data.db`) | 2.2 GB | `tsuburu import-meta <file>` |
-| What a work is about, and works about the same things | a keyword graph (`graph.csv`) | 190 MB | `tsuburu import-keywords <file>` |
+| :-- | :-- | --: | :-- |
+| Dialogue search without reading the works yourself | recognised text (`llm-search-index`) | 3.9 GB | `tsuburu import-artifact <dir>` |
+| Titles, artists and characters offline | metadata (`data.db`) | 2.2 GB | `tsuburu import-meta <file>` |
+| What a work is about, and works about the same things | keywords (`graph.csv`) | 190 MB | `tsuburu import-keywords <file>` |
 
-Stop the server before importing; each database is opened by one process at a
-time. Corpora of this kind are published for this site by others — tsuburu
-reads them, it does not ship them.
+Stop the server first — one process opens a database at a time. The corpus
+directory is read where it sits and never copied, so keep it wherever you
+like, including an external disk.
 
-**Searching by meaning** asks for one more thing: the embedding model that
-built the index, which is a separate multi-gigabyte download and runs as your
-own local server. It stays hidden until you set it up. See
-[Searching by meaning](#searching-by-meaning).
+**Searching by meaning** needs one more thing: the embedding model that built
+the index. It is a separate multi-gigabyte download, runs as your own local
+server, and the mode stays hidden until you set it up.
 
 ### Where things are kept
 
-| | |
-|---|---|
+| Platform | Path |
+| :-- | :-- |
 | macOS | `~/Library/Application Support/la.tsuburu.tsuburu/` |
 | Linux | `~/.local/share/tsuburu/` |
 | Windows | `%APPDATA%\tsuburu\tsuburu\data\` |
 
-Deleting that directory resets everything and loses nothing but what you
-imported and read. The imported corpus directory is read where it sits and
-never copied, so it can live on an external disk — point `import-artifact` at
-wherever you keep it.
+Deleting it resets everything and loses only what you imported and read.
 
-## Usage
+## Searching
 
+One box asks every source at once — hitomi's tags, your local titles, the
+recognised dialogue — and shows each in its own section as it arrives.
+
+They are not merged into one list. A tag intersection and a fuzzy line match
+cannot be ranked against each other, and one list would put an arbitrary order
+on the answer. Each section links to itself for the full results.
+
+Terms combine with AND; `-term` excludes. From the terminal:
+
+```console
+tsuburu search "glasses -school"   # search
+tsuburu gallery 4170351            # inspect one work
+tsuburu serve --port 9000          # pick a port (0 takes a free one)
+tsuburu serve --no-open            # do not launch a browser
 ```
-tsuburu                          # start the server and open a browser
-tsuburu serve --port 9000        # pick a port (0 chooses a free one)
-tsuburu serve --no-open          # do not launch a browser
-tsuburu search "glasses -school" # search from the terminal
-tsuburu gallery 4170351          # inspect one gallery
-```
-
-Search terms are combined with AND. Prefix a term with `-` to exclude it; quote
-the whole query so your shell does not read it as a flag.
-
-In the browser one box asks every source at once — hitomi's tags, the local
-titles, the recognised dialogue — and shows each in its own section as it
-arrives. They are not merged into one list: a tag intersection and a fuzzy
-line match cannot be ranked against each other, and pretending otherwise
-would put an arbitrary order on the answer. Each section links to itself for
-the full list.
 
 ## Reading offline
 
-Any work, or any single page, can be kept on disk. The reader has
-**Download** and **Download this page**; the Downloads tab lists what is here,
-how far each work got, and lets a work be finished or deleted.
+The reader has **Download** and **Download this page**; the Downloads tab shows
+what is here and how far each work got.
 
 Pages are stored under the hash hitomi already gives them, so the same page in
-two re-uploads is stored once, and deleting a work leaves the pages another
-one still needs. Reading a downloaded work does not touch the network at all:
-the image proxy answers from disk first, and if the gallery's metadata cannot
-be fetched, the page list on disk is enough to open it.
-
-## Artists
-
-An artist's name in a gallery links to a page of everything they drew — newest
-first, out of the metadata snapshot, with a count per language so you can stay
-in the one you read. **Follow** keeps a name next to your favorites, and the
-Favorites tab lists the ones you follow with how much each has.
-
-Artist pages come from the snapshot, so they need `import-meta` to have run.
-
-## Using a published corpus
-
-Recognised text, a metadata snapshot and a keyword graph are published for
-this site. If you have them, three commands load them and most of the heavy
-work disappears:
-
-```
-tsuburu import-artifact  /path/to/llm-search-index  # recognised Korean text, 31 s
-tsuburu import-meta      /path/to/data.db           # 1.46M galleries, 4 min
-tsuburu import-keywords  /path/to/graph.csv         # 106,000 works, 25 s
-```
-
-Stop the server first; each database is opened by one process at a time.
-`import-meta` reads the SQLite file through the local `sqlite3` command: macOS
-ships it, Linux has it in a package, and on Windows `sqlite3.exe` from
-sqlite.org needs to be on `PATH`.
-
-With the metadata snapshot loaded, cards for galleries it covers never touch
-the network, and the search bar gains a **local titles & artists** scope that
-finds Korean titles, artists, series and characters offline. The snapshot
-stops at the day it was taken, but galleries fetched from hitomi afterwards
-are filed into it as they are seen, so it keeps up with what you browse.
-
-With the dialogue corpus loaded, every Korean gallery up to mid-2026 is
-searchable by a remembered line, with no downloading or recognition.
-
-The `llm-search-index` directory is not copied into tsuburu's own storage: the
-embedding index is read where it sits, so keep the directory where it is.
-
-## What a work is about
-
-A keyword graph is published alongside: the words found running through each
-work, scored by TF-IDF over the dialogue it recognised. A few tens of
-megabytes, against the embedding index's 2.6 GB.
-
-A work shows the words it is about, each a link to everything else those words
-run through, and an **About the same things** row underneath the reader that
-names what the two have in common. It is coarser than the embeddings — shared
-words, not shared meaning — but it costs almost nothing to keep and answers
-without a model.
-
-Asked from the second volume of a series, it answers with the first: they
-share four character names. Words held by more than 20,000 works are dropped
-on import — they cost the most to store and say the least — and searching for
-one says so, rather than implying the word appears nowhere.
+two re-uploads is stored once, and deleting a work leaves the pages another one
+still needs. Reading a downloaded work never touches the network: the image
+proxy answers from disk, and if the metadata cannot be fetched, the page list
+on disk is enough to open it.
 
 ## Dialogue search
 
-hitomi's index only knows titles and tags. To find a work by a line you
-remember, tsuburu has to read the pages itself: run the operating system's
-text recognition over them and keep the text. Images are discarded as soon as
-they are read.
+hitomi's index knows titles and tags. To find a work by a line you remember,
+the pages have to be read — recognised by the operating system, and the text
+kept. Images are discarded as soon as they are read.
+
+### As you read
 
 **Works you open are read as you go.** Their pages are already coming down to
 be displayed, so the image proxy hands what it is carrying to recognition
-instead of fetching it again: nothing extra is downloaded, and a work you have
-actually read becomes findable by a line from it. Pages that already have text
-are skipped, so re-reading costs nothing. The Dialogue tab lists what this has
-collected, with its size, and deletes any of it — or all of it — on request.
+instead of fetching it again. Nothing extra is downloaded, and a work you have
+actually read becomes findable by a line from it.
 
-The **background sweep** is a different thing and is **off by default**: it
-downloads galleries you have not opened. Turn it on from the Dialogue tab and
-it indexes while the app is open, most popular Korean galleries first. The tab
-always shows how much is covered; a miss means "not indexed yet" as often as
-it means "not there".
+Pages that already have text are skipped, so re-reading costs nothing. The
+Dialogue tab lists what this collected, with its size, and deletes any of it —
+or all of it — on request.
 
-Two shortcuts narrow it:
+### The background sweep
 
-- **Import history.** Paste hitomi URLs or ids from your browser history or an
-  older database; they are indexed before anything else.
-- **Hunt.** Narrow with tags, language and type, and queue only those.
+A different thing, and **off by default**: it downloads galleries you have not
+opened. Turn it on from the Dialogue tab and it works while the app is open,
+most popular Korean galleries first. Two shortcuts narrow it:
 
-### Sharing what has been read
-
-The text is the expensive part and it is small, so it can travel. The
-Dialogue tab exports what a machine has read as `.tsd` shard files and imports
-other people's; files are checked against the hash in their name, and an
-export can leave out the galleries you chose to read yourself.
+- **Import history** — paste hitomi URLs or ids from your browser history; they
+  are indexed before anything else.
+- **Hunt** — narrow by tags, language and type, and queue only those.
 
 ### Similar scenes
 
-The corpus also carries an embedding per passage, produced by a 4B model.
-Searching it by a phrase would need that model; searching it by a passage
-already in the index needs nothing at all. Each dialogue result has a
-**Similar scenes** button that takes the vector stored for that passage and
-finds the nearest others, which answers "what else reads like this".
+An imported corpus carries an embedding per passage, produced by a 4B model.
+Searching it by a phrase needs that model; searching it by a passage already in
+the index needs nothing at all. Each result has a **Similar scenes** button.
 
 Asked from a page of the second volume of a series, it answers with the same
-scene in the first volume, and the third volume after that.
+scene in the first volume, and the third volume after that. First query 4.3 s
+while the index comes off disk, 0.20 s after.
 
-Passages read on this machine are embedded too, when a pack is configured, and
-scanned beside the imported index — so meaning search and Similar scenes reach
-the works you have read, not just the imported corpus.
+Passages read on this machine are embedded too when a pack is configured, and
+scanned beside the imported index, so this reaches the works you have read.
 
 ### Searching by meaning
 
-Searching those same vectors by a *phrase* rather than by a passage needs the
-model that made them, which is a multi-gigabyte download. tsuburu does not
-bundle it and does not need it: the phrase mode stays hidden until you point
-the Dialogue tab's pack setting at a server that speaks the OpenAI embeddings
-API — llama.cpp, Ollama, LM Studio or anything else — running
-`Qwen3-Embedding-4B` or a model whose vectors it shares.
+Point the Dialogue tab's pack setting at a server speaking the OpenAI
+embeddings API — llama.cpp, Ollama, LM Studio — running `Qwen3-Embedding-4B`
+or a model whose vectors it shares.
 
-```
+```console
 llama-server -m Qwen3-Embedding-4B-Q8_0.gguf --embedding --pooling last \
              -c 4096 -ub 4096 --port 8080
 ```
 
-A different model answers with perfectly plausible vectors and useless
-results, so the setting has a **Check** button: it embeds a passage that is
-already in the index and compares the answer with the vector stored for it.
-Anything below 0.9 is reported as the wrong model rather than left looking
-like a bad corpus. Against the index it was made for the right model scores 1.000,
-and a query takes a second or two — nearly all of it the model reading the
-phrase, not the search.
+A different model answers with plausible vectors and useless results, so the
+setting has a **Check** button: it embeds a passage already in the index and
+compares. Below 0.9 it reports the wrong model rather than leaving it to look
+like a bad corpus. The right model scores 1.000.
+
+### Sharing what has been read
+
+The text is the expensive part and it is small, so it can travel. The Dialogue
+tab exports what this machine recognised as `.tsd` shards and imports other
+people's; files are checked against the hash in their name.
+
+Text that came from an imported corpus is never included — a shard is your own
+reading, and a corpus is the importer's to fetch.
+
+## What a work is about
+
+A keyword graph gives the words running through each work, scored by TF-IDF
+over its dialogue. A few tens of megabytes against the embedding index's 2.6 GB.
+
+A work shows the words it is about, each a link to everything else those words
+run through, and an **About the same things** row under the reader naming what
+the two have in common. Coarser than the embeddings — shared words, not shared
+meaning — but it costs almost nothing and answers without a model.
+
+Asked from the second volume of a series it answers with the first: they share
+four character names. Words held by more than 20,000 works are dropped on
+import, and searching for one says so rather than implying it appears nowhere.
+
+## Artists
+
+An artist's name in a work links to everything they drew — newest first, with a
+count per language so you can stay in the one you read. **Follow** keeps a name
+beside your favorites. Needs the metadata snapshot.
 
 ## Interface language
 
-The interface is in Korean, English or Japanese. It follows the browser on
-first run and remembers the choice after that; the switch sits at the end of
-the navigation bar and beside the reader's own header.
+한국어, English or 日本語. It follows the browser on first run and remembers the
+choice; the switch sits at the end of the navigation bar and beside the
+reader's header.
 
-Only the wording around the content is translated. Titles, tags and dialogue
-stay in whatever language hitomi holds them in. Numbers are grouped the way
-the chosen language does, not the browser. An error keeps its English
-diagnostic, but the sentence above it — the part that says what to do about
-it — is translated, and the failures a reader can act on are named by the
-server so that sentence can be specific.
+Only the wording is translated — titles, tags and dialogue stay in whatever
+language hitomi holds them in. Numbers are grouped the way the chosen language
+does. An error keeps its English diagnostic, but the sentence above it, the
+part that says what to do, is translated.
 
 Adding a language is one file under `web/src/lib/locales/`, typed against the
-English one so a missing message is a build error rather than an English word
-on a translated screen.
+English one so a missing message is a build error.
+
+## What it costs
+
+Measured on an M4 Pro (macOS 26.5, 24 GB) over a residential connection, with
+all three files imported.
+
+### Footprint
+
+| What | How much |
+| :-- | --: |
+| Binary, frontend included | **3.9 MB** |
+| Start to first response | **0.4 s** |
+| Memory, idle | **22 MB** |
+| Memory, searching the dialogue corpus | ~540 MB |
+| Memory, with the embedding index open | 2.5 GB (mapped file, reclaimable) |
+
+### Disk
+
+| Imported | Size |
+| :-- | --: |
+| Nothing imported | ~2 MB |
+| Recognised dialogue, 108,340 works | 1.8 GB |
+| Metadata, 1,464,390 works | 1.1 GB |
+| Keywords, 106,155 works | 174 MB |
+| Embedding index, 2,537,826 passages | 2.6 GB, read in place |
+
+### Speed
+
+| Searching hitomi | |
+| :-- | --: |
+| A term not searched before | **1.6 s** |
+| The same search again | **0.7 ms** |
+| Two terms intersected | 3.8 s |
+| Sorted by popularity | 0.7 s |
+| Transferred per search | **5.3 KB** in, 1 KB out |
+
+| Locally | |
+| :-- | --: |
+| Title, artist, series or character over 1.46M works | **0.19 s** |
+| Tag suggestion while typing | 0.8 ms |
+| One artist's works with a count per language | 47 ms |
+| What a work is about | 1 ms |
+| Works about the same things | 2–18 ms |
+| Every work a word runs through | 1 ms |
+
+| Dialogue, over 108,340 works | |
+| :-- | --: |
+| A line you remember, exact | **1.2 s** |
+| The same, allowing for misremembering | 0.7 s |
+| Scenes like this one | 4.3 s first, **0.20 s** after |
+| By meaning, with a pack running | 1.5–3.4 s, nearly all of it the model |
+
+| Reading and indexing | |
+| :-- | --: |
+| Text recognition | **7.4 pages/s** |
+| Downloading pages | 1.7 MB/s, 2.5 pages/s |
+| Importing a dialogue corpus | 31 s |
+| Importing the metadata | 4 min |
+| Importing the keyword graph | 25 s |
+
+Most of a hitomi search is latency, not computation: the index is a B-tree six
+or seven levels deep and each level is a dependent round trip. tsuburu
+prefetches the upper levels at startup, which removes about 70 % of the cost.
 
 ## Platforms
 
@@ -363,103 +308,83 @@ Searching, reading, favorites, history, downloads and the imports work
 everywhere. Text recognition differs, because tsuburu ships no model and calls
 whatever the machine can already reach:
 
-| | Recognition | Decoding |
-|---|---|---|
+| Platform | Recognition | Decoding |
+| :-- | :-- | :-- |
 | macOS | Vision | ImageIO |
 | Windows | Windows.Media.Ocr | WIC — AVIF needs the free AV1 Video Extension |
 | Linux, other Unix | `tesseract` | `ffmpeg`, ImageMagick or `avifdec` |
 
-The first two come with the operating system. Linux has neither, so tsuburu
-calls two tools the distribution packages — the same arrangement `import-meta`
-uses for `sqlite3`:
+The first two come with the operating system. A decoder has to sit in front of
+tesseract because hitomi serves AVIF, which leptonica cannot read. When either
+is missing the Dialogue tab says which one.
 
-```
-sudo apt install tesseract-ocr tesseract-ocr-kor ffmpeg
-```
+Recognition is not equally good everywhere: against Vision's reading of a
+Korean page, tesseract found 7 of the 8 words — enough for matching, which
+ignores spacing inside Hangul and scores fuzzily, but noisier line by line.
 
-A decoder has to sit in front of tesseract because hitomi serves AVIF, which
-leptonica cannot read. When either is absent the Dialogue tab says which one,
-rather than reporting itself broken; an imported corpus stays searchable
-either way.
+### Matching across scripts
 
-Recognition is not equally good everywhere. Measured against Vision's reading
-of a Korean page, tesseract found 7 of the 8 words Vision did — enough for
-matching, which ignores spacing inside Hangul and scores fuzzily, but noisier
-line by line.
-
-## Matching across scripts
-
-Titles and dialogue are matched through a shared encoding that covers Hangul,
-Latin and everything else, so a Japanese title or a Cyrillic line matches the
-way a Korean one does — spacing is ignored inside Hangul and respected between
-Latin words.
-
-Recognition is told which script to expect, because asking for all of them at
-once costs accuracy. A work is read in its own language, and the Dialogue
-tab's language setting picks the corpus the background sweep goes through.
+Titles and dialogue are matched through one encoding covering Hangul, Latin and
+everything else, so a Japanese title or a Cyrillic line matches the way a
+Korean one does. Spacing is ignored inside Hangul and respected between Latin
+words. A work is read in its own language.
 
 ## Building
 
-Requires Rust 1.90+ and Node 20+.
+Rust 1.90+, Node 20+.
 
-```
+```console
 cd web && npm install && npm run build && cd ..
 cargo build --release
 ```
 
-The frontend is embedded into the binary at compile time, so the release
-artifact is a single file. `web/dist` is not committed; a build that skips the
-frontend step still compiles and then says the assets are missing, rather than
-serving a blank page.
+The frontend is embedded at compile time, so the release is a single file.
+`web/dist` is not committed; a build that skips the frontend still compiles and
+then says the assets are missing.
 
-## Testing
-
-```
-cargo test --workspace          # offline; uses recorded response fixtures
+```console
+cargo test --workspace                     # offline, against recorded bytes
 cargo test -p tsuburu-fetch -- --ignored   # hits the live site
 ```
 
 The offline suite parses real captured bytes, so it verifies the actual format
-rather than an idealised one. The live suite is what tells you the site has
-changed.
+rather than an idealised one. The live suite is what tells you the site changed.
 
 ## When it breaks
 
 It will. hitomi's index format is undocumented and its domain has already moved
-once (`ltn.hitomi.la` no longer resolves). tsuburu checks what it reads and, when
-the format is not what it expects, says the site has changed and that an update
-is needed — rather than showing wrong results or an empty screen.
+once. tsuburu checks what it reads and, when the format is not what it expects,
+says the site has changed and an update is needed — rather than showing wrong
+results or an empty screen.
 
-All knowledge of hitomi's formats lives in the `tsuburu-hitomi` crate. That is
-the only place a fix has to go.
+All knowledge of hitomi's formats lives in `tsuburu-hitomi`. That is the only
+place a fix has to go.
 
 ## Notes
 
 tsuburu runs entirely on your own machine. It does not host or redistribute
-content; it relays only the requests you make, and limits how many it makes at
-once. The site it searches contains adult material and the application is
-intended for adults.
+content; it relays only the requests you make, and limits how many at once. The
+site it searches contains adult material and the application is for adults.
 
-Stopping it with Ctrl-C or a TERM closes the databases. Killing it outright
-leaves them to be repaired on the next start, which on a full corpus costs
-half a minute and two gigabytes.
+Stopping with Ctrl-C or a TERM closes the databases. Killing it outright leaves
+them to be repaired on the next start — on a full corpus, half a minute.
 
 ## Layout
 
 ```
-crates/tsuburu-hitomi   hitomi's formats: index, search, metadata, image URLs
-crates/tsuburu-fetch    HTTP client, range requests, node cache
-crates/tsuburu-server   JSON API, image proxy, background indexer
-crates/tsuburu-store    favorites, reading history, followed artists (redb)
-crates/tsuburu-korean   Korean search-term dictionary
-crates/tsuburu-ocr      text recognition behind a trait (Vision, WinRT, tesseract)
-crates/tsuburu-dialogue recognised text, matching, shards, corpus import
-crates/tsuburu-meta     local metadata snapshot and its search
-crates/tsuburu-embed    nearest-neighbour search over an imported embedding index
-crates/tsuburu-downloads pages kept on disk, shared by content hash
-crates/tsuburu-keywords what each work is about, from an imported graph.csv
-crates/tsuburu-text     multi-script matching shared by the searchable stores
-crates/tsuburu          CLI and server entry point
-web/                    Svelte 5 + Vite frontend
-docs/superpowers/       design specs and implementation plans
+crates/tsuburu-hitomi     hitomi's formats: index, search, metadata, image URLs
+crates/tsuburu-fetch      HTTP client, range requests, node cache
+crates/tsuburu-server     JSON API, image proxy, background indexer
+crates/tsuburu-store      favorites, history, followed artists
+crates/tsuburu-korean     Korean search-term dictionary
+crates/tsuburu-ocr        recognition behind a trait: Vision, WinRT, tesseract
+crates/tsuburu-dialogue   recognised text, matching, shards, corpus import
+crates/tsuburu-meta       local metadata snapshot and its search
+crates/tsuburu-embed      nearest-neighbour search over an embedding index
+crates/tsuburu-downloads  pages kept on disk, shared by content hash
+crates/tsuburu-keywords   what each work is about
+crates/tsuburu-text       multi-script matching shared by the stores
+crates/tsuburu            CLI and server entry point
+web/                      Svelte 5 + Vite frontend
+docs/superpowers/         design specs and implementation plans
 ```
