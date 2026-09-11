@@ -28,44 +28,24 @@ press ctrl+c to stop
 
 ## 설치
 
-[최신 릴리스](../../releases/latest)에서 자기 기계에 맞는 압축을 받아 풀고,
-안에 든 파일 하나를 실행하면 됩니다.
+설치되는 것은 없습니다. 받아서 열고 실행하면 끝입니다. 압축 안에 프로그램과
+`START-HERE.txt`(한국어·영어)가 같이 들어 있습니다.
 
-<details open>
-<summary><b>macOS</b></summary>
+| 쓰는 컴퓨터 | [최신 릴리스](../../releases/latest)에서 받을 것 | 그다음 |
+| :-- | :-- | :-- |
+| Windows | `…windows-msvc.zip` | **tsuburu.exe** 더블클릭 |
+| Mac, M1 이상 | `…aarch64-apple-darwin.zip` | **Start tsuburu.command** 더블클릭 |
+| Mac, 인텔 | `…x86_64-apple-darwin.zip` | **Start tsuburu.command** 더블클릭 |
+| Linux | `…linux-gnu.tar.gz` | **start.sh** 실행 |
 
-서명이 없어서 처음에는 Gatekeeper가 막습니다.
+서명이 없는 빌드라 각 운영체제가 **처음 한 번만** 경고합니다.
 
-```console
-tar xzf tsuburu-aarch64-apple-darwin.tar.gz   # 인텔 맥이면 x86_64
-xattr -d com.apple.quarantine tsuburu         # 또는 우클릭 → 열기, 한 번만
-./tsuburu
-```
-</details>
-
-<details>
-<summary><b>Windows</b></summary>
-
-압축을 풀고(탐색기가 `.tar.gz`를 처리합니다, 터미널이면 `tar -xf`)
-`tsuburu.exe`를 실행합니다. SmartScreen이 알 수 없는 게시자라고 경고하면
-*추가 정보 → 실행*.
-</details>
-
-<details>
-<summary><b>Linux</b></summary>
-
-```console
-tar xzf tsuburu-x86_64-unknown-linux-gnu.tar.gz
-chmod +x tsuburu
-./tsuburu
-```
-
-대사 검색을 쓰려면 tsuburu가 부르는 도구 두 개를 깔아둡니다.
-
-```console
-sudo apt install tesseract-ocr tesseract-ocr-kor ffmpeg
-```
-</details>
+- **Windows** — 파란 *Windows의 PC 보호* 창이 뜹니다. *추가 정보* → *실행*.
+- **macOS** — *개발자를 확인할 수 없어 열 수 없습니다*. **Start
+  tsuburu.command**를 마우스 오른쪽 버튼으로 클릭하고 *열기*를 고르세요. 이
+  실행기가 브라우저가 붙인 격리 표시까지 지우므로, 해야 할 일은 이것뿐입니다.
+- **Linux** — 경고가 없습니다. 파일 관리자가 `start.sh`를 실행하지 못하면
+  그 폴더에서 터미널을 열고 `./start.sh`를 입력하세요.
 
 브라우저가 `http://127.0.0.1:8420/`로 열립니다. 성인임을 한 번 확인하면 검색
 화면이 나옵니다.

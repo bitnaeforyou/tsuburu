@@ -1,0 +1,31 @@
+tsuburu — 시작하기 / Getting started
+====================================
+
+[한국어]
+
+1. 이 폴더의 "Start tsuburu.command" 파일을 더블클릭하세요.
+
+2. "확인되지 않은 개발자" 경고가 뜨면,
+   그 파일을 마우스 오른쪽 버튼으로 클릭하고 "열기"를 고르세요.
+   처음 한 번만 하면 됩니다.
+
+3. 브라우저가 열립니다. 안 열리면 주소창에 직접 입력하세요:
+   http://127.0.0.1:8420/
+
+끄려면 열려 있는 터미널 창에서 Control-C를 누르거나 창을 닫으세요.
+
+설치되는 것은 없습니다. 이 폴더를 지우면 프로그램이 사라집니다.
+
+
+[English]
+
+1. Double-click "Start tsuburu.command" in this folder.
+
+2. If macOS says the developer cannot be verified, right-click that same
+   file and choose Open. Once is enough.
+
+3. A browser opens. If it does not, go to http://127.0.0.1:8420/
+
+To stop it, press Control-C in the terminal window, or close the window.
+
+Nothing is installed. Deleting this folder removes the program.

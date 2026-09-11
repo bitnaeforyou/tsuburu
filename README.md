@@ -27,44 +27,25 @@ press ctrl+c to stop
 
 ## Install
 
-Download the archive for your machine from the [latest release](../../releases/latest),
-unpack it, run the one file inside.
+Nothing is installed. Download, open, and run — the archive holds the program
+and a `START-HERE.txt` that says the same thing in two languages.
 
-<details open>
-<summary><b>macOS</b></summary>
+| Your computer | Download from [the latest release](../../releases/latest) | Then |
+| :-- | :-- | :-- |
+| Windows | `…windows-msvc.zip` | double-click **tsuburu.exe** |
+| Mac, M1 and later | `…aarch64-apple-darwin.zip` | double-click **Start tsuburu.command** |
+| Mac, Intel | `…x86_64-apple-darwin.zip` | double-click **Start tsuburu.command** |
+| Linux | `…linux-gnu.tar.gz` | run **start.sh** |
 
-The release is unsigned, so Gatekeeper stops it the first time.
+These builds are not signed, so each system warns once, the first time only:
 
-```console
-tar xzf tsuburu-aarch64-apple-darwin.tar.gz   # x86_64 on an Intel Mac
-xattr -d com.apple.quarantine tsuburu         # or right-click → Open, once
-./tsuburu
-```
-</details>
-
-<details>
-<summary><b>Windows</b></summary>
-
-Unpack the archive (Explorer handles `.tar.gz`, or `tar -xf` in a terminal) and
-run `tsuburu.exe`. SmartScreen warns about an unknown publisher —
-*More info → Run anyway*.
-</details>
-
-<details>
-<summary><b>Linux</b></summary>
-
-```console
-tar xzf tsuburu-x86_64-unknown-linux-gnu.tar.gz
-chmod +x tsuburu
-./tsuburu
-```
-
-For dialogue search, install the two tools it calls:
-
-```console
-sudo apt install tesseract-ocr tesseract-ocr-kor ffmpeg
-```
-</details>
+- **Windows** — a blue *Windows protected your PC* box. Click *More info*,
+  then *Run anyway*.
+- **macOS** — *cannot be opened because the developer cannot be verified*.
+  Right-click **Start tsuburu.command** and choose *Open*. That launcher also
+  clears the quarantine flag the browser adds, so it is the only step.
+- **Linux** — nothing warns. If your file manager will not run `start.sh`,
+  open a terminal in the folder and type `./start.sh`.
 
 A browser opens at `http://127.0.0.1:8420/`. Confirm you are an adult once and
 the search screen appears.

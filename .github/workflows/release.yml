@@ -38,24 +38,45 @@ jobs:
 
       - run: cargo build --release --locked -p tsuburu --target ${{ matrix.target }}
 
-      # One file per platform: the frontend is inside the binary already.
+      # Packed so that someone who has never opened a terminal can start it:
+      # zip on macOS and Windows, which both unpack on a double-click, and a
+      # launcher beside the binary that does the one awkward step for them.
       - name: Package
         shell: bash
         run: |
           name="tsuburu-${{ matrix.target }}"
           mkdir -p "dist/$name"
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp "target/${{ matrix.target }}/release/tsuburu.exe" "dist/$name/"
-          else
-            cp "target/${{ matrix.target }}/release/tsuburu" "dist/$name/"
-          fi
-          cp README.md LICENSE "dist/$name/" 2>/dev/null || cp README.md "dist/$name/"
-          cd dist && tar -czf "$name.tar.gz" "$name"
+          cp README.md README.ko.md LICENSE "dist/$name/"
+
+          case "${{ matrix.os }}" in
+            windows-latest)
+              cp "target/${{ matrix.target }}/release/tsuburu.exe" "dist/$name/"
+              cp packaging/START-HERE-windows.txt "dist/$name/START-HERE.txt"
+              (cd dist && 7z a -tzip "$name.zip" "$name" >/dev/null)
+              ;;
+            macos-latest)
+              cp "target/${{ matrix.target }}/release/tsuburu" "dist/$name/"
+              cp "packaging/start-macos.command" "dist/$name/Start tsuburu.command"
+              cp packaging/START-HERE-macos.txt "dist/$name/START-HERE.txt"
+              chmod +x "dist/$name/tsuburu" "dist/$name/Start tsuburu.command"
+              # -X keeps the archive free of the extra files macOS would add.
+              (cd dist && zip -qrX "$name.zip" "$name")
+              ;;
+            *)
+              cp "target/${{ matrix.target }}/release/tsuburu" "dist/$name/"
+              cp packaging/start-linux.sh "dist/$name/start.sh"
+              cp packaging/START-HERE-linux.txt "dist/$name/START-HERE.txt"
+              chmod +x "dist/$name/tsuburu" "dist/$name/start.sh"
+              (cd dist && tar -czf "$name.tar.gz" "$name")
+              ;;
+          esac
 
       - uses: actions/upload-artifact@v4
         with:
           name: tsuburu-${{ matrix.target }}
-          path: dist/*.tar.gz
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
 
   release:
     needs: build
@@ -70,10 +91,21 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.tar.gz
+          files: |
+            dist/*.zip
+            dist/*.tar.gz
           body: |
-            Download the archive for your platform, unpack it, and run `tsuburu`.
+            Download the file for your computer, open it, and read
+            `START-HERE.txt` inside. Nothing is installed.
 
-            macOS builds are unsigned: right-click the binary and choose Open
-            the first time.
+            | | Download | Then |
+            | :-- | :-- | :-- |
+            | **Windows** | `…windows-msvc.zip` | double-click `tsuburu.exe` |
+            | **Mac** (M1 and later) | `…aarch64-apple-darwin.zip` | double-click `Start tsuburu.command` |
+            | **Mac** (Intel) | `…x86_64-apple-darwin.zip` | double-click `Start tsuburu.command` |
+            | **Linux** | `…linux-gnu.tar.gz` | run `start.sh` |
+
+            These builds are not signed, so each system warns once the first
+            time. Windows: *More info → Run anyway*. macOS: right-click
+            `Start tsuburu.command` and choose *Open*.
           generate_release_notes: true

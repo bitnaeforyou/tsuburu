@@ -1,0 +1,30 @@
+tsuburu — 시작하기 / Getting started
+====================================
+
+[한국어]
+
+1. 이 폴더의 tsuburu.exe 를 더블클릭하세요.
+
+2. "Windows의 PC 보호" 파란 창이 뜨면
+   "추가 정보"를 누르고 "실행"을 고르세요. 처음 한 번만 나옵니다.
+
+3. 브라우저가 열립니다. 안 열리면 주소창에 직접 입력하세요:
+   http://127.0.0.1:8420/
+
+끄려면 열려 있는 검은 창에서 Ctrl-C를 누르거나 창을 닫으세요.
+
+설치되는 것은 없습니다. 이 폴더를 지우면 프로그램이 사라집니다.
+
+
+[English]
+
+1. Double-click tsuburu.exe in this folder.
+
+2. If SmartScreen shows a blue "Windows protected your PC" box, click
+   "More info", then "Run anyway". It appears once.
+
+3. A browser opens. If it does not, go to http://127.0.0.1:8420/
+
+To stop it, press Ctrl-C in the black window, or close it.
+
+Nothing is installed. Deleting this folder removes the program.

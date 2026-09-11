@@ -223,6 +223,15 @@ async fn serve(
             tracing::info!(path = %store.path().display(), "opened the library");
             Some(store)
         }
+        // One copy at a time: the databases take a lock. Starting a second
+        // one would come up with favorites, history, dialogue and downloads
+        // all switched off, which looks like a broken program rather than a
+        // program that is already running.
+        Err(err) if already_running(&err.to_string()) => {
+            eprintln!("tsuburu is already running.");
+            eprintln!("Open http://127.0.0.1:{port}/ , or stop the other one first.");
+            std::process::exit(1);
+        }
         Err(err) => {
             eprintln!("favorites and history are disabled: {err}");
             None
@@ -328,6 +337,15 @@ async fn serve(
         grinder.shutdown();
     }
     Ok(())
+}
+
+/// Whether a database refused to open because another copy holds it.
+///
+/// redb says so in words rather than a distinct error, so this reads them.
+/// Being wrong in the cautious direction only costs a clearer message.
+fn already_running(message: &str) -> bool {
+    let message = message.to_lowercase();
+    message.contains("already open") || message.contains("acquire lock")
 }
 
 /// Ctrl-C, or the TERM a process manager sends.
