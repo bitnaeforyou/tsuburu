@@ -40,8 +40,15 @@
   const fit = $derived(fitOf(settings))
   const paged = $derived(settings.layout !== 'scroll')
   const groups = $derived(spreads(pages.length, settings.coverAlone))
+  /// Where the reader is, as a page this work actually has: a number left over
+  /// from a longer work must not be rendered as a page that is not there.
+  const where = $derived(Math.min(Math.max(current, 0), Math.max(pages.length - 1, 0)))
   const showing = $derived(
-    settings.layout === 'spread' ? (groups[spreadOf(current, groups)] ?? [current]) : [current],
+    pages.length === 0
+      ? []
+      : settings.layout === 'spread'
+        ? (groups[spreadOf(where, groups)] ?? [where])
+        : [where],
   )
   /// Filling the width or showing pixels one for one means the page is taller
   /// than the frame; it has to be scrollable or the bottom is unreachable.
@@ -104,7 +111,7 @@
 
   // Decoding ahead, not just fetching: a decode on the turn is what stutters.
   $effect(() => {
-    for (const at of toPrefetch(current, pages.length, PREFETCH)) {
+    for (const at of toPrefetch(where, pages.length, PREFETCH)) {
       const image = new Image()
       image.src = pages[at].src
       void image.decode().catch(() => {})
@@ -272,7 +279,7 @@
       {/each}
     </div>
 
-    <span class="corner where">{current + 1} / {pages.length}</span>
+    <span class="corner where">{where + 1} / {pages.length}</span>
 
     <button class="corner full" onclick={toggleFullscreen} title={t('reader.fullscreen')}>
       {fullscreen ? '⤡' : '⤢'}

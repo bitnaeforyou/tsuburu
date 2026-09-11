@@ -69,6 +69,23 @@ describe('what is on screen', () => {
     expect(images[0]).toHaveAttribute('src', '/img/page-2.avif')
   })
 
+  test('a page number past the end shows the last page, not nothing', async () => {
+    settings({ layout: 'page' })
+    const screen = render(Harness, { pages: pages.slice(0, 3), start: 40 })
+    await tick()
+    const images = screen.container.querySelectorAll('img')
+    expect(images).toHaveLength(1)
+    expect(images[0]).toHaveAttribute('src', '/img/page-2.avif')
+    expect(screen.container.querySelector('.where')).toHaveTextContent('3 / 3')
+  })
+
+  test('a work with no pages renders nothing rather than failing', async () => {
+    settings({ layout: 'spread' })
+    const screen = render(Harness, { pages: [] })
+    await tick()
+    expect(screen.container.querySelectorAll('img')).toHaveLength(0)
+  })
+
   test('a spread pairs pages and leaves the cover alone', async () => {
     settings({ layout: 'spread' })
     const screen = render(Harness, { pages })

@@ -166,7 +166,7 @@ export function forwardForTap(x: number, width: number, direction: Direction): b
 export function toPrefetch(page: number, count: number, ahead: number): number[] {
   const out: number[] = []
   for (let i = page + 1; i <= page + ahead && i < count; i++) out.push(i)
-  if (page > 0) out.push(page - 1)
+  if (page > 0 && page - 1 < count) out.push(page - 1)
   return out
 }
 

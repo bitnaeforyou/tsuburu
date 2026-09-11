@@ -140,6 +140,14 @@ describe('toPrefetch', () => {
   })
 })
 
+describe('toPrefetch, out of range', () => {
+  test('never names a page the work does not have', () => {
+    expect(toPrefetch(40, 3, 3)).toEqual([])
+    expect(toPrefetch(0, 0, 3)).toEqual([])
+    expect(toPrefetch(2, 3, 3)).toEqual([1])
+  })
+})
+
 describe('sanitise', () => {
   test('keeps what is valid', () => {
     const settings = {

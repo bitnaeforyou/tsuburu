@@ -37,6 +37,10 @@
   })
 
   $effect(() => {
+    // Both are read here, so that arriving at another work - or at another page
+    // of this one - starts again instead of leaving the last one on screen.
+    void id
+    void startPage
     void load()
     void library.load().catch(() => {})
   })
@@ -97,6 +101,10 @@
 
   async function load() {
     error = null
+    // A page number belongs to the work it was read in, not to the next one.
+    gallery = null
+    current = 0
+    resumeAt = null
     try {
       gallery = await api.gallery(id)
     } catch (cause) {
