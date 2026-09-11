@@ -1,0 +1,199 @@
+<script lang="ts">
+  import { t } from './i18n.svelte'
+  import { fitKey, fitOf, reader, step, type Fit, type Layout } from './reader.svelte'
+
+  /// Everything the reader can be told to do, in one row: where you are, where
+  /// to go, and how the pages should sit while you get there.
+  let {
+    count,
+    current = $bindable(0),
+  }: {
+    count: number
+    current: number
+  } = $props()
+
+  const settings = $derived(reader.settings)
+  const rtl = $derived(settings.direction === 'rtl')
+
+  const LAYOUTS: { value: Layout; key: 'reader.scroll' | 'reader.paged' | 'reader.spread' }[] = [
+    { value: 'scroll', key: 'reader.scroll' },
+    { value: 'page', key: 'reader.paged' },
+    { value: 'spread', key: 'reader.spread' },
+  ]
+
+  const FITS: { value: Fit; key: 'reader.fitWidth' | 'reader.fitHeight' | 'reader.fitContain' | 'reader.fitOriginal' }[] = [
+    { value: 'width', key: 'reader.fitWidth' },
+    { value: 'height', key: 'reader.fitHeight' },
+    { value: 'contain', key: 'reader.fitContain' },
+    { value: 'original', key: 'reader.fitOriginal' },
+  ]
+
+  function move(forward: boolean) {
+    current = step(current, forward, count, settings.layout, settings.coverAlone)
+  }
+</script>
+
+<div class="bar">
+  <div class="turn" class:rtl>
+    <button onclick={() => move(false)} disabled={current === 0}>
+      {rtl ? '→' : '←'}
+      {t('gallery.previous')}
+    </button>
+    <input
+      class="scrub"
+      type="range"
+      min="0"
+      max={Math.max(count - 1, 0)}
+      value={current}
+      dir={rtl ? 'rtl' : 'ltr'}
+      aria-label={t('common.page', { n: current + 1 })}
+      oninput={(event) => (current = Number(event.currentTarget.value))}
+    />
+    <button onclick={() => move(true)} disabled={current >= count - 1}>
+      {t('gallery.next')}
+      {rtl ? '←' : '→'}
+    </button>
+  </div>
+
+  <div class="set">
+    <div class="group" role="group" aria-label={t('reader.layout')}>
+      {#each LAYOUTS as option (option.value)}
+        <button
+          class:on={settings.layout === option.value}
+          aria-pressed={settings.layout === option.value}
+          onclick={() => reader.set('layout', option.value)}
+        >
+          {t(option.key)}
+        </button>
+      {/each}
+    </div>
+
+    <button
+      class="wide"
+      onclick={() => reader.set('direction', rtl ? 'ltr' : 'rtl')}
+      title={t('reader.direction')}
+      aria-label={t('reader.direction')}
+    >
+      {rtl ? t('reader.rtl') : t('reader.ltr')}
+    </button>
+
+    <label class="pick">
+      <span class="sr">{t('reader.fit')}</span>
+      <select
+        value={fitOf(settings)}
+        onchange={(event) =>
+          reader.set(fitKey(settings.layout), event.currentTarget.value as Fit)}
+      >
+        {#each FITS as option (option.value)}
+          <option value={option.value}>{t(option.key)}</option>
+        {/each}
+      </select>
+    </label>
+
+    {#if settings.layout === 'spread'}
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={settings.coverAlone}
+          onchange={(event) => reader.set('coverAlone', event.currentTarget.checked)}
+        />
+        {t('reader.coverAlone')}
+      </label>
+    {/if}
+  </div>
+</div>
+
+<style>
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .turn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1 1 18rem;
+    /* On a wide screen a scrubber the width of the window puts the two
+       buttons an arm apart. */
+    max-width: 34rem;
+    min-width: 0;
+  }
+  .turn.rtl {
+    flex-direction: row-reverse;
+  }
+  .turn button {
+    white-space: nowrap;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+  }
+
+  .scrub {
+    flex: 1;
+    min-width: 4rem;
+    accent-color: var(--accent);
+  }
+
+  .set {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .group {
+    display: flex;
+  }
+  .group button {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0;
+    margin-left: -1px;
+  }
+  .group button:first-child {
+    border-radius: var(--radius) 0 0 var(--radius);
+    margin-left: 0;
+  }
+  .group button:last-child {
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+  .group button.on {
+    color: var(--accent);
+    border-color: var(--accent);
+    z-index: 1;
+  }
+
+  .wide,
+  select {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+  }
+  select {
+    font-family: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+</style>

@@ -7,11 +7,12 @@
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
   import LocalePicker from '../lib/LocalePicker.svelte'
+  import ReaderView from '../lib/ReaderView.svelte'
+  import ReaderBar from '../lib/ReaderBar.svelte'
+  import { reader } from '../lib/reader.svelte'
 
   let { id, startPage = null }: { id: number; startPage?: number | null } = $props()
 
-  /** 미리 디코드해둘 다음 장 수. 넘길 때 흰 화면이 보이지 않을 만큼만. */
-  const PREFETCH = 2
   /** 진행 상황을 쓰기 전에 기다리는 시간. 페이지마다 쓰면 디스크가 시끄럽다. */
   const SAVE_DELAY = 1000
 
@@ -19,13 +20,13 @@
   let error = $state<unknown>(null)
   let current = $state(0)
   let resumeAt = $state<number | null>(null)
-  let elements = $state<(HTMLImageElement | null)[]>([])
   let keywords = $state<api.Keyword[]>([])
   let near = $state<api.NearWork[]>([])
   let download = $state<api.DownloadItem | null>(null)
   let downloadError = $state<string | null>(null)
 
   const favorited = $derived(library.has(id))
+  const paged = $derived(reader.settings.layout !== 'scroll')
 
   $effect(() => {
     void load()
@@ -95,18 +96,21 @@
       return
     }
     // A dialogue hit links straight to its page.
-    if (startPage !== null) {
-      requestAnimationFrame(() => go(startPage))
-    }
+    if (startPage !== null) current = clamp(startPage)
     // 마지막으로 본 위치를 알린다. 자동으로 뛰지는 않는다. 처음부터 보려는
     // 경우를 빼앗지 않기 위해서다.
     try {
       const { items } = await api.history()
       const previous = items.find((item) => item.id === id)
-      if (previous && previous.last_page > 0) resumeAt = previous.last_page
+      if (previous && previous.last_page > 0 && startPage === null) resumeAt = previous.last_page
     } catch {
       // 기록을 못 읽어도 읽기는 계속된다.
     }
+  }
+
+  function clamp(page: number): number {
+    const count = gallery?.pages.length ?? 0
+    return Math.min(Math.max(page, 0), Math.max(count - 1, 0))
   }
 
   function summary(): Omit<api.Summary, 'id'> {
@@ -120,34 +124,6 @@
     }
   }
 
-  // 스크롤을 따라 현재 페이지를 갱신한다. 세로 뷰어라 스크롤이 곧 페이지 이동이다.
-  $effect(() => {
-    const pages = gallery?.pages
-    if (!pages) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .map((entry) => Number((entry.target as HTMLElement).dataset.page))
-        if (visible.length) current = Math.min(...visible)
-      },
-      { rootMargin: '-45% 0px -45% 0px' },
-    )
-    for (const element of elements) if (element) observer.observe(element)
-    return () => observer.disconnect()
-  })
-
-  // 다음 장을 미리 받아 디코드해둔다. 디코드까지 해야 넘길 때 끊기지 않는다.
-  $effect(() => {
-    const pages = gallery?.pages
-    if (!pages) return
-    for (let i = current + 1; i <= current + PREFETCH && i < pages.length; i++) {
-      const img = new Image()
-      img.src = pages[i].src
-      void img.decode().catch(() => {})
-    }
-  })
-
   // 진행 상황 저장. 페이지를 넘길 때마다 쓰지 않고 잠잠해지면 한 번 쓴다.
   $effect(() => {
     const page = current
@@ -156,23 +132,6 @@
       void api.recordProgress(id, page, summary()).catch(() => {})
     }, SAVE_DELAY)
     return () => clearTimeout(timer)
-  })
-
-  $effect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (!gallery) return
-      if (event.key === 'ArrowRight' || event.key === ' ') {
-        event.preventDefault()
-        go(current + 1)
-      } else if (event.key === 'ArrowLeft') {
-        event.preventDefault()
-        go(current - 1)
-      } else if (event.key === 'Escape') {
-        back()
-      }
-    }
-    addEventListener('keydown', onKey)
-    return () => removeEventListener('keydown', onKey)
   })
 
   // 갤러리 URL로 바로 들어오면 돌아갈 히스토리가 없다. 그럴 때는 마지막
@@ -185,15 +144,9 @@
     location.hash = sessionStorage.getItem('tsuburu.lastSearch') ?? toSearch()
   }
 
-  function go(next: number) {
-    if (!gallery) return
-    current = Math.min(Math.max(next, 0), gallery.pages.length - 1)
-    elements[current]?.scrollIntoView({ block: 'start' })
-  }
-
   function resume() {
     if (resumeAt === null) return
-    go(resumeAt)
+    current = clamp(resumeAt)
     resumeAt = null
   }
 </script>
@@ -223,80 +176,66 @@
   {:else if !gallery}
     <p class="status">{t('common.loading')}</p>
   {:else}
-    {#if resumeAt !== null}
-      <div class="resume">
-        {t('gallery.resume', { n: resumeAt + 1 })}
-        <button onclick={resume}>{t('gallery.continue')}</button>
-        <button onclick={() => (resumeAt = null)}>{t('gallery.startOver')}</button>
-      </div>
-    {/if}
-
-    {#if gallery.artists.length || gallery.series.length}
-      <p class="credits">
-        {#each gallery.artists as name (name)}
-          <a href={toArtist(name)}>{name}</a>
-        {/each}
-        {#if gallery.series.length}
-          <span class="muted">&middot; {gallery.series.join(', ')}</span>
-        {/if}
-      </p>
-    {/if}
-
-    <div class="keep">
-      {#if download}
-        <span class="muted">
-          {t('gallery.onDisk', { have: download.have, pages: download.pages })}
-          {#if download.job.running}&middot; {t('gallery.downloading')}{/if}
-        </span>
+    <!-- Turning pages is a screenful at a time, so the note, the controls, the
+         pages and the hint share the window and everything else waits below
+         it. -->
+    <div class="screen" class:paged>
+      {#if resumeAt !== null}
+        <div class="resume">
+          {t('gallery.resume', { n: resumeAt + 1 })}
+          <button onclick={resume}>{t('gallery.continue')}</button>
+          <button onclick={() => (resumeAt = null)}>{t('gallery.startOver')}</button>
+        </div>
       {/if}
-      <button onclick={keepWork}>
-        {download?.complete
-          ? t('gallery.downloaded')
-          : download
-            ? t('gallery.getRest')
-            : t('gallery.download')}
-      </button>
-      <button onclick={() => keepPage(current)}>{t('gallery.downloadPage')}</button>
-      {#if downloadError}<span class="muted">{downloadError}</span>{/if}
+
+      <ReaderBar count={gallery.pages.length} bind:current />
+      <ReaderView pages={gallery.pages} bind:current onback={back} />
+      <p class="hint">{paged ? t('reader.hintPaged') : t('gallery.hint')}</p>
     </div>
 
-    {#if gallery.tags.length}
-      <p class="tags">{gallery.tags.join(' · ')}</p>
-    {/if}
+    <section class="about">
+      {#if gallery.artists.length || gallery.series.length}
+        <p class="credits">
+          {#each gallery.artists as name (name)}
+            <a href={toArtist(name)}>{name}</a>
+          {/each}
+          {#if gallery.series.length}
+            <span class="muted">&middot; {gallery.series.join(', ')}</span>
+          {/if}
+        </p>
+      {/if}
 
-    {#if keywords.length}
-      <p class="keywords">
-        <span class="muted">{t('keyword.title')}</span>
-        {#each keywords as keyword (keyword.word)}
-          <a href={toKeyword(keyword.word)}>{keyword.word}</a>
-        {/each}
-      </p>
-    {/if}
+      <div class="keep">
+        {#if download}
+          <span class="muted">
+            {t('gallery.onDisk', { have: download.have, pages: download.pages })}
+            {#if download.job.running}&middot; {t('gallery.downloading')}{/if}
+          </span>
+        {/if}
+        <button onclick={keepWork}>
+          {download?.complete
+            ? t('gallery.downloaded')
+            : download
+              ? t('gallery.getRest')
+              : t('gallery.download')}
+        </button>
+        <button onclick={() => keepPage(current)}>{t('gallery.downloadPage')}</button>
+        {#if downloadError}<span class="muted">{downloadError}</span>{/if}
+      </div>
 
-    <div class="reader">
-      {#each gallery.pages as p, i (p.src)}
-        <img
-          bind:this={elements[i]}
-          data-page={i}
-          src={p.src}
-          width={p.width}
-          height={p.height}
-          alt={t('common.page', { n: i + 1 })}
-          loading={i <= PREFETCH ? 'eager' : 'lazy'}
-          decoding="async"
-        />
-      {/each}
-    </div>
+      {#if gallery.tags.length}
+        <p class="tags">{gallery.tags.join(' · ')}</p>
+      {/if}
 
-    <nav>
-      <button onclick={() => go(current - 1)} disabled={current === 0}>
-        {t('gallery.previous')}
-      </button>
-      <button onclick={() => go(current + 1)} disabled={current >= gallery.pages.length - 1}>
-        {t('gallery.next')}
-      </button>
-    </nav>
-    <p class="hint">{t('gallery.hint')}</p>
+      {#if keywords.length}
+        <p class="keywords">
+          <span class="muted">{t('keyword.title')}</span>
+          {#each keywords as keyword (keyword.word)}
+            <a href={toKeyword(keyword.word)}>{keyword.word}</a>
+          {/each}
+        </p>
+      {/if}
+    </section>
 
     {#if near.length}
       <section class="near">
@@ -351,6 +290,13 @@
     padding: 1rem;
   }
 
+  .screen.paged {
+    display: flex;
+    flex-direction: column;
+    /* The window, less the sticky header and this padding. */
+    min-height: calc(100dvh - 6rem);
+  }
+
   .resume {
     display: flex;
     gap: 0.5rem;
@@ -361,6 +307,12 @@
     padding: 0.6rem 0.9rem;
     margin-bottom: 1rem;
     font-size: 0.9rem;
+  }
+
+  .about {
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
   }
 
   .tags {
@@ -421,29 +373,6 @@
     color: var(--muted);
   }
 
-  .reader {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .reader img {
-    max-width: min(100%, 1000px);
-    height: auto;
-    background: var(--surface);
-    /* 화면 밖 페이지는 레이아웃만 잡고 렌더링하지 않는다. */
-    content-visibility: auto;
-    contain-intrinsic-size: auto 1200px;
-  }
-
-  nav {
-    display: flex;
-    justify-content: center;
-    gap: 0.75rem;
-    margin: 1.5rem 0 0.5rem;
-  }
-
   .status,
   .hint {
     color: var(--muted);
@@ -451,5 +380,6 @@
   }
   .hint {
     font-size: 0.85rem;
+    margin: 0.6rem 0 0;
   }
 </style>

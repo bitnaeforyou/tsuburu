@@ -57,7 +57,7 @@ Nothing beyond the file you just ran:
 | | What you get |
 | :-- | :-- |
 | **Search** | hitomi's tags, Korean or English. `-term` excludes. |
-| **Read** | full resolution, arrow keys, resumes where you stopped |
+| **Read** | full resolution, three layouts, either direction, resumes where you stopped |
 | **Keep** | a work or a single page, then read it with hitomi unreachable |
 | **Remember** | favorites and history, on this machine only |
 | **Dialogue search** | over every work you open — see [below](#dialogue-search) |
@@ -109,6 +109,36 @@ tsuburu gallery 4170351            # inspect one work
 tsuburu serve --port 9000          # pick a port (0 takes a free one)
 tsuburu serve --no-open            # do not launch a browser
 ```
+
+## The reader
+
+Three ways to lay a work out. The choice is remembered.
+
+| Layout | |
+| :-- | :-- |
+| **Scroll** | every page in one column, the way a webtoon is read |
+| **Page** | one page, one turn |
+| **Spread** | two pages side by side, the cover on its own |
+
+Manga is drawn right to left, so **R → L** flips the arrow keys, the side of the
+screen that turns forward, and the order pages sit in a spread. Scrolling and
+turning each remember their own fit: filling the width suits a column, fitting
+the whole page suits a turn.
+
+| | |
+| :-- | :-- |
+| **←** **→** | turn, in reading order |
+| **Space**, **PageDown** | onward |
+| **F** | full screen |
+| **Esc** | back |
+| Tap the left or right third | turn; the middle is left alone, so reaching for a control does not turn a page |
+| Swipe | turn |
+| Double-click, **Ctrl** + wheel | zoom, then drag to move around; turning the page lets it go |
+
+The slider goes straight to a page. The next three pages are decoded before you
+reach them, so a turn is a frame rather than a wait, and turning a page at a
+time holds one page in the window instead of all of them — a 1,537-page work is
+one image element rather than 1,537.
 
 ## Reading offline
 
@@ -270,6 +300,11 @@ all three files imported.
 | The same, allowing for misremembering | 0.7 s |
 | Scenes like this one | 4.3 s first, **0.20 s** after |
 | By meaning, with a pack running | 1.5–3.4 s, nearly all of it the model |
+
+| The reader | |
+| :-- | --: |
+| Turning to a page already fetched | **12–66 ms**, key to painted |
+| Image elements for a 1,537-page work | **1** turning pages, 1,537 scrolling |
 
 | Reading and indexing | |
 | :-- | --: |
