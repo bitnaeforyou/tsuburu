@@ -1,0 +1,61 @@
+name: Mirror
+
+# Pushes this repository to a second one under a different account, with the
+# authorship rewritten on the way. Nothing about that account is written down
+# here: the address, the token and the name to sign with all come from
+# secrets, so the source stays silent about where it goes.
+#
+# Set up with:
+#   gh secret set MIRROR_REPO   # owner/name of the target repository
+#   gh secret set MIRROR_TOKEN  # a PAT on that account, scopes: repo, workflow
+#   gh secret set MIRROR_NAME   # the name to sign the mirrored commits with
+#   gh secret set MIRROR_EMAIL  # its address, e.g. the account's noreply one
+#
+# Without MIRROR_REPO the job skips, so the workflow is harmless unpaired.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Is a mirror configured
+        id: configured
+        env:
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+        run: echo "yes=${{ env.MIRROR_REPO != '' }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.configured.outputs.yes == 'true'
+        with:
+          # The whole history, or the rewrite below would produce a stump.
+          fetch-depth: 0
+
+      - name: Rewrite the authorship
+        if: steps.configured.outputs.yes == 'true'
+        env:
+          MIRROR_NAME: ${{ secrets.MIRROR_NAME }}
+          MIRROR_EMAIL: ${{ secrets.MIRROR_EMAIL }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq git-filter-repo
+          # Read from the environment rather than interpolating into the
+          # callback: a name with a quote in it would otherwise be code.
+          # Deterministic, so the mirror moves forward rather than being
+          # replaced: the same commits in give the same hashes out.
+          git filter-repo --force \
+            --name-callback 'import os; return os.environb[b"MIRROR_NAME"]' \
+            --email-callback 'import os; return os.environb[b"MIRROR_EMAIL"]'
+
+      - name: Push
+        if: steps.configured.outputs.yes == 'true'
+        env:
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+          MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+        run: |
+          git push --force \
+            "https://x-access-token:$MIRROR_TOKEN@github.com/$MIRROR_REPO.git" \
+            HEAD:main --tags
