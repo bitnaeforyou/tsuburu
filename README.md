@@ -106,6 +106,83 @@ or seven levels deep and each level is a dependent round trip. tsuburu
 prefetches the upper levels in the background at startup, which removes about
 70 % of the cost. Result lists are read only as far as the current page needs.
 
+## Getting started
+
+Download the archive for your machine from the
+[latest release](https://github.com/byeolki/tsuburu/releases/latest), unpack
+it, and run the one file inside. Nothing is installed and nothing else is
+needed.
+
+**macOS** — the release is unsigned, so Gatekeeper stops it the first time.
+
+```
+tar xzf tsuburu-aarch64-apple-darwin.tar.gz    # or x86_64 on an Intel Mac
+xattr -d com.apple.quarantine tsuburu          # or: right-click → Open, once
+./tsuburu
+```
+
+**Windows** — unpack the `.tar.gz` (Explorer handles it, or `tar -xf` in a
+terminal) and run `tsuburu.exe`. SmartScreen warns about an unknown
+publisher: *More info → Run anyway*.
+
+**Linux**
+
+```
+tar xzf tsuburu-x86_64-unknown-linux-gnu.tar.gz
+chmod +x tsuburu
+./tsuburu
+```
+
+A browser opens at `http://127.0.0.1:8420/`. If it does not, open that
+address yourself. Confirm you are an adult once and the search screen appears.
+
+### What works immediately
+
+Everything below needs nothing beyond the file you just ran:
+
+- **Search** hitomi's tags, in Korean or English. `-term` excludes.
+- **Read** any work, at full resolution, with the arrow keys.
+- **Favorites** and **reading history**, kept on this machine.
+- **Download** a work or a single page and read it offline afterwards.
+- **Dialogue search over what you have read.** Opening a work recognises its
+  pages as they arrive — no extra download — so a work you have read becomes
+  findable by a line you remember. This is on by default and needs no setup on
+  macOS or Windows; on Linux install `tesseract-ocr` and `ffmpeg` first.
+
+### What you have to bring
+
+Three optional files make the program much more capable. They are large, they
+are not distributed with tsuburu, and everything above keeps working without
+them.
+
+| To get | You need | Size | Import |
+|---|---|---|---|
+| Dialogue search over a large corpus without reading it yourself | a recognised-text corpus (`llm-search-index`) | 3.9 GB | `tsuburu import-artifact <dir>` |
+| Titles, artists and characters searchable offline | a metadata snapshot (`data.db`) | 2.2 GB | `tsuburu import-meta <file>` |
+| What a work is about, and works about the same things | a keyword graph (`graph.csv`) | 190 MB | `tsuburu import-keywords <file>` |
+
+Stop the server before importing; each database is opened by one process at a
+time. Corpora of this kind are published for this site by others — tsuburu
+reads them, it does not ship them.
+
+**Searching by meaning** asks for one more thing: the embedding model that
+built the index, which is a separate multi-gigabyte download and runs as your
+own local server. It stays hidden until you set it up. See
+[Searching by meaning](#searching-by-meaning).
+
+### Where things are kept
+
+| | |
+|---|---|
+| macOS | `~/Library/Application Support/la.tsuburu.tsuburu/` |
+| Linux | `~/.local/share/tsuburu/` |
+| Windows | `%APPDATA%\tsuburu\tsuburu\data\` |
+
+Deleting that directory resets everything and loses nothing but what you
+imported and read. The imported corpus directory is read where it sits and
+never copied, so it can live on an external disk — point `import-artifact` at
+wherever you keep it.
+
 ## Usage
 
 ```
@@ -355,11 +432,6 @@ is needed — rather than showing wrong results or an empty screen.
 
 All knowledge of hitomi's formats lives in the `tsuburu-hitomi` crate. That is
 the only place a fix has to go.
-
-## macOS
-
-Releases are unsigned, so macOS shows an "unidentified developer" warning the
-first time. Right-click the binary and choose Open to get past it.
 
 ## Notes
 
