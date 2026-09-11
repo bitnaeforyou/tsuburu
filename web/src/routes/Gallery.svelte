@@ -27,6 +27,14 @@
 
   const favorited = $derived(library.has(id))
   const paged = $derived(reader.settings.layout !== 'scroll')
+  /// Nothing on screen but the pages. Reached by tapping the middle of a page,
+  /// left again the same way or with Escape.
+  let bare = $state(false)
+
+  // Scrolling has no middle to tap, so there would be no way back out.
+  $effect(() => {
+    if (!paged) bare = false
+  })
 
   $effect(() => {
     void load()
@@ -151,7 +159,7 @@
   }
 </script>
 
-<header>
+<header class:bare>
   <button onclick={back}>&larr; {t('gallery.back')}</button>
   <h1>{gallery?.title ?? `#${id}`}</h1>
   {#if gallery && !library.unavailable}
@@ -170,7 +178,7 @@
   <LocalePicker />
 </header>
 
-<main>
+<main class:bare>
   {#if error}
     <ErrorNote {error} onretry={load} />
   {:else if !gallery}
@@ -179,8 +187,8 @@
     <!-- Turning pages is a screenful at a time, so the note, the controls, the
          pages and the hint share the window and everything else waits below
          it. -->
-    <div class="screen" class:paged>
-      {#if resumeAt !== null}
+    <div class="screen" class:paged class:bare>
+      {#if resumeAt !== null && !bare}
         <div class="resume">
           {t('gallery.resume', { n: resumeAt + 1 })}
           <button onclick={resume}>{t('gallery.continue')}</button>
@@ -188,12 +196,21 @@
         </div>
       {/if}
 
-      <ReaderBar count={gallery.pages.length} bind:current />
-      <ReaderView pages={gallery.pages} bind:current onback={back} />
-      <p class="hint">{paged ? t('reader.hintPaged') : t('gallery.hint')}</p>
+      {#if !bare}
+        <ReaderBar count={gallery.pages.length} bind:current />
+      {/if}
+      <ReaderView
+        pages={gallery.pages}
+        bind:current
+        onback={() => (bare ? (bare = false) : back())}
+        onchrome={() => (bare = !bare)}
+      />
+      {#if !bare}
+        <p class="hint">{paged ? t('reader.hintPaged') : t('gallery.hint')}</p>
+      {/if}
     </div>
 
-    <section class="about">
+    <section class="about" hidden={bare}>
       {#if gallery.artists.length || gallery.series.length}
         <p class="credits">
           {#each gallery.artists as name (name)}
@@ -238,7 +255,7 @@
     </section>
 
     {#if near.length}
-      <section class="near">
+      <section class="near" hidden={bare}>
         <strong>{t('keyword.near')}</strong>
         <Grid>
           {#each near as other (other.id)}
@@ -289,12 +306,22 @@
   main {
     padding: 1rem;
   }
+  main.bare {
+    padding: 0;
+  }
+
+  header.bare {
+    display: none;
+  }
 
   .screen.paged {
     display: flex;
     flex-direction: column;
     /* The window, less the sticky header and this padding. */
     min-height: calc(100dvh - 6rem);
+  }
+  .screen.paged.bare {
+    min-height: 100dvh;
   }
 
   .resume {

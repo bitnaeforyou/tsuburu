@@ -114,7 +114,7 @@ export const en = {
   'reader.coverAlone': 'Cover on its own',
   'reader.fullscreen': 'Full screen',
   'reader.hintPaged':
-    'Tap the sides or swipe to turn · double-click to zoom · F for full screen · Esc goes back',
+    'Tap the sides or swipe to turn · the middle clears everything else away · double-click to zoom · F for full screen · Esc goes back',
 
   'favorites.artists': 'Artists you follow',
   'favorites.empty': 'No favorites yet. Tap the star on any result to keep it here.',

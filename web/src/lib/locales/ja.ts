@@ -113,7 +113,8 @@ export const ja: Messages = {
   'reader.fitOriginal': '原寸',
   'reader.coverAlone': '表紙は単独',
   'reader.fullscreen': '全画面',
-  'reader.hintPaged': '左右をタップかスワイプでページ送り · ダブルクリックで拡大 · F で全画面 · Esc で戻る',
+  'reader.hintPaged':
+    '左右をタップかスワイプでページ送り · 中央をタップで他をすべて隠す · ダブルクリックで拡大 · F で全画面 · Esc で戻る',
 
   'favorites.artists': 'フォロー中の作家',
   'favorites.empty': 'まだありません。結果の星を押すとここに入ります。',

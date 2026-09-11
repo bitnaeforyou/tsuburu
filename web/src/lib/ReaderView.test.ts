@@ -185,6 +185,38 @@ describe('taps and swipes', () => {
     expect(at(screen)).toBe(2)
   })
 
+  test('the middle asks for everything else to get out of the way', async () => {
+    settings({ layout: 'page' })
+    const onchrome = vi.fn()
+    const screen = render(Harness, { pages, start: 2, onchrome })
+    await tick()
+    const surface = screen.container.querySelector('.surface')!
+    widen(surface)
+
+    pointer(surface, 'pointerdown', 450)
+    pointer(surface, 'pointerup', 450, 300, 0)
+    await tick()
+
+    expect(onchrome).toHaveBeenCalledOnce()
+    expect(at(screen)).toBe(2)
+  })
+
+  test('a swipe through the middle turns the page instead', async () => {
+    settings({ layout: 'page' })
+    const onchrome = vi.fn()
+    const screen = render(Harness, { pages, start: 2, onchrome })
+    await tick()
+    const surface = screen.container.querySelector('.surface')!
+    widen(surface)
+
+    pointer(surface, 'pointerdown', 600)
+    pointer(surface, 'pointerup', 400, 300, 0)
+    await tick()
+
+    expect(onchrome).not.toHaveBeenCalled()
+    expect(at(screen)).toBe(3)
+  })
+
   test('right to left swaps the sides', async () => {
     settings({ layout: 'page', direction: 'rtl' })
     const screen = render(Harness, { pages, start: 2 })
@@ -222,7 +254,7 @@ describe('taps and swipes', () => {
     await tick()
     const surface = screen.container.querySelector('.surface')!
     widen(surface)
-    const corner = screen.container.querySelector('.corner') as HTMLButtonElement
+    const corner = screen.container.querySelector('.corner.full') as HTMLButtonElement
 
     pointer(corner, 'pointerdown', 860, 560)
     pointer(corner, 'pointerup', 860, 560, 0)
@@ -290,7 +322,7 @@ describe('full screen', () => {
     settings({ layout: 'page' })
     const screen = render(Harness, { pages })
     await tick()
-    const corner = screen.container.querySelector('.corner') as HTMLButtonElement
+    const corner = screen.container.querySelector('.corner.full') as HTMLButtonElement
     const surface = screen.container.querySelector('.surface')!
 
     corner.click()
@@ -317,7 +349,7 @@ describe('full screen', () => {
 
     const screen = render(Harness, { pages })
     await tick()
-    ;(screen.container.querySelector('.corner') as HTMLButtonElement).click()
+    ;(screen.container.querySelector('.corner.full') as HTMLButtonElement).click()
     await tick()
 
     expect(asked).toHaveBeenCalledOnce()

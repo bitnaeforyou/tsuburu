@@ -131,7 +131,8 @@ the whole page suits a turn.
 | **Space**, **PageDown** | onward |
 | **F** | full screen |
 | **Esc** | back |
-| Tap the left or right third | turn; the middle is left alone, so reaching for a control does not turn a page |
+| Tap the left or right third | turn |
+| Tap the middle | clear everything but the pages away, and back again |
 | Swipe | turn |
 | Double-click, **Ctrl** + wheel | zoom, then drag to move around; turning the page lets it go |
 

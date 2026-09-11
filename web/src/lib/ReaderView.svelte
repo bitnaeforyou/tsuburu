@@ -19,10 +19,14 @@
     pages,
     current = $bindable(0),
     onback,
+    onchrome,
   }: {
     pages: Page[]
     current: number
     onback?: () => void
+    /// The middle of the page was tapped, which is how a reader asks for
+    /// everything around the pages to get out of the way, and back again.
+    onchrome?: () => void
   } = $props()
 
   /// Pages to have decoded ahead of the reader, so a turn never shows white.
@@ -203,7 +207,8 @@
     const box = surface?.getBoundingClientRect()
     if (!box) return
     const forward = forwardForTap(event.clientX - box.left, box.width, settings.direction)
-    if (forward !== null) move(forward)
+    if (forward === null) onchrome?.()
+    else move(forward)
   }
 
   function onDoubleClick(event: MouseEvent) {
@@ -267,7 +272,9 @@
       {/each}
     </div>
 
-    <button class="corner" onclick={toggleFullscreen} title={t('reader.fullscreen')}>
+    <span class="corner where">{current + 1} / {pages.length}</span>
+
+    <button class="corner full" onclick={toggleFullscreen} title={t('reader.fullscreen')}>
       {fullscreen ? '⤡' : '⤢'}
     </button>
   </div>
@@ -401,15 +408,24 @@
 
   .corner {
     position: absolute;
-    right: 0.6rem;
     bottom: 0.6rem;
     opacity: 0.4;
-    font-size: 0.95rem;
+    font-size: 0.8rem;
     line-height: 1;
     padding: 0.3rem 0.5rem;
   }
   .corner:hover,
   .corner:focus-visible {
     opacity: 1;
+  }
+  .where {
+    left: 0.6rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+  .full {
+    right: 0.6rem;
+    font-size: 0.95rem;
   }
 </style>

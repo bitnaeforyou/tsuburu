@@ -113,7 +113,8 @@ export const ko: Messages = {
   'reader.fitOriginal': '원본 크기',
   'reader.coverAlone': '표지는 한 장으로',
   'reader.fullscreen': '전체 화면',
-  'reader.hintPaged': '양옆을 누르거나 밀어서 넘김 · 두 번 누르면 확대 · F 전체 화면 · Esc로 뒤로',
+  'reader.hintPaged':
+    '양옆을 누르거나 밀어서 넘김 · 가운데를 누르면 나머지가 사라짐 · 두 번 누르면 확대 · F 전체 화면 · Esc로 뒤로',
 
   'favorites.artists': '팔로우한 작가',
   'favorites.empty': '아직 없습니다. 결과에서 별을 누르면 여기에 담깁니다.',
