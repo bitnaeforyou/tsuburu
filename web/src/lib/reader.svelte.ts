@@ -2,6 +2,10 @@
 /// takes you. The choices live here rather than in the component so that the
 /// parts worth being sure about - which pages share a spread, which way a
 /// key moves - can be tested without a browser.
+///
+/// The component that uses this is ReaderView, not Reader: on a filesystem
+/// that ignores case, `./reader.svelte` would resolve to a Reader.svelte
+/// beside it and every import here would silently become the component.
 
 export type Layout = 'scroll' | 'page' | 'spread'
 export type Direction = 'ltr' | 'rtl'
