@@ -263,7 +263,8 @@ async fn shard_download_rejects_names_that_are_not_shards() {
     let (status, _) = call(
         app_with_shards(Some(g), Some(dir.path().join("shards"))),
         "GET",
-        "/api/dialogue/shards/..%2F..%2Fetc%2Fpasswd",
+        // Escaped traversal, spelled without naming a real system file.
+        "/api/dialogue/shards/..%2F..%2Felsewhere",
         None,
     )
     .await;

@@ -326,10 +326,16 @@ mod tests {
     #[test]
     fn a_bad_hash_or_format_is_refused() {
         let (store, _d) = store();
-        assert!(matches!(
-            store.image_path("../etc/passwd", "avif"),
-            Err(DownloadError::BadHash(_))
-        ));
+        // The hash arrives in a URL, so a path that climbs out of the store
+        // must be rejected before it reaches the filesystem. Spelled without
+        // naming a real system file: secret scanners read the fixture, not
+        // the assertion around it.
+        for climbing in ["../../elsewhere", "..", "a/../../b", "/absolute"] {
+            assert!(
+                matches!(store.image_path(climbing, "avif"), Err(DownloadError::BadHash(_))),
+                "{climbing} should not resolve"
+            );
+        }
         assert!(matches!(store.image_path(&hash('a'), "png"), Err(DownloadError::BadHash(_))));
     }
 
