@@ -90,27 +90,43 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+
+      # What changed goes first. The tag already says it, and the program
+      # reads the first lines of this when it offers the update - which was
+      # showing people how to unpack a zip instead.
+      - name: Write the notes
+        run: |
+          git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME" > notes.md
+          cat >> notes.md <<'TAIL'
+
+          ---
+
+          Download the file for your computer, open it, and read
+          `START-HERE.txt` inside. Nothing is installed.
+
+          | | Download | Then |
+          | :-- | :-- | :-- |
+          | **Windows** | `…windows-msvc.zip` | double-click `tsuburu.exe` |
+          | **Mac** (M1 and later) | `…aarch64-apple-darwin.zip` | double-click `Start tsuburu.command` |
+          | **Mac** (Intel) | `…x86_64-apple-darwin.zip` | double-click `Start tsuburu.command` |
+          | **Linux** | `…linux-gnu.tar.gz` | run `start.sh` |
+
+          These builds are not signed, so each system warns once the first
+          time. Windows: *More info → Run anyway*. macOS: right-click
+          `Start tsuburu.command` and choose *Open*.
+          TAIL
+
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*.zip
             dist/*.tar.gz
-          body: |
-            Download the file for your computer, open it, and read
-            `START-HERE.txt` inside. Nothing is installed.
-
-            | | Download | Then |
-            | :-- | :-- | :-- |
-            | **Windows** | `…windows-msvc.zip` | double-click `tsuburu.exe` |
-            | **Mac** (M1 and later) | `…aarch64-apple-darwin.zip` | double-click `Start tsuburu.command` |
-            | **Mac** (Intel) | `…x86_64-apple-darwin.zip` | double-click `Start tsuburu.command` |
-            | **Linux** | `…linux-gnu.tar.gz` | run `start.sh` |
-
-            These builds are not signed, so each system warns once the first
-            time. Windows: *More info → Run anyway*. macOS: right-click
-            `Start tsuburu.command` and choose *Open*.
+          body_path: notes.md
           generate_release_notes: true
