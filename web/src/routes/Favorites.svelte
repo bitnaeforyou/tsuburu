@@ -7,6 +7,7 @@
   import AppHeader from '../lib/AppHeader.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import { toArtist } from '../lib/router'
+  import Backup from '../lib/Backup.svelte'
 
   let items = $state<api.Favorite[]>([])
   let artists = $state<api.FollowedArtist[]>([])
@@ -67,6 +68,8 @@
       {/each}
     </Grid>
   {/if}
+
+  <Backup />
 </main>
 
 <style>
