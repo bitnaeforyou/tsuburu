@@ -86,7 +86,7 @@ impl Config {
     }
 }
 
-fn decode_ids(bytes: &[u8]) -> Vec<i32> {
+pub fn decode_ids(bytes: &[u8]) -> Vec<i32> {
     bytes.as_chunks::<4>().0.iter().copied().map(i32::from_be_bytes).collect()
 }
 
@@ -113,6 +113,13 @@ pub async fn page(
 /// 목록 전체를 집합으로. 필터로 쓸 때만 사용한다.
 ///
 /// 목록에 따라 수 MB가 될 수 있다. 한 번 받으면 캐시되지만 첫 요청은 느리다.
+/// The whole of a `.nozomi` list, undecoded, for a caller that wants the ids
+/// in some other shape than a set.
+pub async fn all_ids(fetcher: &dyn Fetcher, url: &str) -> Result<Vec<u8>, SearchError> {
+    let total = fetcher.length(url).await?;
+    Ok(fetcher.get_range(url, 0..total).await?)
+}
+
 pub async fn id_set(fetcher: &dyn Fetcher, url: &str) -> Result<HashSet<i32>, SearchError> {
     let total = fetcher.length(url).await?;
     let bytes = fetcher.get_range(url, 0..total).await?;

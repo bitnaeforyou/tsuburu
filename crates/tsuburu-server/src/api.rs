@@ -111,6 +111,9 @@ pub struct Card {
     pub tags: Vec<String>,
     /// 이 서버의 썸네일 프록시 경로. 브라우저는 hitomi를 직접 보지 않는다.
     pub thumbnail: Option<String>,
+    /// Whether hitomi still lists it. `None` until the list has been read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub listed: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -134,6 +137,13 @@ pub async fn cards(
     if ids.is_empty() {
         return Err(ApiError::bad_request("ids must contain at least one gallery id"));
     }
+
+    // Reading hitomi's list of works is worth doing once and never worth
+    // waiting for: the first page of results goes out without it.
+    state.listing.warm(
+        Arc::clone(&state.fetcher),
+        state.cfg.sort_list_url(tsuburu_hitomi::Sort::Date, "all"),
+    );
 
     let gg = state.gg().await?;
     let mut out = Vec::with_capacity(ids.len());
@@ -195,6 +205,11 @@ pub async fn cards(
         }
     }
 
+    // Said once the list has been read, and not guessed at before then.
+    for card in &mut out {
+        card.listed = state.listing.listed(card.id);
+    }
+
     Ok(Json(out))
 }
 
@@ -217,6 +232,7 @@ fn card_from_work(w: tsuburu_meta::Work) -> Card {
         artists: named(w.artists),
         tags: w.tags.into_iter().take(8).collect(),
         thumbnail: w.thumbnail_hash.map(|h| format!("/tn/{h}.avif")),
+        listed: None,
     }
 }
 
@@ -266,6 +282,7 @@ async fn build_card(
         artists: named(gallery.artists),
         tags: gallery.tags.into_iter().take(8).collect(),
         thumbnail,
+        listed: None,
     })
 }
 

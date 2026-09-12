@@ -106,6 +106,14 @@ one in it, is not searched for: hitomi's index maps words to works, so a
 gallery number is an address rather than a term, and pasting one opens that
 work.
 
+That matters more than it sounds. hitomi stops listing a work long before it
+stops serving it — of a sample of sixty works its index no longer names, **52
+still handed over every page**. They are missing from hitomi's own search and
+from browsing, but the snapshot still knows them, so the local source finds
+them and a number opens them. Where a result is one of those, it says **not
+listed on hitomi**: the pages are there now, which is the only time keeping a
+copy is still possible.
+
 From the terminal:
 
 ```console

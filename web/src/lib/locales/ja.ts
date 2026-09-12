@@ -67,8 +67,8 @@ export const ja: Messages = {
 
   'terms.noTranslation': '訳語なし',
 
-  'search.placeholder': '韓国語か英語で検索、-語 で除外',
-  'search.placeholderLocal': 'タイトル・作家・シリーズ・キャラクター',
+  'search.placeholder': '検索語・作品番号・hitomi のアドレス · -語 で除外',
+  'search.placeholderLocal': 'タイトル・作家・シリーズ・キャラクター、または作品番号',
   'search.clear': '検索語を消す',
   'search.in': '範囲',
   'search.scopeAll': 'すべて',
@@ -108,6 +108,8 @@ export const ja: Messages = {
   'kind.imageset': '画像集',
 
   'card.unavailable': '取得できません',
+  'card.unlisted': 'hitomi の一覧にない',
+  'card.unlistedNote': 'サイトがこの作品を一覧に出さなくなりました。ページはまだ残っているので、必要なら取得しておいてください。',
   'card.favoriteAdd': 'お気に入りに追加',
   'card.favoriteRemove': 'お気に入りから外す',
 

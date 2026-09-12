@@ -68,8 +68,8 @@ export const en = {
 
   'terms.noTranslation': 'no translation',
 
-  'search.placeholder': 'Search in Korean or English, use -term to exclude',
-  'search.placeholderLocal': 'Title, artist, series or character, in Korean or English',
+  'search.placeholder': 'Words, a gallery number, or a hitomi address · -word excludes',
+  'search.placeholderLocal': 'Title, artist, series, character — or a gallery number',
   'search.clear': 'Clear search',
   'search.in': 'In',
   'search.scopeAll': 'everywhere',
@@ -109,6 +109,8 @@ export const en = {
   'kind.imageset': 'Image set',
 
   'card.unavailable': 'unavailable',
+  'card.unlisted': 'not listed on hitomi',
+  'card.unlistedNote': 'The site has stopped listing this work. Its pages are still here, so keep a copy if you want it.',
   'card.favoriteAdd': 'Add to favorites',
   'card.favoriteRemove': 'Remove from favorites',
 

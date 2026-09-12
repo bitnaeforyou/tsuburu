@@ -65,6 +65,9 @@ pub struct AppState {
     pub model: Arc<tsuburu_embed::runner::Runner>,
     /// Whether a newer tsuburu has been published, and becoming it.
     pub updater: Arc<tsuburu_update::Updater>,
+    /// Which works hitomi still lists. A work it has stopped listing keeps
+    /// its pages, and is the kind worth keeping a copy of.
+    pub listing: Arc<crate::listed::Listing>,
     version: RwLock<Option<Cached<String>>>,
     gg: RwLock<Option<Cached<GgMap>>>,
     /// 갤러리 메타 JSON은 최대 200 KB를 넘기도 한다. 카드 한 장으로 줄여
@@ -107,6 +110,7 @@ impl AppState {
                 tsuburu_store::data_dir().unwrap_or_else(|_| std::env::temp_dir()).join("model"),
             ),
             updater: tsuburu_update::Updater::new(),
+            listing: Default::default(),
             version: RwLock::new(None),
             gg: RwLock::new(None),
             cards: Cache::new(4096),

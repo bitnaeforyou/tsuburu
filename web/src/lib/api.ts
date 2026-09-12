@@ -61,6 +61,8 @@ export type Card = {
   pages: number
   artists: string[]
   tags: string[]
+  /// Whether hitomi still lists it. Absent until the list has been read.
+  listed?: boolean
   thumbnail: string | null
 }
 

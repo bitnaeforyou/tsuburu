@@ -67,8 +67,8 @@ export const ko: Messages = {
 
   'terms.noTranslation': '번역 없음',
 
-  'search.placeholder': '한국어나 영어로 검색, -단어로 제외',
-  'search.placeholderLocal': '제목·작가·시리즈·캐릭터, 한국어나 영어로',
+  'search.placeholder': '검색어 · 품번 · hitomi 주소 아무거나 · -단어로 제외',
+  'search.placeholderLocal': '제목·작가·시리즈·캐릭터, 또는 품번',
   'search.clear': '검색어 지우기',
   'search.in': '범위',
   'search.scopeAll': '전체',
@@ -108,6 +108,8 @@ export const ko: Messages = {
   'kind.imageset': '이미지 모음',
 
   'card.unavailable': '불러올 수 없음',
+  'card.unlisted': 'hitomi 목록에 없음',
+  'card.unlistedNote': 'hitomi가 이 작품을 더는 목록에 올리지 않습니다. 쪽은 아직 남아 있으니, 가질 생각이면 받아두세요.',
   'card.favoriteAdd': '즐겨찾기에 추가',
   'card.favoriteRemove': '즐겨찾기에서 빼기',
 

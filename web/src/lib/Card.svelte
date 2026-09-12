@@ -99,6 +99,9 @@
       <span class="id">#{id}</span>
       &middot; {t('common.pages', { n: pages })}{language ? ` · ${language}` : ''}
     </p>
+    {#if card?.listed === false}
+      <p class="unlisted" title={t('card.unlistedNote')}>{t('card.unlisted')}</p>
+    {/if}
     {#if topTags.length}
       <p class="tags">{topTags.join(' · ')}</p>
     {/if}
@@ -213,6 +216,14 @@
   .id {
     font-variant-numeric: tabular-nums;
     user-select: all;
+  }
+
+  /* Not an error: the work is here and readable. It is a reason to keep a
+     copy, because the site has stopped pointing at it. */
+  .unlisted {
+    margin: 0.15rem 0 0;
+    color: var(--accent);
+    font-size: 0.72rem;
   }
 
   .tags {

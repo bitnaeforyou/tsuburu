@@ -9,6 +9,7 @@ pub mod error;
 pub mod grinder;
 pub mod keywords;
 pub mod library;
+pub mod listed;
 pub mod meta;
 pub mod proxy;
 pub mod similar;
