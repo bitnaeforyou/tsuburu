@@ -103,7 +103,12 @@ jobs:
       # showing people how to unpack a zip instead.
       - name: Write the notes
         run: |
-          git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME" > notes.md
+          # The whole message, not the body: git calls the first paragraph the
+          # subject, and a release note that opens by dropping its first
+          # paragraph is worse than one that repeats a line. Fetched again
+          # because a checkout does not always bring the annotation with it.
+          git fetch --force --tags --depth=1 origin "refs/tags/$GITHUB_REF_NAME" || true
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.md
           cat >> notes.md <<'TAIL'
 
           ---
