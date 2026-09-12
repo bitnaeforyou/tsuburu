@@ -308,6 +308,16 @@ async fn serve(
         }
     }
     let state = Arc::new(app_state);
+    // Switched on once, on again now: a reader who turned it on did not agree
+    // to turn it on every time. Only if its files are here - nothing is
+    // fetched without being asked.
+    state.model.resume();
+    // What a previous update left behind on a platform that could not delete
+    // it while it was running.
+    tsuburu_update::sweep();
+    // Asked once, at the start, and only asked: nothing is replaced until
+    // somebody presses the button.
+    state.updater.check();
     let app = tsuburu_server::router(Arc::clone(&state));
 
     // 상위 노드 예열은 배경에서 돌린다. 서버 기동을 막지 않는다.

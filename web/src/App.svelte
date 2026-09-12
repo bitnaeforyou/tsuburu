@@ -4,7 +4,7 @@
   import Gallery from './routes/Gallery.svelte'
   import Favorites from './routes/Favorites.svelte'
   import History from './routes/History.svelte'
-  import Dialogue from './routes/Dialogue.svelte'
+  import Settings from './routes/Settings.svelte'
   import Artist from './routes/Artist.svelte'
   import Downloads from './routes/Downloads.svelte'
   import Keyword from './routes/Keyword.svelte'
@@ -34,8 +34,8 @@
   <Favorites />
 {:else if route.name === 'history'}
   <History />
-{:else if route.name === 'dialogue'}
-  <Dialogue query={route.query} />
+{:else if route.name === 'settings'}
+  <Settings />
 {:else if route.name === 'artist'}
   <Artist artist={route.artist} />
 {:else if route.name === 'downloads'}

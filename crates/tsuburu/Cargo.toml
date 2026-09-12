@@ -13,6 +13,7 @@ path = "src/main.rs"
 tsuburu-hitomi = { path = "../tsuburu-hitomi" }
 tsuburu-fetch = { path = "../tsuburu-fetch" }
 tsuburu-server = { path = "../tsuburu-server" }
+tsuburu-update = { path = "../tsuburu-update" }
 tsuburu-store = { path = "../tsuburu-store" }
 tsuburu-dialogue = { path = "../tsuburu-dialogue" }
 tsuburu-ocr = { path = "../tsuburu-ocr" }

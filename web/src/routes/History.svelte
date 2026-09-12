@@ -6,7 +6,6 @@
   import Grid from '../lib/Grid.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
-  import Backup from '../lib/Backup.svelte'
 
   let items = $state<api.HistoryEntry[]>([])
   let error = $state<unknown>(null)
@@ -77,8 +76,6 @@
       {/each}
     </Grid>
   {/if}
-
-  <Backup />
 </main>
 
 <style>
@@ -90,6 +87,8 @@
     font-size: 0.85rem;
   }
   main {
+    max-width: var(--page);
+    margin-inline: auto;
     padding: 1rem;
   }
   .count {

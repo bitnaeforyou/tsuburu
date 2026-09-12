@@ -2044,6 +2044,7 @@ dependencies = [
  "tsuburu-ocr",
  "tsuburu-server",
  "tsuburu-store",
+ "tsuburu-update",
 ]
 
 [[package]]
@@ -2080,11 +2081,14 @@ dependencies = [
 name = "tsuburu-embed"
 version = "0.2.0"
 dependencies = [
+ "futures-util",
  "memmap2",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
+ "tokio",
  "tracing",
 ]
 
@@ -2186,6 +2190,7 @@ dependencies = [
  "tsuburu-meta",
  "tsuburu-ocr",
  "tsuburu-store",
+ "tsuburu-update",
  "wiremock",
 ]
 
@@ -2205,6 +2210,20 @@ dependencies = [
 [[package]]
 name = "tsuburu-text"
 version = "0.2.0"
+
+[[package]]
+name = "tsuburu-update"
+version = "0.2.0"
+dependencies = [
+ "futures-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "typenum"

@@ -13,6 +13,7 @@ pub mod meta;
 pub mod proxy;
 pub mod similar;
 pub mod state;
+pub mod update;
 
 use axum::Router;
 use axum::routing::{get, post, put};
@@ -45,10 +46,15 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/dialogue/status", get(dialogue::status))
         .route("/api/dialogue/settings", put(dialogue::update_settings))
         .route("/api/dialogue/search", get(dialogue::search))
-        .route("/api/dialogue/similar", get(dialogue::similar))
         .route("/api/dialogue/phrase", get(dialogue::phrase))
         .route("/api/dialogue/pack", get(dialogue::get_embedder).put(dialogue::set_embedder))
         .route("/api/dialogue/pack/check", get(dialogue::check_pack))
+        .route("/api/update", get(update::state))
+        .route("/api/update/check", post(update::check))
+        .route("/api/update/apply", post(update::apply))
+        .route("/api/model", get(dialogue::get_model))
+        .route("/api/model/enable", post(dialogue::enable_model))
+        .route("/api/model/disable", post(dialogue::disable_model))
         .route("/api/dialogue/stored", get(dialogue::stored).delete(dialogue::forget_read))
         .route("/api/dialogue/stored/{id}", axum::routing::delete(dialogue::forget))
         .route("/api/dialogue/enqueue", post(dialogue::enqueue))

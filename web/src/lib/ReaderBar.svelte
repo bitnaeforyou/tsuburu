@@ -60,9 +60,7 @@
 
   <div class="set">
     {#if onpages}
-      <button class="wide" onclick={onpages} title={t('reader.pages')} aria-label={t('reader.pages')}>
-        ▦
-      </button>
+      <button class="wide" onclick={onpages}>{t('reader.pages')}</button>
     {/if}
 
     <div class="group" role="group" aria-label={t('reader.layout')}>
@@ -119,7 +117,14 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem 1rem;
-    margin-bottom: 0.6rem;
+    /* Scrolling reading is all scroll, so the controls have to come with you;
+       `--chrome` is how tall the header above them is. */
+    position: sticky;
+    top: var(--chrome, 0);
+    z-index: 1;
+    background: var(--bg);
+    padding: 0.5rem 0;
+    margin-bottom: 0.1rem;
   }
 
   .turn {

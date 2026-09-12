@@ -59,6 +59,7 @@ export type Card = {
   kind: string | null
   language: string | null
   pages: number
+  artists: string[]
   tags: string[]
   thumbnail: string | null
 }
@@ -299,11 +300,6 @@ export function importArtifact(dir: string): Promise<ImportProgress> {
 
 export type SimilarHit = { gallery_id: number; page: number; score: number; snippet: string[] }
 
-export function similarScenes(id: number, page: number, limit = 12): Promise<SimilarHit[]> {
-  const params = new URLSearchParams({ id: String(id), page: String(page), limit: String(limit) })
-  return request(`/api/dialogue/similar?${params}`)
-}
-
 // --- downloads ---
 
 export type DownloadItem = {
@@ -373,6 +369,55 @@ export function unfollowArtist(name: string): Promise<{ following: boolean }> {
 }
 
 // --- phrase search over the embeddings ---
+
+/// Whether a newer tsuburu has been published, and how far along becoming it
+/// has got.
+export type UpdateState = {
+  state: 'idle' | 'checking' | 'found' | 'fetching' | 'ready' | 'failed'
+  version?: string
+  notes?: string
+  done?: number
+  total?: number
+  error?: string
+  here: string
+  published: boolean
+}
+
+export function updateState(): Promise<UpdateState> {
+  return request('/api/update')
+}
+
+export function checkUpdate(): Promise<UpdateState> {
+  return send('POST', '/api/update/check')
+}
+
+export function applyUpdate(): Promise<UpdateState> {
+  return send('POST', '/api/update/apply')
+}
+
+/// The model that turns a phrase into a vector: what it is doing, and whether
+/// its weights are already on this machine.
+export type ModelState = {
+  state: 'off' | 'fetching' | 'starting' | 'ready' | 'failed'
+  what?: string
+  done?: number
+  total?: number
+  error?: string
+  kept: boolean
+  bytes: number
+}
+
+export function modelState(): Promise<ModelState> {
+  return request('/api/model')
+}
+
+export function enableModel(): Promise<ModelState> {
+  return send('POST', '/api/model/enable')
+}
+
+export function disableModel(): Promise<ModelState> {
+  return send('POST', '/api/model/disable')
+}
 
 export type EmbedderSettings = { url: string; model: string }
 

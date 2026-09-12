@@ -105,6 +105,9 @@ pub struct Card {
     pub kind: Option<String>,
     pub language: Option<String>,
     pub pages: usize,
+    /// Who drew it, where that is known: hitomi writes "N/A" when it is not,
+    /// which is not a name and is not shown as one.
+    pub artists: Vec<String>,
     pub tags: Vec<String>,
     /// 이 서버의 썸네일 프록시 경로. 브라우저는 hitomi를 직접 보지 않는다.
     pub thumbnail: Option<String>,
@@ -195,6 +198,15 @@ pub async fn cards(
     Ok(Json(out))
 }
 
+/// The names among them, at most two: a result has room for that much.
+fn named(artists: Vec<String>) -> Vec<String> {
+    artists
+        .into_iter()
+        .filter(|name| !name.trim().is_empty() && !name.eq_ignore_ascii_case("N/A"))
+        .take(2)
+        .collect()
+}
+
 fn card_from_work(w: tsuburu_meta::Work) -> Card {
     Card {
         id: w.id,
@@ -202,8 +214,28 @@ fn card_from_work(w: tsuburu_meta::Work) -> Card {
         kind: (!w.kind.is_empty()).then_some(w.kind),
         language: (!w.language.is_empty()).then_some(w.language),
         pages: w.pages as usize,
+        artists: named(w.artists),
         tags: w.tags.into_iter().take(8).collect(),
         thumbnail: w.thumbnail_hash.map(|h| format!("/tn/{h}.avif")),
+    }
+}
+
+#[cfg(test)]
+mod card_tests {
+    use super::named;
+
+    #[test]
+    fn keeps_the_names_and_drops_what_is_not_one() {
+        assert_eq!(named(vec!["keso".into()]), vec!["keso".to_string()]);
+        assert!(named(vec!["N/A".into()]).is_empty());
+        assert!(named(vec!["n/a".into(), "  ".into()]).is_empty());
+        assert_eq!(named(vec!["N/A".into(), "keso".into()]), vec!["keso".to_string()]);
+    }
+
+    #[test]
+    fn a_result_has_room_for_two() {
+        let many = vec!["a".into(), "b".into(), "c".into(), "d".into()];
+        assert_eq!(named(many), vec!["a".to_string(), "b".to_string()]);
     }
 }
 
@@ -231,6 +263,7 @@ async fn build_card(
         kind: gallery.kind,
         language: gallery.language,
         pages: gallery.files.len(),
+        artists: named(gallery.artists),
         tags: gallery.tags.into_iter().take(8).collect(),
         thumbnail,
     })

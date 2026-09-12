@@ -1,8 +1,9 @@
 <script lang="ts">
   import * as api from '../lib/api'
   import { t, number } from '../lib/i18n.svelte'
-  import { defaultSearch, toSearch, type SearchState } from '../lib/router'
+  import { defaultSearch, galleryNamed, toGallery, toSearch, type SearchState } from '../lib/router'
   import { library } from '../lib/library.svelte'
+  import { markScroll, recall, remember } from '../lib/results.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -45,10 +46,21 @@
     if (params.query) sessionStorage.setItem('tsuburu.lastSearch', location.hash)
   })
 
+  // The same for a search arrived at by its own address, so a pasted
+  // ...?q=4183648 opens the work rather than looking for the number.
+  $effect(() => {
+    const named = galleryNamed(params.query)
+    if (named !== null) location.replace(toGallery(named))
+  })
+
+  /// What this particular search is, for remembering what it found.
+  const key = $derived(
+    [params.query, params.sort, params.language, params.kind, params.scope, params.mode].join(' '),
+  )
+
   // 검색어나 정렬, 필터가 바뀌면 처음부터 다시 그린다.
   $effect(() => {
-    const key = [params.query, params.sort, params.language, params.kind, params.scope].join(' ')
-    void key
+    const asked = key
     ids = []
     terms = []
     hits = []
@@ -56,10 +68,45 @@
     offset = 0
     error = null
     if (sectioned) return
+
+    // Coming back from a work: the same question has the same answer, and it
+    // was left somewhere particular on the page.
+    const before = recall(asked)
+    if (before) {
+      ids = before.ids
+      terms = before.terms
+      hits = before.hits
+      total = before.total
+      offset = before.offset
+      restoreScroll(before.scrollY)
+      return
+    }
+
     // Local scope needs something to search for; hitomi scope can browse.
     if (params.scope === 'local' && !params.query && params.language === 'all' && params.kind === 'all') return
     if (params.scope === 'dialogue' && !params.query) return
     void load(0)
+  })
+
+  /// Puts the page back where it was.
+  ///
+  /// Once is not enough: the cards below the fold have no height until they
+  /// are drawn, so the first attempt can run out of page before it gets
+  /// there. The second one lands.
+  function restoreScroll(want: number) {
+    if (want <= 0) return
+    requestAnimationFrame(() => scrollTo(0, want))
+    setTimeout(() => {
+      if (Math.abs(window.scrollY - want) > 8) scrollTo(0, want)
+    }, 200)
+  }
+
+  // Kept as it changes, and the place on the page kept as it is left.
+  $effect(() => {
+    const asked = key
+    if (sectioned || (ids.length === 0 && hits.length === 0)) return
+    remember(asked, { ids, terms, hits, total, offset, scrollY: 0 })
+    return () => markScroll(asked, window.scrollY)
   })
 
   async function load(from: number) {
@@ -68,7 +115,15 @@
     loading = true
     error = null
     try {
-      if (params.scope === 'dialogue') {
+      if (params.scope === 'dialogue' && params.mode === 'meaning') {
+        // A phrase is turned into a vector by the model tsuburu runs, and the
+        // answer is the passages nearest it - so it comes back whole, not in
+        // pages.
+        const found = await api.phraseScenes(params.query)
+        hits = found.map((hit) => ({ ...hit, exact: false, also: [] }))
+        total = hits.length
+        return
+      } else if (params.scope === 'dialogue') {
         const found = await api.dialogueSearch(params.query, 50, controller.signal)
         hits = found.hits
         total = found.hits.length
@@ -109,7 +164,11 @@
   }
 
   function go(changes: Partial<SearchState>) {
-    location.hash = toSearch({ ...params, ...changes })
+    const next = { ...params, ...changes }
+    // A number or a hitomi address is the work itself, not something to look
+    // for. Searching for it could only ever find nothing.
+    const named = galleryNamed(next.query)
+    location.hash = named === null ? toSearch(next) : toGallery(named)
   }
 
   const hasMore = $derived(params.scope !== 'dialogue' && ids.length < total)
@@ -171,6 +230,8 @@
 
 <style>
   main {
+    max-width: var(--page);
+    margin-inline: auto;
     padding: 1rem;
   }
 

@@ -10,11 +10,14 @@
     current,
     onpick,
     onclose,
+    inline = false,
   }: {
     pages: Page[]
     current: number
     onpick: (page: number) => void
-    onclose: () => void
+    onclose?: () => void
+    /// Shown in the flow of a page rather than over everything on it.
+    inline?: boolean
   } = $props()
 
   let sheet = $state<HTMLElement | null>(null)
@@ -22,10 +25,11 @@
   // Opening a thousand pages at the top of the work would hide the one being
   // read somewhere below the fold.
   $effect(() => {
-    sheet?.querySelector('.page.on')?.scrollIntoView({ block: 'center' })
+    if (!inline) sheet?.querySelector('.page.on')?.scrollIntoView({ block: 'center' })
   })
 
   $effect(() => {
+    if (inline || !onclose) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
@@ -36,12 +40,21 @@
   })
 </script>
 
-<div class="sheet" role="dialog" aria-modal="true" aria-label={t('reader.pages')} bind:this={sheet}>
-  <header>
-    <strong>{t('reader.pages')}</strong>
-    <span class="muted">{current + 1} / {pages.length}</span>
-    <button onclick={onclose}>{t('reader.pagesClose')}</button>
-  </header>
+<div
+  class="sheet"
+  class:inline
+  role={inline ? undefined : 'dialog'}
+  aria-modal={inline ? undefined : 'true'}
+  aria-label={t('reader.pages')}
+  bind:this={sheet}
+>
+  {#if !inline}
+    <header>
+      <strong>{t('reader.pages')}</strong>
+      <span class="muted">{current + 1} / {pages.length}</span>
+      <button onclick={onclose}>{t('reader.pagesClose')}</button>
+    </header>
+  {/if}
 
   <div class="wall">
     {#each pages as page, at (page.src)}
@@ -87,6 +100,15 @@
     color: var(--muted);
     font-variant-numeric: tabular-nums;
     margin-right: auto;
+  }
+
+  .sheet.inline {
+    position: static;
+    background: none;
+  }
+  .sheet.inline .wall {
+    overflow: visible;
+    padding: 0;
   }
 
   .wall {

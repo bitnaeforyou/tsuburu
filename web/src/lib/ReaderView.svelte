@@ -123,9 +123,13 @@
       followed = false
       return
     }
-    // The document already opens at the first page; scrolling to it would only
-    // push the controls above the top of the window.
-    if (arriving && page === 0) return
+    // Arriving at the first page means the top of the whole thing. Bringing
+    // the image itself into view would push the controls off the top; coming
+    // from the screen before would leave it wherever that was scrolled to.
+    if (arriving && page === 0) {
+      scrollTo(0, 0)
+      return
+    }
     elements[page]?.scrollIntoView({ block: 'start' })
   })
 

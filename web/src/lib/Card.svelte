@@ -28,6 +28,14 @@
   const pages = $derived(card?.pages ?? preset?.pages ?? 0)
   const language = $derived(card?.language ?? preset?.language ?? null)
   const favorited = $derived(library.has(id))
+  /// What the work is, in the three words a card has room for. Namespaced
+  /// tags say female:/male:; the part after the colon is the word.
+  const topTags = $derived(
+    (card?.tags ?? [])
+      .map((tag) => tag.split(':').pop() ?? tag)
+      .filter((tag) => tag.length > 0)
+      .slice(0, 3),
+  )
 
   // 갤러리 메타데이터는 한 건에 수십~수백 KB다. 화면에 들어온 카드만 받는다.
   $effect(() => {
@@ -88,8 +96,12 @@
     </div>
     <h3>{title}</h3>
     <p class="meta">
-      {t('common.pages', { n: pages })}{language ? ` · ${language}` : ''}
+      <span class="id">#{id}</span>
+      &middot; {t('common.pages', { n: pages })}{language ? ` · ${language}` : ''}
     </p>
+    {#if topTags.length}
+      <p class="tags">{topTags.join(' · ')}</p>
+    {/if}
   </a>
 
   {#if !library.unavailable}
@@ -197,5 +209,18 @@
     margin: 0;
     color: var(--muted);
     font-size: 0.8rem;
+  }
+  .id {
+    font-variant-numeric: tabular-nums;
+    user-select: all;
+  }
+
+  .tags {
+    margin: 0.1rem 0 0;
+    color: var(--muted);
+    font-size: 0.72rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>

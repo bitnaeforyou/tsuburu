@@ -36,7 +36,12 @@ jobs:
         working-directory: web
         run: npm ci && npm run build
 
+      # The binary is told where it was published, so it can offer the next
+      # one. It is not written in the source: this repository is not
+      # necessarily the one a reader downloaded from.
       - run: cargo build --release --locked -p tsuburu --target ${{ matrix.target }}
+        env:
+          TSUBURU_RELEASES: ${{ github.repository }}
 
       # Packed so that someone who has never opened a terminal can start it:
       # zip on macOS and Windows, which both unpack on a double-click, and a

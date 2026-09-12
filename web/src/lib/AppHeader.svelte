@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
-  import { toDialogue, toSearch } from './router'
+  import { toSearch, toSettings } from './router'
   import { t } from './i18n.svelte'
   import LocalePicker from './LocalePicker.svelte'
 
@@ -11,7 +11,7 @@
     active,
     actions,
   }: {
-    active: 'search' | 'dialogue' | 'favorites' | 'downloads' | 'history'
+    active: 'search' | 'settings' | 'favorites' | 'downloads' | 'history'
     actions?: Snippet
   } = $props()
 
@@ -23,12 +23,15 @@
     return () => document.body.classList.remove('has-tabs')
   })
 
+  // In the order they are reached for: looking for something, then the things
+  // you kept, then what you read, then what is on disk. Settings last, where
+  // settings go.
   const TABS = [
     { id: 'search', key: 'nav.search', href: toSearch() },
-    { id: 'dialogue', key: 'nav.dialogue', href: toDialogue() },
     { id: 'favorites', key: 'nav.favorites', href: '#/favorites' },
-    { id: 'downloads', key: 'nav.downloads', href: '#/downloads' },
     { id: 'history', key: 'nav.history', href: '#/history' },
+    { id: 'downloads', key: 'nav.downloads', href: '#/downloads' },
+    { id: 'settings', key: 'nav.settings', href: toSettings() },
   ] as const
 </script>
 
@@ -58,7 +61,7 @@
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 0.7rem 1rem;
+    padding: 0.7rem var(--gutter);
     background: var(--bg);
     border-bottom: 1px solid var(--border);
   }
@@ -109,7 +112,7 @@
      reaches them, and stop eating three rows of the top of every screen. */
   @media (max-width: 640px) {
     header {
-      padding: 0.6rem 0.9rem;
+      padding: 0.6rem var(--gutter);
       gap: 0.5rem;
     }
 

@@ -60,6 +60,11 @@ pub struct AppState {
     /// Pages kept on disk. `None` if the store could not be opened.
     pub downloads: Option<Arc<tsuburu_downloads::DownloadStore>>,
     pub download_jobs: Arc<crate::downloads::Jobs>,
+    /// The model that turns a phrase into a vector. Nothing is fetched and
+    /// nothing runs until a reader asks for it.
+    pub model: Arc<tsuburu_embed::runner::Runner>,
+    /// Whether a newer tsuburu has been published, and becoming it.
+    pub updater: Arc<tsuburu_update::Updater>,
     version: RwLock<Option<Cached<String>>>,
     gg: RwLock<Option<Cached<GgMap>>>,
     /// 갤러리 메타 JSON은 최대 200 KB를 넘기도 한다. 카드 한 장으로 줄여
@@ -98,6 +103,10 @@ impl AppState {
             keywords: None,
             downloads: None,
             download_jobs: Default::default(),
+            model: tsuburu_embed::runner::Runner::new(
+                tsuburu_store::data_dir().unwrap_or_else(|_| std::env::temp_dir()).join("model"),
+            ),
+            updater: tsuburu_update::Updater::new(),
             version: RwLock::new(None),
             gg: RwLock::new(None),
             cards: Cache::new(4096),

@@ -380,16 +380,7 @@ fn storage_error(err: &dyn std::fmt::Display) -> ApiError {
     ApiError { error: ErrorKind::Storage, message: err.to_string(), code: None }
 }
 
-// --- similar scenes ---
-
-#[derive(Debug, Deserialize)]
-pub struct SimilarParams {
-    pub id: i32,
-    #[serde(default)]
-    pub page: u16,
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-}
+// --- what a phrase search hands back ---
 
 #[derive(Debug, Serialize)]
 pub struct SimilarHit {
@@ -397,80 +388,6 @@ pub struct SimilarHit {
     pub page: u16,
     pub score: f32,
     pub snippet: Vec<String>,
-}
-
-/// Passages closest in meaning to the one being read.
-///
-/// The neighbours come from the imported embeddings; the text shown beside them
-/// comes from the local corpus, so nothing is fetched.
-pub async fn similar(
-    State(state): State<Arc<AppState>>,
-    Query(params): Query<SimilarParams>,
-) -> Result<Json<Vec<SimilarHit>>, ApiError> {
-    let grinder = Arc::clone(grinder(&state)?);
-    let dir = grinder.store().artifact_dir()?.ok_or_else(|| ApiError {
-        error: ErrorKind::Unsupported,
-        message: "no embeddings are available; import artifact's llm-search-index first".into(),
-        code: Some("import_artifact"),
-    })?;
-
-    let limit = params.limit.clamp(1, MAX_RESULTS);
-    let id = params.id;
-    let page = params.page;
-    let state_for_blocking = Arc::clone(&state);
-    let hits = tokio::task::spawn_blocking(move || -> Result<Vec<SimilarHit>, String> {
-        let similarity = state_for_blocking.similarity.get(&dir)?;
-        let store = grinder.store();
-        let passage = |work: i32, page: u16| -> Option<Vec<u8>> {
-            let pages = store.text(work).ok().flatten()?;
-            let text = pages.into_iter().find(|p| p.page == page)?.lines.concat();
-            Some(tsuburu_dialogue::jamo::codes(&text))
-        };
-        // The passage is in the imported index, or only in what was read here.
-        // Either way it supplies the query, and both sides are searched: a
-        // work read on this machine still has the whole corpus to match
-        // against.
-        let in_index = similarity.stored_vector(id, page);
-        let Some(query) = (match in_index {
-            Some(vector) => Some(vector),
-            None => store.vector(id, page).map_err(|e| e.to_string())?,
-        }) else {
-            return Err(format!("gallery {id} has no embedding to compare with"));
-        };
-        let from_index = if similarity.stored_vector(id, page).is_some() {
-            // Its own chapters are excluded by work rather than by score.
-            similarity.near(id, page, limit, &passage)?
-        } else {
-            similarity.near_vector(&query, limit, &passage)
-        };
-        let from_here = crate::similar::near_local(store, &query, limit, Some(id));
-        let matches = crate::similar::merge(from_index, from_here, limit);
-        Ok(matches
-            .into_iter()
-            .map(|m| SimilarHit {
-                gallery_id: m.gallery_id,
-                page: m.page,
-                score: m.score,
-                // The passage itself, straight from the imported corpus.
-                snippet: store
-                    .text(m.gallery_id)
-                    .ok()
-                    .flatten()
-                    .and_then(|pages| {
-                        pages
-                            .into_iter()
-                            .find(|p| p.page == m.page)
-                            .map(|p| p.lines.into_iter().take(3).collect::<Vec<_>>())
-                    })
-                    .unwrap_or_default(),
-            })
-            .collect())
-    })
-    .await
-    .map_err(|e| storage_error(&e))?
-    .map_err(|message| ApiError { error: ErrorKind::Storage, message, code: None })?;
-
-    Ok(Json(hits))
 }
 
 // --- phrase search, through a model the user supplies ---
@@ -489,7 +406,7 @@ impl Default for EmbedderSettings {
     }
 }
 
-fn embedder_settings(grinder: &Grinder) -> EmbedderSettings {
+fn stored_embedder(grinder: &Grinder) -> EmbedderSettings {
     grinder
         .store()
         .embedder()
@@ -499,10 +416,22 @@ fn embedder_settings(grinder: &Grinder) -> EmbedderSettings {
         .unwrap_or_default()
 }
 
+/// Where to send a phrase to be turned into a vector.
+///
+/// The model tsuburu fetched and is running answers for itself; the stored
+/// address is only for someone who would rather run their own.
+fn embedder_settings(state: &AppState, grinder: &Grinder) -> EmbedderSettings {
+    let mut settings = stored_embedder(grinder);
+    if let Some(url) = state.model.url() {
+        settings.url = url;
+    }
+    settings
+}
+
 pub async fn get_embedder(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<EmbedderSettings>, ApiError> {
-    Ok(Json(embedder_settings(grinder(&state)?)))
+    Ok(Json(stored_embedder(grinder(&state)?)))
 }
 
 pub async fn set_embedder(
@@ -563,6 +492,12 @@ pub struct PhraseParams {
 }
 
 /// Scenes that mean something like the phrase given.
+/// How much text a page needs before it is worth offering as an answer.
+///
+/// Vectors for one or two words land near everything, so without this the
+/// nearest passages to any phrase are the pages that say almost nothing.
+const LEAST_TEXT: usize = 12;
+
 pub async fn phrase(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PhraseParams>,
@@ -572,7 +507,7 @@ pub async fn phrase(
         return Err(ApiError::bad_request("give a phrase to look for"));
     }
     let dir = similarity_dir(&grinder)?;
-    let settings = embedder_settings(&grinder);
+    let settings = embedder_settings(&state, &grinder);
     let limit = params.limit.clamp(1, MAX_RESULTS);
 
     let dims = {
@@ -593,9 +528,14 @@ pub async fn phrase(
             let text = pages.into_iter().find(|p| p.page == page)?.lines.concat();
             Some(tsuburu_dialogue::jamo::codes(&text))
         };
-        let from_index = similarity.near_vector(&query, limit, &passage);
-        let from_here = crate::similar::near_local(store, &query, limit, None);
-        Ok(crate::similar::merge(from_index, from_here, limit)
+        // Ask for more than will be shown: most of what comes back nearest a
+        // phrase is a page whose whole text is "오빠" or "부글부글", and a
+        // vector that short sits near everything. They are dropped below, and
+        // dropping them from a list of exactly `limit` would leave gaps.
+        let wide = (limit * 6).min(MAX_RESULTS * 6);
+        let from_index = similarity.near_vector(&query, wide, &passage);
+        let from_here = crate::similar::near_local(store, &query, wide, None);
+        Ok(crate::similar::merge(from_index, from_here, wide)
             .into_iter()
             .map(|m| SimilarHit {
                 gallery_id: m.gallery_id,
@@ -613,6 +553,10 @@ pub async fn phrase(
                     })
                     .unwrap_or_default(),
             })
+            .filter(|hit| {
+                hit.snippet.iter().map(|line| line.chars().count()).sum::<usize>() >= LEAST_TEXT
+            })
+            .take(limit)
             .collect())
     })
     .await
@@ -711,10 +655,43 @@ pub async fn forget_read(
     Ok(Json(serde_json::json!({ "removed": removed })))
 }
 
+/// What the interface needs to draw one switch: what it is doing, whether the
+/// weights are already here, and whether anybody publishes a model server for
+/// this computer at all.
+#[derive(Debug, Serialize)]
+pub struct ModelState {
+    #[serde(flatten)]
+    pub progress: tsuburu_embed::runner::Progress,
+    pub kept: bool,
+    pub bytes: u64,
+}
+
+fn model_state(state: &AppState) -> ModelState {
+    ModelState {
+        progress: state.model.progress(),
+        kept: state.model.kept(),
+        bytes: state.model.bytes_kept(),
+    }
+}
+
+pub async fn get_model(State(state): State<Arc<AppState>>) -> Json<ModelState> {
+    Json(model_state(&state))
+}
+
+pub async fn enable_model(State(state): State<Arc<AppState>>) -> Json<ModelState> {
+    state.model.enable();
+    Json(model_state(&state))
+}
+
+pub async fn disable_model(State(state): State<Arc<AppState>>) -> Json<ModelState> {
+    state.model.disable();
+    Json(model_state(&state))
+}
+
 pub async fn check_pack(State(state): State<Arc<AppState>>) -> Result<Json<PackCheck>, ApiError> {
     let grinder = Arc::clone(grinder(&state)?);
     let dir = similarity_dir(&grinder)?;
-    let settings = embedder_settings(&grinder);
+    let settings = embedder_settings(&state, &grinder);
 
     // Any indexed gallery will do; take the first one the corpus has.
     let sample = grinder.store().done_ids()?.into_iter().min().ok_or_else(|| {

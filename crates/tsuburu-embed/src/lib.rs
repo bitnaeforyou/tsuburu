@@ -11,6 +11,7 @@
 //! embeddings are actually good at.
 
 pub mod embedder;
+pub mod runner;
 
 use memmap2::Mmap;
 use std::fs::File;

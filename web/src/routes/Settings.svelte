@@ -4,9 +4,8 @@
   import AppHeader from '../lib/AppHeader.svelte'
   import Card from '../lib/Card.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
-  import { toDialogue, toGallery } from '../lib/router'
-
-  let { query }: { query: string } = $props()
+  import Backup from '../lib/Backup.svelte'
+  import { toDialogue } from '../lib/router'
 
   const LANGUAGES = ['all', 'korean', 'japanese', 'english']
   const KINDS = ['all', 'doujinshi', 'manga']
@@ -16,10 +15,6 @@
     { label: '6 MB/s', value: 6 * 1024 * 1024 },
   ]
 
-  let input = $state(query)
-  let hits = $state<api.DialogueHit[]>([])
-  let searching = $state(false)
-  let searchError = $state<unknown>(null)
   let status = $state<api.DialogueStatus | null>(null)
   let statusError = $state<unknown>(null)
 
@@ -29,8 +24,9 @@
   let hunt = $state({ q: '', language: 'korean', kind: 'doujinshi', limit: 500, force: false })
   let huntResult = $state<string | null>(null)
 
-  // Two ways to ask: the words as written, or what they mean.
-  let mode = $state<'words' | 'meaning'>('words')
+  let update = $state<api.UpdateState | null>(null)
+  let model = $state<api.ModelState | null>(null)
+  let modelError = $state<string | null>(null)
   let cache = $state<{
     items: api.Stored[]
     total: number
@@ -44,27 +40,6 @@
   let packBusy = $state(false)
   let packError = $state<string | null>(null)
 
-  let similarFor = $state<string | null>(null)
-  let similar = $state<api.SimilarHit[]>([])
-  let similarError = $state<string | null>(null)
-
-  // The embeddings answer "what else reads like this", using the vector
-  // already stored for the passage. No model is loaded to ask.
-  async function showSimilar(hit: api.DialogueHit) {
-    const key = `${hit.gallery_id}:${hit.page}`
-    if (similarFor === key) {
-      similarFor = null
-      return
-    }
-    similarFor = key
-    similar = []
-    similarError = null
-    try {
-      similar = await api.similarScenes(hit.gallery_id, hit.page)
-    } catch (cause) {
-      similarError = cause instanceof Error ? cause.message : String(cause)
-    }
-  }
 
   let artifactDir = $state('')
   let artifactResult = $state<string | null>(null)
@@ -73,13 +48,54 @@
   let exchangeResult = $state<string | null>(null)
   let exchanging = $state(false)
 
-  let controller: AbortController | null = null
-
+  // Fetching several gigabytes takes long enough that the switch has to keep
+  // saying so. Asked unconditionally: turning it on answers before the first
+  // byte moves, so what it says at that moment is no guide to what to do next.
   $effect(() => {
-    input = query
-    if (query) void search()
-    else hits = []
+    void refreshModel()
+    const timer = setInterval(() => void refreshModel(), 1000)
+    return () => clearInterval(timer)
   })
+
+  async function refreshModel() {
+    try {
+      model = await api.modelState()
+      modelError = null
+    } catch (cause) {
+      modelError = cause instanceof Error ? cause.message : String(cause)
+    }
+  }
+
+  async function toggleModel() {
+    const on = model?.state === 'ready' || model?.state === 'fetching' || model?.state === 'starting'
+    try {
+      model = on ? await api.disableModel() : await api.enableModel()
+      modelError = null
+    } catch (cause) {
+      modelError = cause instanceof Error ? cause.message : String(cause)
+    }
+  }
+
+  /// What the weights weigh, so the switch can say so before it has them.
+  const WEIGHTS = 2_496_703_776
+  const gigabytes = (n: number) => `${(n / 1073741824).toFixed(1)} GB`
+  const megabytes = (n: number) => `${(n / 1048576).toFixed(0)} MB`
+
+  // The program asks once when it starts; this is only so the answer, and the
+  // fetching after it, reach the screen.
+  $effect(() => {
+    void refreshUpdate()
+    const timer = setInterval(() => void refreshUpdate(), 1500)
+    return () => clearInterval(timer)
+  })
+
+  async function refreshUpdate() {
+    try {
+      update = await api.updateState()
+    } catch {
+      // Nothing to say if the question itself could not be asked.
+    }
+  }
 
   // The status line is what makes a miss readable as "not yet" instead of
   // "does not exist", so keep it fresh while the page is open.
@@ -95,26 +111,6 @@
       statusError = null
     } catch (cause) {
       statusError = cause
-    }
-  }
-
-  async function search() {
-    controller?.abort()
-    controller = new AbortController()
-    searching = true
-    searchError = null
-    try {
-      if (mode === 'meaning') {
-        const found = await api.phraseScenes(query)
-        hits = found.map((h) => ({ ...h, exact: false, also: [] }))
-      } else {
-        const result = await api.dialogueSearch(query, 25, controller.signal)
-        hits = result.hits
-      }
-    } catch (cause) {
-      if ((cause as Error).name !== 'AbortError') searchError = cause
-    } finally {
-      searching = false
     }
   }
 
@@ -165,11 +161,6 @@
     } finally {
       packBusy = false
     }
-  }
-
-  function submit(event: SubmitEvent) {
-    event.preventDefault()
-    location.hash = toDialogue(input.trim())
   }
 
   async function toggleIndexing() {
@@ -299,9 +290,10 @@
   const running = $derived(status?.status ?? null)
 </script>
 
-<AppHeader active="dialogue" />
+<AppHeader active="settings" />
 
 <main>
+  <h1>{t('nav.settings')}</h1>
   {#if status && !status.supported}
     <div class="panel">
       <strong>{t('dialogue.unsupported')}</strong>
@@ -312,10 +304,89 @@
       </p>
     </div>
   {:else}
+    <section class="panel version" class:offer={update?.state === 'found'}>
+      <div class="row">
+        <div>
+          <h2>{t('update.title')}</h2>
+          <p class="muted small">
+            {#if update?.state === 'found'}
+              {t('update.found', { version: update.version ?? '' })}
+              {#if update.notes}&middot; {update.notes}{/if}
+            {:else if update?.state === 'fetching'}
+              {t('update.fetching', {
+                done: megabytes(update.done ?? 0),
+                total: megabytes(update.total ?? 0),
+              })}
+            {:else if update?.state === 'ready'}
+              {t('update.ready', { version: update.version ?? '' })}
+            {:else if update?.state === 'failed'}
+              {t('update.failed', { error: update.error ?? '' })}
+            {:else if update && !update.published}
+              {t('update.unpublished')}
+            {:else if update?.state === 'checking'}
+              {t('update.checking')}
+            {:else}
+              {t('update.none')}
+            {/if}
+          </p>
+        </div>
+
+        {#if update?.state === 'found'}
+          <button class="go" onclick={() => void api.applyUpdate().then((u) => (update = u))}>
+            {t('update.get', { version: update.version ?? '' })}
+          </button>
+        {:else if update?.published && update.state !== 'fetching' && update.state !== 'ready'}
+          <button onclick={() => void api.checkUpdate().then((u) => (update = u))}>
+            {t('update.check')}
+          </button>
+        {/if}
+      </div>
+      <p class="muted small">{t('update.here', { version: update?.here ?? '' })}</p>
+    </section>
+
+    <section class="panel switch">
+        <div class="row">
+          <div>
+            <h2>{t('model.title')}</h2>
+            <p class="muted small">{t('model.note', { size: gigabytes(WEIGHTS) })}</p>
+          </div>
+          <button
+            class:on={model?.state === 'ready'}
+            disabled={!model}
+            onclick={toggleModel}
+            aria-pressed={model?.state === 'ready'}
+          >
+            {model?.state === 'off' || model?.state === 'failed'
+              ? model?.kept
+                ? t('model.turnOn')
+                : t('model.getIt', { size: gigabytes(WEIGHTS) })
+              : t('model.turnOff')}
+          </button>
+        </div>
+
+        {#if model?.state === 'fetching'}
+          <div class="meter" style:--done={`${model.total ? ((model.done ?? 0) / model.total) * 100 : 0}%`}>
+            <span>
+              {model.what === 'model' ? t('model.gettingWeights') : t('model.gettingServer')}
+              &middot; {gigabytes(model.done ?? 0)} / {gigabytes(model.total ?? 0)}
+            </span>
+          </div>
+        {:else if model?.state === 'starting'}
+          <p class="muted small">{t('model.starting')}</p>
+        {:else if model?.state === 'ready'}
+          <p class="muted small">{t('model.ready')}</p>
+        {:else if model?.state === 'failed'}
+          <p class="muted small">{t('model.failed', { error: model.error ?? '' })}</p>
+        {:else if model?.kept}
+          <p class="muted small">{t('model.kept', { size: gigabytes(model.bytes) })}</p>
+        {/if}
+        {#if modelError}<p class="muted small">{modelError}</p>{/if}
+    </section>
+
     <section class="panel status">
       <div class="row">
         <div>
-          <strong>{t('dialogue.index')}</strong>
+          <h2>{t('dialogue.index')}</h2>
           {#if coverage}
             <span class="muted">
               {t('dialogue.coverageTop1k', { percent: percent(coverage.top_1k, 1000) })} ·
@@ -414,99 +485,9 @@
       {/if}
     </section>
 
-    <form class="searchbar" onsubmit={submit}>
-      <input
-        bind:value={input}
-        placeholder={mode === 'meaning'
-          ? t('dialogue.searchMeaning')
-          : t('dialogue.searchWords')}
-        aria-label={t('dialogue.searchLabel')}
-        autocomplete="off"
-      />
-      <select bind:value={mode} aria-label={t('dialogue.mode')}>
-        <option value="words">{t('dialogue.modeWords')}</option>
-        <option value="meaning">{t('dialogue.modeMeaning')}</option>
-      </select>
-      <button type="submit" disabled={!input.trim()}>{t('dialogue.find')}</button>
-    </form>
-    {#if mode === 'meaning'}
-      <p class="muted small">
-        {t('dialogue.meaningNote')}
-      </p>
-    {/if}
-
-    {#if searchError}
-      <ErrorNote error={searchError} onretry={search} />
-    {/if}
-
-    {#if query && !searchError}
-      {#if searching}
-        <p class="muted">
-          {status?.counts?.done
-            ? t('dialogue.searchingCount', { n: number(status.counts.done) })
-            : t('dialogue.searching')}
-        </p>
-      {:else if hits.length === 0}
-        <p class="muted">
-          {t('dialogue.noHits')}
-        </p>
-      {:else}
-        <p class="muted">{t('common.galleries', { n: hits.length })}</p>
-        <ul class="hits">
-          {#each hits as hit (hit.gallery_id)}
-            <li class="hit">
-              <div class="thumb"><Card id={hit.gallery_id} /></div>
-              <div class="body">
-                <a href={toGallery(hit.gallery_id, hit.page)}>
-                  {t('common.page', { n: hit.page + 1 })}
-                  {#if hit.exact}<span class="badge">{t('dialogue.exact')}</span>{:else}<span
-                      class="badge fuzzy">~{Math.round(hit.score * 100)}%</span
-                    >{/if}
-                  {#if hit.also?.length}
-                    <span class="badge fuzzy" title={hit.also.join(', ')}>
-                      {hit.also.length > 1
-                        ? t('dialogue.copies', { n: hit.also.length })
-                        : t('dialogue.copy', { n: hit.also.length })}
-                    </span>
-                  {/if}
-                </a>
-                <blockquote>
-                  {#each hit.snippet as line, i (i)}<span>{line}</span>{/each}
-                </blockquote>
-                <button class="similar-toggle" onclick={() => showSimilar(hit)}>
-                  {similarFor === `${hit.gallery_id}:${hit.page}`
-                    ? t('dialogue.similarHide')
-                    : t('dialogue.similarShow')}
-                </button>
-                {#if similarFor === `${hit.gallery_id}:${hit.page}`}
-                  {#if similarError}
-                    <p class="muted small">{similarError}</p>
-                  {:else if similar.length === 0}
-                    <p class="muted small">{t('dialogue.similarSearching')}</p>
-                  {:else}
-                    <ul class="similar">
-                      {#each similar as near (near.gallery_id)}
-                        <li>
-                          <a href={toGallery(near.gallery_id, near.page)}>
-                            {t('common.page', { n: near.page + 1 })}
-                            <span class="badge fuzzy">{Math.round(near.score * 100)}%</span>
-                          </a>
-                          <span class="muted small">{near.snippet.join(' / ')}</span>
-                        </li>
-                      {/each}
-                    </ul>
-                  {/if}
-                {/if}
-              </div>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    {/if}
-
-    <section class="panel tools">
+    <section class="panel">
       <form onsubmit={submitImport}>
-        <strong>{t('dialogue.importHistory')}</strong>
+        <h2>{t('dialogue.importHistory')}</h2>
         <p class="muted small">{t('dialogue.importHistoryNote')}</p>
         <textarea bind:value={importText} rows="3" placeholder="https://hitomi.la/doujinshi/...-1234567.html"></textarea>
         <div class="row">
@@ -518,9 +499,11 @@
         </div>
         {#if importResult}<p class="muted small">{importResult}</p>{/if}
       </form>
+    </section>
 
+    <section class="panel">
       <form onsubmit={submitHunt}>
-        <strong>{t('dialogue.hunt')}</strong>
+        <h2>{t('dialogue.hunt')}</h2>
         <p class="muted small">{t('dialogue.huntNote')}</p>
         <div class="row">
           <input
@@ -549,67 +532,11 @@
         </div>
         {#if huntResult}<p class="muted small">{huntResult}</p>{/if}
       </form>
+    </section>
 
-      <form onsubmit={submitArtifact}>
-        <strong>{t('dialogue.artifact')}</strong>
-        <p class="muted small">{t('dialogue.artifactNote')}</p>
-        <div class="row">
-          <input
-            bind:value={artifactDir}
-            placeholder="/path/to/llm-search-index"
-            aria-label={t('dialogue.directory')}
-          />
-          <button type="submit" disabled={!artifactDir.trim() || status?.import?.running}>
-            {t('dialogue.import')}
-          </button>
-        </div>
-        {#if status?.import}
-          <p class="muted small">
-            {#if status.import.running}
-              {t('dialogue.importing', { n: number(status.import.works_seen) })}
-            {:else if status.import.error}
-              {t('dialogue.importFailed', { error: status.import.error })}
-            {:else}
-              {t('dialogue.imported', {
-                added: number(status.import.added),
-                skipped: number(status.import.skipped),
-              })}
-            {/if}
-          </p>
-        {:else if artifactResult}
-          <p class="muted small">{artifactResult}</p>
-        {/if}
-      </form>
-
-      <form onsubmit={(e) => { e.preventDefault(); void savePack() }}>
-        <strong>{t('dialogue.pack')}</strong>
-        <p class="muted small">{t('dialogue.packNote')}</p>
-        {#if pack}
-          <div class="row">
-            <input bind:value={pack.url} aria-label={t('dialogue.packUrl')} />
-            <input bind:value={pack.model} aria-label={t('dialogue.packModel')} />
-            <button type="submit" disabled={packBusy}>{t('dialogue.packSave')}</button>
-          </div>
-        {/if}
-        {#if packBusy}
-          <p class="muted small">{t('dialogue.packAsking')}</p>
-        {:else if packCheck}
-          <p class="muted small">
-            {packCheck.ok ? '✓' : '✗'}
-            {t('dialogue.packResult', {
-              cosine: packCheck.cosine.toFixed(3),
-              gallery: packCheck.sample_gallery,
-              page: packCheck.sample_page + 1,
-              note: packCheck.note,
-            })}
-          </p>
-        {:else if packError}
-          <p class="muted small">{packError}</p>
-        {/if}
-      </form>
-
+    <section class="panel">
       <div class="exchange">
-        <strong>{t('dialogue.cache')}</strong>
+        <h2>{t('dialogue.cache')}</h2>
         <p class="muted small">{t('dialogue.cacheNote')}</p>
         {#if cache && cache.total > 0}
           <div class="row">
@@ -651,8 +578,11 @@
         {/if}
       </div>
 
+    </section>
+
+    <section class="panel">
       <div class="exchange">
-        <strong>{t('dialogue.share')}</strong>
+        <h2>{t('dialogue.share')}</h2>
         <p class="muted small">{t('dialogue.shareNote')}</p>
         <div class="row">
           <label class="check">
@@ -682,6 +612,69 @@
         {/if}
       </div>
     </section>
+
+    <details class="advanced">
+      <summary>{t('settings.advanced')}</summary>
+      <p class="muted small">{t('settings.advancedNote')}</p>
+      <form onsubmit={submitArtifact}>
+        <h2>{t('dialogue.artifact')}</h2>
+        <p class="muted small">{t('dialogue.artifactNote')}</p>
+        <div class="row">
+          <input
+            bind:value={artifactDir}
+            placeholder="/path/to/llm-search-index"
+            aria-label={t('dialogue.directory')}
+          />
+          <button type="submit" disabled={!artifactDir.trim() || status?.import?.running}>
+            {t('dialogue.import')}
+          </button>
+        </div>
+        {#if status?.import}
+          <p class="muted small">
+            {#if status.import.running}
+              {t('dialogue.importing', { n: number(status.import.works_seen) })}
+            {:else if status.import.error}
+              {t('dialogue.importFailed', { error: status.import.error })}
+            {:else}
+              {t('dialogue.imported', {
+                added: number(status.import.added),
+                skipped: number(status.import.skipped),
+              })}
+            {/if}
+          </p>
+        {:else if artifactResult}
+          <p class="muted small">{artifactResult}</p>
+        {/if}
+      </form>
+      <form onsubmit={(e) => { e.preventDefault(); void savePack() }}>
+        <h2>{t('dialogue.pack')}</h2>
+        <p class="muted small">{t('dialogue.packNote')}</p>
+        {#if pack}
+          <div class="row">
+            <input bind:value={pack.url} aria-label={t('dialogue.packUrl')} />
+            <input bind:value={pack.model} aria-label={t('dialogue.packModel')} />
+            <button type="submit" disabled={packBusy}>{t('dialogue.packSave')}</button>
+          </div>
+        {/if}
+        {#if packBusy}
+          <p class="muted small">{t('dialogue.packAsking')}</p>
+        {:else if packCheck}
+          <p class="muted small">
+            {packCheck.ok ? '✓' : '✗'}
+            {t('dialogue.packResult', {
+              cosine: packCheck.cosine.toFixed(3),
+              gallery: packCheck.sample_gallery,
+              page: packCheck.sample_page + 1,
+              note: packCheck.note,
+            })}
+          </p>
+        {:else if packError}
+          <p class="muted small">{packError}</p>
+        {/if}
+      </form>
+    </details>
+
+    <Backup />
   {/if}
 </main>
 
@@ -701,8 +694,30 @@
   }
 
   main {
+    max-width: var(--page-narrow);
+    margin-inline: auto;
     padding: 1rem;
-    max-width: 64rem;
+  }
+
+  h1 {
+    font-size: 1.35rem;
+    margin: 0.25rem 0 1rem;
+  }
+
+  /* Every box says what it is in the same voice, so the page reads as a list
+     of things rather than a wall. */
+  h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0;
+  }
+  h2 + .small {
+    margin-top: 0.25rem;
+  }
+  .panel form,
+  .panel .exchange {
+    display: grid;
+    gap: 0.4rem;
   }
   .panel {
     background: var(--surface);
@@ -732,79 +747,7 @@
     border-color: var(--accent);
     color: var(--accent);
   }
-  .searchbar {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-  }
-  .searchbar input {
-    flex: 1;
-  }
-  .hits {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 1.5rem;
-    display: grid;
-    gap: 0.75rem;
-  }
-  .hit {
-    display: grid;
-    grid-template-columns: 120px 1fr;
-    gap: 0.9rem;
-    align-items: start;
-  }
-  .hit a {
-    font-weight: 500;
-    text-decoration: none;
-  }
-  .badge {
-    font-size: 0.7rem;
-    margin-left: 0.4rem;
-    padding: 0.1rem 0.4rem;
-    border-radius: 999px;
-    background: var(--accent);
-    color: var(--bg);
-  }
-  .badge.fuzzy {
-    background: var(--border);
-    color: var(--text);
-  }
-  blockquote {
-    margin: 0.4rem 0 0;
-    padding: 0.5rem 0.75rem;
-    border-left: 3px solid var(--accent);
-    background: var(--surface);
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-  }
-  .similar-toggle {
-    margin-top: 0.4rem;
-    font-size: 0.8rem;
-    padding: 0.2rem 0.55rem;
-  }
-  .similar {
-    list-style: none;
-    margin: 0.5rem 0 0;
-    padding: 0 0 0 0.75rem;
-    border-left: 2px solid var(--border);
-    display: grid;
-    gap: 0.3rem;
-    font-size: 0.85rem;
-  }
-  .similar a {
-    text-decoration: none;
-    margin-right: 0.5rem;
-  }
 
-  .tools {
-    display: grid;
-    gap: 1.25rem;
-  }
-  .tools form {
-    display: grid;
-    gap: 0.4rem;
-  }
   textarea {
     font: inherit;
     color: inherit;
@@ -859,18 +802,82 @@
     .panel {
       padding: 0.8rem 0.9rem;
     }
-    .searchbar {
-      flex-wrap: wrap;
-    }
-    .searchbar input {
-      flex: 1 1 100%;
-    }
-    .searchbar select {
-      flex: 1;
-    }
-    .hit {
-      grid-template-columns: 88px 1fr;
-      gap: 0.7rem;
-    }
+  }
+
+  /* A version is a quiet line until there is a newer one to offer, and then
+     it is the first thing on the page. */
+  .version .row {
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: nowrap;
+  }
+  .version .row > div {
+    flex: 1;
+    min-width: 0;
+  }
+  .version.offer {
+    border-color: var(--accent);
+  }
+  .version .go {
+    color: var(--accent);
+    border-color: var(--accent);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  /* The one switch a reader is ever likely to touch, so it reads as one:
+     what it does on the left, what it costs on the button. */
+  .switch .row {
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: nowrap;
+  }
+  /* The words take what is left; the switch stays where a switch goes. */
+  .switch .row > div {
+    flex: 1;
+    min-width: 0;
+  }
+  .switch button {
+    flex: none;
+    white-space: nowrap;
+  }
+  .switch button.on {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .meter {
+    position: relative;
+    margin-top: 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.78rem;
+    padding: 0.2rem 0.5rem;
+    overflow: hidden;
+  }
+  .meter::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--done);
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+    transition: width 200ms linear;
+  }
+  .meter span {
+    position: relative;
+  }
+
+  .advanced {
+    margin-bottom: 1rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .advanced summary {
+    cursor: pointer;
+    padding: 0.4rem 0;
+  }
+  .advanced :global(strong) {
+    color: var(--text);
   }
 </style>

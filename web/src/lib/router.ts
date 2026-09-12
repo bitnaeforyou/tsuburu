@@ -7,6 +7,9 @@ export type Sort = 'date' | 'today' | 'week' | 'month' | 'year'
 
 export type Scope = 'all' | 'hitomi' | 'local' | 'dialogue'
 
+/// Two ways to ask the dialogue: the words as written, or what they mean.
+export type Mode = 'words' | 'meaning'
+
 export type SearchState = {
   query: string
   sort: Sort
@@ -18,6 +21,8 @@ export type SearchState = {
    * recognised dialogue.
    */
   scope: Scope
+  /** Only the dialogue can be asked either way; elsewhere this is ignored. */
+  mode: Mode
 }
 
 export type Route =
@@ -25,12 +30,13 @@ export type Route =
   | { name: 'gallery'; id: number; page: number | null }
   | { name: 'favorites' }
   | { name: 'history' }
-  | { name: 'dialogue'; query: string }
+  | { name: 'settings' }
   | { name: 'artist'; artist: string }
   | { name: 'downloads' }
   | { name: 'keyword'; word: string }
 
 const SORTS: Sort[] = ['date', 'today', 'week', 'month', 'year']
+const MODES: Mode[] = ['words', 'meaning']
 const SCOPES: Scope[] = ['all', 'hitomi', 'local', 'dialogue']
 
 function asScope(value: string | null): Scope {
@@ -43,6 +49,7 @@ export const defaultSearch: SearchState = {
   language: 'all',
   kind: 'all',
   scope: 'all',
+  mode: 'words',
 }
 
 export function parse(hash: string): Route {
@@ -57,7 +64,14 @@ export function parse(hash: string): Route {
   }
   if (head === '/favorites') return { name: 'favorites' }
   if (head === '/history') return { name: 'history' }
-  if (head === '/dialogue') return { name: 'dialogue', query: params.get('q') ?? '' }
+  if (head === '/settings') return { name: 'settings' }
+  // The dialogue had a screen of its own before the searching moved to the one
+  // box and the rest became settings. Its old addresses still lead somewhere.
+  if (head === '/dialogue') {
+    const asked = params.get('q')
+    if (!asked) return { name: 'settings' }
+    return { name: 'search', ...defaultSearch, query: asked, scope: 'dialogue' }
+  }
   if (head === '/downloads') return { name: 'downloads' }
   const artist = /^\/artist\/(.+)$/.exec(head)
   if (artist) return { name: 'artist', artist: decodeURIComponent(artist[1]) }
@@ -65,6 +79,7 @@ export function parse(hash: string): Route {
   if (keyword) return { name: 'keyword', word: decodeURIComponent(keyword[1]) }
 
   const sort = params.get('sort') as Sort | null
+  const mode = params.get('mode') as Mode | null
   return {
     name: 'search',
     query: params.get('q') ?? '',
@@ -72,6 +87,7 @@ export function parse(hash: string): Route {
     language: params.get('language') || 'all',
     kind: params.get('kind') || 'all',
     scope: asScope(params.get('scope')),
+    mode: mode && MODES.includes(mode) ? mode : 'words',
   }
 }
 
@@ -83,12 +99,39 @@ export function toSearch(state: Partial<SearchState> = {}): string {
   if (merged.language !== 'all') params.set('language', merged.language)
   if (merged.kind !== 'all') params.set('kind', merged.kind)
   if (merged.scope !== defaultSearch.scope) params.set('scope', merged.scope)
+  if (merged.mode !== defaultSearch.mode) params.set('mode', merged.mode)
   const query = params.toString()
   return query ? `#/?${query}` : '#/'
 }
 
 export function toGallery(id: number, page?: number): string {
   return page !== undefined ? `#/g/${id}?p=${page}` : `#/g/${id}`
+}
+
+/// The gallery a query names outright, rather than describes.
+///
+/// hitomi's index maps words to works, so a number is not a search term in it
+/// at all: it is an address. Someone who pastes one - or the page it came
+/// from - means open that, and searching for it can only ever find nothing.
+/// Four digits or fewer stay a search, because a year is a thing people look
+/// for and a gallery that old is not.
+export function galleryNamed(query: string): number | null {
+  const text = query.trim()
+  if (text === '' || /\s/.test(text)) return null
+
+  const bare = /^#?(\d{5,})$/.exec(text)
+  if (bare) return Number(bare[1])
+
+  if (!/(^|\/\/|\.)hitomi\.la\//i.test(text)) return null
+  const address = text.replace(/[?#].*$/, '').replace(/\.html$/i, '')
+  const found = /(?:^|[-/])(\d{5,})$/.exec(address)
+  return found ? Number(found[1]) : null
+}
+
+/// A series, looked for where series are indexed: the local snapshot. hitomi's
+/// own tag index has no term for one.
+export function toSeries(name: string): string {
+  return toSearch({ ...defaultSearch, query: `series:${name}`, scope: 'local' })
 }
 
 export function toArtist(name: string): string {
@@ -99,6 +142,12 @@ export function toKeyword(word: string): string {
   return `#/keyword/${encodeURIComponent(word)}`
 }
 
-export function toDialogue(query = ''): string {
-  return query ? `#/dialogue?q=${encodeURIComponent(query)}` : '#/dialogue'
+export function toSettings(): string {
+  return '#/settings'
+}
+
+/// The dialogue is asked for in the one search box like everything else; this
+/// is the address that narrows it to that source.
+export function toDialogue(query = '', mode: Mode = 'words'): string {
+  return toSearch({ ...defaultSearch, query, scope: 'dialogue', mode })
 }

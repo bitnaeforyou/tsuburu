@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Scope, Sort, SearchState } from './router'
+  import type { Mode, Scope, Sort, SearchState } from './router'
   import { t, type Key } from './i18n.svelte'
 
   // 검색 실행과 필터는 같은 성격의 도구이므로 한 줄에 모은다. 제출은 텍스트가
@@ -75,7 +75,21 @@
           <option value="all">{t('search.scopeAll')}</option>
           <option value="hitomi">{t('search.scopeHitomi')}</option>
           {#if localAvailable}<option value="local">{t('search.scopeLocal')}</option>{/if}
-          {#if dialogueAvailable}<option value="dialogue">{t('nav.dialogue')}</option>{/if}
+          {#if dialogueAvailable}<option value="dialogue">{t('search.scopeDialogue')}</option>{/if}
+        </select>
+      </label>
+    {/if}
+
+    <!-- Only the dialogue can be asked either way, so only there is it asked. -->
+    {#if params.scope === 'dialogue'}
+      <label>
+        <span>{t('dialogue.mode')}</span>
+        <select
+          value={params.mode}
+          onchange={(e) => onchange({ mode: e.currentTarget.value as Mode })}
+        >
+          <option value="words">{t('dialogue.modeWords')}</option>
+          <option value="meaning">{t('dialogue.modeMeaning')}</option>
         </select>
       </label>
     {/if}
@@ -115,7 +129,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem 1.25rem;
-    padding: 0.7rem 1rem;
+    padding: 0.7rem var(--gutter);
     background: var(--bg);
     border-bottom: 1px solid var(--border);
   }
@@ -190,7 +204,7 @@
      results. They keep one row and slide sideways instead. */
   @media (max-width: 640px) {
     .toolbar {
-      padding: 0.6rem 0.9rem;
+      padding: 0.6rem var(--gutter);
       gap: 0.6rem;
     }
 
