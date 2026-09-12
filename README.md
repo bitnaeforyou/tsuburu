@@ -20,7 +20,7 @@ press ctrl+c to stop
 - **Read** at full resolution, and **keep** works or single pages for offline
 - **Find a work by a line you remember** — pages you open are recognised as they arrive
 - **Follow artists**, keep favorites, resume where you stopped
-- With a published corpus: **1.46M titles offline**, **what a work is about**, **scenes like this one**, and **search by meaning**
+- With a published corpus: **1.46M titles offline**, **what a work is about**, and **saying a line in your own words**
 - Interface in **한국어 / English / 日本語**
 
 ---
@@ -101,7 +101,12 @@ They are not merged into one list. A tag intersection and a fuzzy line match
 cannot be ranked against each other, and one list would put an arbitrary order
 on the answer. Each section links to itself for the full results.
 
-Terms combine with AND; `-term` excludes. From the terminal:
+Terms combine with AND; `-term` excludes. A number, or a hitomi address with
+one in it, is not searched for: hitomi's index maps words to works, so a
+gallery number is an address rather than a term, and pasting one opens that
+work.
+
+From the terminal:
 
 ```console
 tsuburu search "glasses -school"   # search
@@ -111,6 +116,12 @@ tsuburu serve --no-open            # do not launch a browser
 ```
 
 ## The reader
+
+A work opens on its own page first — cover, title, artists, series, how many
+pages, what it is tagged, every page as a thumbnail, and what else is about the
+same things — and reading is a step you take from there: **Read**, or **Continue from page 12** if you have been here
+before. Leaving the reader comes back to it rather than out of the work. A line
+found by dialogue search is the exception: it links to the page it is on.
 
 Three ways to lay a work out. The choice is remembered.
 
@@ -157,6 +168,19 @@ moves a tall page, two pinch — so nothing it does turns into a scroll of the
 page behind it. What the help line says changes with the device: a phone is not
 told about **Esc**.
 
+## Keeping it up to date
+
+A published copy knows which release it came from, because the workflow that
+built it told it — the source names nobody. It asks once when it starts whether
+there is a newer one, and if there is, the Settings tab says so. One press
+fetches the build for this computer and puts it where the running one is,
+moving the old one aside first rather than writing over it; on the platform
+that will not delete a running program, the leftover is swept up next time.
+Then it says to start tsuburu again.
+
+Nothing is fetched or replaced without being pressed. A copy built from a
+checkout has nowhere to ask and offers nothing.
+
 ## Taking it with you
 
 Favorites, the artists you follow and how far you have read are the only things
@@ -190,51 +214,54 @@ instead of fetching it again. Nothing extra is downloaded, and a work you have
 actually read becomes findable by a line from it.
 
 Pages that already have text are skipped, so re-reading costs nothing. The
-Dialogue tab lists what this collected, with its size, and deletes any of it —
+Settings tab lists what this collected, with its size, and deletes any of it —
 or all of it — on request.
 
 ### The background sweep
 
 A different thing, and **off by default**: it downloads galleries you have not
-opened. Turn it on from the Dialogue tab and it works while the app is open,
+opened. Turn it on from the Settings tab and it works while the app is open,
 most popular Korean galleries first. Two shortcuts narrow it:
 
 - **Import history** — paste hitomi URLs or ids from your browser history; they
   are indexed before anything else.
 - **Hunt** — narrow by tags, language and type, and queue only those.
 
-### Similar scenes
-
-An imported corpus carries an embedding per passage, produced by a 4B model.
-Searching it by a phrase needs that model; searching it by a passage already in
-the index needs nothing at all. Each result has a **Similar scenes** button.
-
-Asked from a page of the second volume of a series, it answers with the same
-scene in the first volume, and the third volume after that. First query 4.3 s
-while the index comes off disk, 0.20 s after.
-
 Passages read on this machine are embedded too when a pack is configured, and
 scanned beside the imported index, so this reaches the works you have read.
 
-### Searching by meaning
+### Say it in your own words
 
-Point the Dialogue tab's pack setting at a server speaking the OpenAI
-embeddings API — llama.cpp, Ollama, LM Studio — running `Qwen3-Embedding-4B`
-or a model whose vectors it shares.
+One switch, on the Settings tab. Turning it on fetches 2.3 GB once — the
+weights from the people who trained them, and a model server from the people
+who wrote it — and runs it here. Nothing is fetched before it is switched on,
+nothing leaves this computer after, and switching it off stops the server and
+keeps the file, so switching it on again is only the time to read the weights.
+It comes back on by itself after a restart, because it was already asked for.
 
-```console
-llama-server -m Qwen3-Embedding-4B-Q8_0.gguf --embedding --pooling last \
-             -c 4096 -ub 4096 --port 8080
-```
+Then **in my own words** appears beside the dialogue in the search box. Write
+the line the way you half remember it — wrong words, half the sentence — and it
+finds the real one. What it will not do is find a scene from a description of
+it: the index holds short lines of dialogue, so a description only lands near
+lines that happen to use the same words.
 
-A different model answers with plausible vectors and useless results, so the
-setting has a **Check** button: it embeds a passage already in the index and
-compares. Below 0.9 it reports the wrong model rather than leaving it to look
-like a bad corpus. The right model scores 1.000.
+| | |
+| :-- | --: |
+| Weights | Qwen3-Embedding-4B, Q4_K_M, from Qwen, Apache-2.0 |
+| Runs on | llama.cpp's own published build for this computer |
+| Fetched | 2.33 GB once, resumed if it is interrupted |
+| Kept at | the same place as everything else — deleting it frees the space |
+
+If you would rather run your own — a different quantisation, a GPU box on the
+network — there is still an address to point at under *things you almost
+certainly do not need*, and a **Check** button beside it: a different model
+answers with plausible vectors and useless results, so it embeds a passage
+already in the index and compares. Below 0.9 it says so rather than leaving it
+to look like a bad corpus. The right model scores 1.000.
 
 ### Sharing what has been read
 
-The text is the expensive part and it is small, so it can travel. The Dialogue
+The text is the expensive part and it is small, so it can travel. The Settings
 tab exports what this machine recognised as `.tsd` shards and imports other
 people's; files are checked against the hash in their name.
 
@@ -323,7 +350,6 @@ all three files imported.
 | :-- | --: |
 | A line you remember, exact | **1.2 s** |
 | The same, allowing for misremembering | 0.7 s |
-| Scenes like this one | 4.3 s first, **0.20 s** after |
 | By meaning, with a pack running | 1.5–3.4 s, nearly all of it the model |
 
 | The reader | |
@@ -357,7 +383,7 @@ whatever the machine can already reach:
 
 The first two come with the operating system. A decoder has to sit in front of
 tesseract because hitomi serves AVIF, which leptonica cannot read. When either
-is missing the Dialogue tab says which one.
+is missing the Settings tab says which one.
 
 Recognition is not equally good everywhere: against Vision's reading of a
 Korean page, tesseract found 7 of the 8 words — enough for matching, which
