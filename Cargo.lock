@@ -2026,7 +2026,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tsuburu"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -2049,7 +2049,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-dialogue"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "flate2",
  "lz4_flex",
@@ -2067,7 +2067,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-downloads"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "redb",
  "serde",
@@ -2079,7 +2079,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-embed"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "futures-util",
  "memmap2",
@@ -2094,7 +2094,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-fetch"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "quick_cache",
  "reqwest",
@@ -2106,7 +2106,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-hitomi"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "futures-util",
  "serde",
@@ -2118,7 +2118,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-keywords"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "lz4_flex",
  "redb",
@@ -2129,14 +2129,14 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-korean"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "tsuburu-meta"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "lz4_flex",
  "memchr",
@@ -2151,7 +2151,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-ocr"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "objc2",
  "objc2-core-foundation",
@@ -2166,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-server"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "axum",
  "http-body-util",
@@ -2196,7 +2196,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-store"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "directories",
  "redb",
@@ -2209,11 +2209,11 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-text"
-version = "0.3.1"
+version = "0.3.2"
 
 [[package]]
 name = "tsuburu-update"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "futures-util",
  "reqwest",
