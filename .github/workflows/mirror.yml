@@ -55,6 +55,23 @@ jobs:
             --name-callback 'import os; return os.environb[b"MIRROR_NAME"]' \
             --email-callback 'import os; return os.environb[b"MIRROR_EMAIL"]'
 
+      # What the mirror says about itself, said here. The mirror is the copy
+      # people find, so leaving it blank leaves the program undescribed; and
+      # keeping the words in one place means they cannot drift apart.
+      - name: Describe it the same way
+        if: steps.configured.outputs.yes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+          MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY" --jq '{description}' > "$RUNNER_TEMP/about.json"
+          gh api "repos/$GITHUB_REPOSITORY/topics" --jq '{names}' > "$RUNNER_TEMP/topics.json"
+          GH_TOKEN="$MIRROR_TOKEN" gh api -X PATCH "repos/$MIRROR_REPO" \
+            --input "$RUNNER_TEMP/about.json" --silent
+          GH_TOKEN="$MIRROR_TOKEN" gh api -X PUT "repos/$MIRROR_REPO/topics" \
+            --input "$RUNNER_TEMP/topics.json" --silent
+
       - name: Push
         if: steps.configured.outputs.yes == 'true'
         env:
