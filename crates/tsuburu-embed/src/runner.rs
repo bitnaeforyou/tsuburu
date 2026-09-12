@@ -139,9 +139,13 @@ impl Runner {
         self.dir.join(MODEL_FILE)
     }
 
+    /// Everything unpacked from one release, under one name.
+    fn runtime_dir(&self) -> PathBuf {
+        self.dir.join(format!("llama-{LLAMA}"))
+    }
+
     fn server_path(&self) -> Option<PathBuf> {
-        let exe = if cfg!(windows) { "llama-server.exe" } else { "llama-server" };
-        Some(self.dir.join(format!("llama-{LLAMA}")).join(exe))
+        find_server(&self.runtime_dir())
     }
 
     pub fn enable(self: &Arc<Self>) {
@@ -204,10 +208,19 @@ impl Runner {
         // Both tarballs and zips: every platform tsuburu runs on has a tar
         // that reads either, which is a great deal less than a decompressor
         // of our own for each.
+        //
+        // Into a directory of our own, because the archives do not agree on
+        // whether they have one: the tarballs hold a llama-<tag>/ folder and
+        // the Windows zip is flat, so unpacking where it stands would spray
+        // thirty DLLs beside the weights.
+        let into = self.runtime_dir();
+        std::fs::create_dir_all(&into)
+            .map_err(|e| RunError::Unpack(asset.clone(), e.to_string()))?;
         let status = Command::new("tar")
             .arg("-xf")
             .arg(&archive)
-            .current_dir(&self.dir)
+            .arg("-C")
+            .arg(&into)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
@@ -218,10 +231,9 @@ impl Runner {
         }
         let _ = std::fs::remove_file(&archive);
 
-        let server = self.server_path().ok_or(RunError::Unsupported)?;
-        if !server.is_file() {
-            return Err(RunError::Unpack(asset, "no llama-server inside".into()));
-        }
+        // Found rather than guessed at, for the same reason.
+        let server = find_server(&into)
+            .ok_or_else(|| RunError::Unpack(asset, "no llama-server inside".into()))?;
         make_runnable(&server);
         Ok(server)
     }
@@ -342,6 +354,27 @@ impl Drop for Runner {
     }
 }
 
+/// The model server, wherever this platform's archive happened to put it.
+///
+/// The tarballs unpack into a folder named for the release and the Windows zip
+/// unpacks flat, so the only thing worth relying on is the name of the file.
+fn find_server(dir: &Path) -> Option<PathBuf> {
+    let wanted = if cfg!(windows) { "llama-server.exe" } else { "llama-server" };
+    let mut look = vec![dir.to_path_buf()];
+    while let Some(at) = look.pop() {
+        let Ok(entries) = std::fs::read_dir(&at) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                look.push(path);
+            } else if path.file_name().is_some_and(|name| name == wanted) {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
 /// Which published build belongs to a computer. Plain CPU builds throughout:
 /// the others want a driver stack that may not be there, and on Apple silicon
 /// this one uses the GPU anyway.
@@ -434,6 +467,35 @@ mod tests {
 
         runner.disable();
         assert!(!runner.wanted());
+    }
+
+    /// The three archives do not agree on where they put it, and the reader
+    /// on the platform whose archive is flat is the one who found out.
+    #[test]
+    fn the_server_is_found_whether_the_archive_had_a_folder_or_not() {
+        let exe = if cfg!(windows) { "llama-server.exe" } else { "llama-server" };
+
+        // The Windows zip: everything at the top, no folder at all.
+        let flat = tempfile::tempdir().unwrap();
+        std::fs::write(flat.path().join("ggml-base.dll"), b"").unwrap();
+        std::fs::write(flat.path().join(exe), b"").unwrap();
+        assert_eq!(find_server(flat.path()), Some(flat.path().join(exe)));
+
+        // The tarballs: one folder named for the release.
+        let nested = tempfile::tempdir().unwrap();
+        let inside = nested.path().join("llama-b10924");
+        std::fs::create_dir_all(&inside).unwrap();
+        std::fs::write(inside.join("libggml.dylib"), b"").unwrap();
+        std::fs::write(inside.join(exe), b"").unwrap();
+        assert_eq!(find_server(nested.path()), Some(inside.join(exe)));
+    }
+
+    #[test]
+    fn an_archive_without_one_is_not_mistaken_for_one_with() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("llama-cli"), b"").unwrap();
+        std::fs::write(dir.path().join("llama-server-impl.dll"), b"").unwrap();
+        assert_eq!(find_server(dir.path()), None);
     }
 
     #[test]
