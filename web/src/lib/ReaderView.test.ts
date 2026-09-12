@@ -34,10 +34,13 @@ function widen(surface: Element, width = 900) {
   })
 }
 
-function pointer(target: Element, type: string, x: number, y = 300, buttons = 1) {
-  target.dispatchEvent(
-    new MouseEvent(type, { clientX: x, clientY: y, buttons, button: 0, bubbles: true }),
-  )
+/// jsdom has no PointerEvent, so a mouse event carries the two fields the
+/// reader reads off one. `id` is which finger.
+function pointer(target: Element, type: string, x: number, y = 300, buttons = 1, id = 1) {
+  const event = new MouseEvent(type, { clientX: x, clientY: y, buttons, button: 0, bubbles: true })
+  Object.defineProperty(event, 'pointerId', { value: id })
+  Object.defineProperty(event, 'pointerType', { value: 'touch' })
+  target.dispatchEvent(event)
 }
 
 async function press(key: string) {
@@ -293,6 +296,96 @@ describe('taps and swipes', () => {
     pointer(surface, 'pointerup', 430, 500, 0)
     await tick()
     expect(at(screen)).toBe(2)
+  })
+})
+
+describe('two fingers', () => {
+  test('pinching magnifies the page', async () => {
+    settings({ layout: 'page' })
+    const screen = render(Harness, { pages, start: 2 })
+    await tick()
+    const surface = screen.container.querySelector('.surface')!
+    widen(surface)
+
+    pointer(surface, 'pointerdown', 400, 300, 1, 1)
+    pointer(surface, 'pointerdown', 500, 300, 1, 2)
+    pointer(surface, 'pointermove', 300, 300, 1, 1)
+    pointer(surface, 'pointermove', 600, 300, 1, 2)
+    await tick()
+
+    const stage = screen.container.querySelector('.stage') as HTMLElement
+    expect(stage.style.transform).toContain('scale(3)')
+  })
+
+  test('pinching apart and back again leaves the page as it was', async () => {
+    settings({ layout: 'page' })
+    const screen = render(Harness, { pages, start: 2 })
+    await tick()
+    const surface = screen.container.querySelector('.surface')!
+    widen(surface)
+
+    pointer(surface, 'pointerdown', 400, 300, 1, 1)
+    pointer(surface, 'pointerdown', 500, 300, 1, 2)
+    pointer(surface, 'pointermove', 300, 300, 1, 1)
+    pointer(surface, 'pointermove', 600, 300, 1, 2)
+    pointer(surface, 'pointermove', 400, 300, 1, 1)
+    pointer(surface, 'pointermove', 500, 300, 1, 2)
+    await tick()
+
+    const stage = screen.container.querySelector('.stage') as HTMLElement
+    expect(stage.style.transform).toBe('')
+  })
+
+  test('lifting the fingers after a pinch turns no page', async () => {
+    settings({ layout: 'page' })
+    const screen = render(Harness, { pages, start: 2 })
+    await tick()
+    const surface = screen.container.querySelector('.surface')!
+    widen(surface)
+
+    pointer(surface, 'pointerdown', 800, 300, 1, 1)
+    pointer(surface, 'pointerdown', 820, 300, 1, 2)
+    pointer(surface, 'pointerup', 820, 300, 0, 2)
+    pointer(surface, 'pointerup', 800, 300, 0, 1)
+    await tick()
+
+    expect(at(screen)).toBe(2)
+  })
+})
+
+describe('a page taller than the frame', () => {
+  test('moves under the finger instead of turning', async () => {
+    settings({ layout: 'page', pageFit: 'width' })
+    const screen = render(Harness, { pages, start: 2 })
+    await tick()
+    const surface = screen.container.querySelector('.surface')!
+    const stage = screen.container.querySelector('.stage') as HTMLElement
+    widen(surface)
+
+    pointer(surface, 'pointerdown', 450, 600)
+    pointer(surface, 'pointermove', 450, 300)
+    pointer(surface, 'pointerup', 450, 300, 0)
+    await tick()
+
+    expect(stage.scrollTop).toBe(300)
+    expect(at(screen)).toBe(2)
+  })
+
+  test('a sideways drag still turns the page', async () => {
+    settings({ layout: 'page', pageFit: 'width' })
+    const screen = render(Harness, { pages, start: 2 })
+    await tick()
+    const surface = screen.container.querySelector('.surface')!
+    const stage = screen.container.querySelector('.stage') as HTMLElement
+    widen(surface)
+
+    pointer(surface, 'pointerdown', 700, 300)
+    pointer(surface, 'pointermove', 500, 320)
+    pointer(surface, 'pointerup', 500, 320, 0)
+    await tick()
+
+    expect(stage.scrollTop).toBe(0)
+    expect(at(screen)).toBe(3)
   })
 })
 

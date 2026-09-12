@@ -168,11 +168,24 @@
   }
   .star.on { color: var(--accent); }
 
+  /* A star meant for a mouse is too small for a thumb. */
+  @media (max-width: 640px) {
+    .star {
+      top: 0.25rem;
+      right: 0.25rem;
+      padding: 0.35rem 0.55rem;
+    }
+  }
+
   h3 {
     margin: 0.5rem 0 0.15rem;
     font-size: 0.9rem;
     font-weight: 500;
     line-height: 1.3;
+    /* Titles here are often one unbroken token of underscores, which has no
+       place to wrap and so spills out of the clamp instead of ending in an
+       ellipsis. */
+    overflow-wrap: anywhere;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     line-clamp: 2;

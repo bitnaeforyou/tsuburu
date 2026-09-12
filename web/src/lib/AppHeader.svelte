@@ -15,6 +15,14 @@
     actions?: Snippet
   } = $props()
 
+  // The bar is only at the bottom on a phone, but the padding that keeps the
+  // last row of a page out from under it is on the body, which no component
+  // owns. Saying so here means it is set exactly while the bar exists.
+  $effect(() => {
+    document.body.classList.add('has-tabs')
+    return () => document.body.classList.remove('has-tabs')
+  })
+
   const TABS = [
     { id: 'search', key: 'nav.search', href: toSearch() },
     { id: 'dialogue', key: 'nav.dialogue', href: toDialogue() },
@@ -37,8 +45,9 @@
         {t(tab.key)}
       </a>
     {/each}
-    <LocalePicker />
   </nav>
+
+  <LocalePicker />
 </header>
 
 <style>
@@ -73,7 +82,7 @@
     gap: 0.15rem;
   }
 
-  nav :global(.locale) {
+  header :global(.locale) {
     margin-left: 0.5rem;
   }
 
@@ -94,5 +103,38 @@
     color: var(--text);
     box-shadow: inset 0 -2px 0 var(--accent);
     border-radius: 0;
+  }
+
+  /* On a phone the five destinations move to the bottom, where a thumb
+     reaches them, and stop eating three rows of the top of every screen. */
+  @media (max-width: 640px) {
+    header {
+      padding: 0.6rem 0.9rem;
+      gap: 0.5rem;
+    }
+
+    nav {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 3;
+      justify-content: space-around;
+      gap: 0;
+      padding: 0.25rem 0 calc(0.25rem + env(safe-area-inset-bottom));
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+    }
+
+    nav a {
+      flex: 1;
+      text-align: center;
+      padding: 0.5rem 0.2rem;
+      font-size: 0.78rem;
+    }
+
+    nav a.current {
+      box-shadow: inset 0 2px 0 var(--accent);
+    }
   }
 </style>

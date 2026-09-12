@@ -56,6 +56,10 @@ Object.defineProperty(HTMLImageElement.prototype, 'decode', {
 })
 
 Element.prototype.scrollIntoView = vi.fn()
+// jsdom has no pointer capture, and refuses ids it has not seen.
+Element.prototype.setPointerCapture = vi.fn()
+Element.prototype.releasePointerCapture = vi.fn()
+Element.prototype.hasPointerCapture = vi.fn(() => false)
 Element.prototype.requestFullscreen = vi.fn(() => Promise.resolve())
 Object.defineProperty(document, 'exitFullscreen', {
   configurable: true,

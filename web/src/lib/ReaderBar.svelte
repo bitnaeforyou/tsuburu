@@ -7,9 +7,12 @@
   let {
     count,
     current = $bindable(0),
+    onpages,
   }: {
     count: number
     current: number
+    /// Asked for the wall of pages. Which page comes back is the caller's.
+    onpages?: () => void
   } = $props()
 
   const settings = $derived(reader.settings)
@@ -56,6 +59,12 @@
   </div>
 
   <div class="set">
+    {#if onpages}
+      <button class="wide" onclick={onpages} title={t('reader.pages')} aria-label={t('reader.pages')}>
+        ▦
+      </button>
+    {/if}
+
     <div class="group" role="group" aria-label={t('reader.layout')}>
       {#each LAYOUTS as option (option.value)}
         <button
@@ -195,5 +204,30 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+
+  /* Everything here is pressed with a thumb on a phone, so it is bigger, and
+     the scrubber gets the whole width rather than sharing it. */
+  @media (max-width: 640px) {
+    .bar {
+      gap: 0.45rem 0.6rem;
+    }
+    .turn {
+      flex: 1 1 100%;
+      max-width: none;
+    }
+    .turn button,
+    .group button,
+    .wide,
+    select {
+      font-size: 0.82rem;
+      padding: 0.45rem 0.7rem;
+    }
+    .scrub {
+      height: 1.75rem;
+    }
+    .check {
+      font-size: 0.82rem;
+    }
   }
 </style>

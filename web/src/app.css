@@ -59,3 +59,13 @@ input:focus-visible, button:focus-visible {
 }
 
 a { color: inherit; }
+
+/* A phone is held in one hand: the things you press have to be big enough to
+   press, and the way between screens belongs at the bottom where the thumb
+   is. `has-tabs` is set by the header that puts it there. */
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  body.has-tabs { padding-bottom: calc(3.4rem + env(safe-area-inset-bottom)); }
+  button { padding: 0.55rem 0.9rem; }
+  input { padding: 0.6rem 0.75rem; }
+}

@@ -59,7 +59,7 @@ Nothing beyond the file you just ran:
 | **Search** | hitomi's tags, Korean or English. `-term` excludes. |
 | **Read** | full resolution, three layouts, either direction, resumes where you stopped |
 | **Keep** | a work or a single page, then read it with hitomi unreachable |
-| **Remember** | favorites and history, on this machine only |
+| **Remember** | favorites and history, on this machine only, in a file you can move |
 | **Dialogue search** | over every work you open — see [below](#dialogue-search) |
 
 ### What you bring
@@ -134,12 +134,36 @@ the whole page suits a turn.
 | Tap the left or right third | turn |
 | Tap the middle | clear everything but the pages away, and back again |
 | Swipe | turn |
-| Double-click, **Ctrl** + wheel | zoom, then drag to move around; turning the page lets it go |
+| Pinch, double-click, **Ctrl** + wheel | zoom, then drag to move around; turning the page lets it go |
+| Drag a page taller than the frame | move it under the finger |
 
-The slider goes straight to a page. The next three pages are decoded before you
-reach them, so a turn is a frame rather than a wait, and turning a page at a
-time holds one page in the window instead of all of them — a 1,537-page work is
-one image element rather than 1,537.
+The slider goes straight to a page, and **▦** — or the page count in the corner,
+which is all that is left once everything else has been cleared away — opens
+every page at once as thumbnails. They are hitomi's own small copies, about a
+thirtieth of the page, and only the ones on screen are fetched: opening the wall
+of a 1,537-page work moves around 140 KB.
+
+The next three pages are decoded before you reach them, so a turn is a frame
+rather than a wait, and turning a page at a time holds one page in the window
+instead of all of them — a 1,537-page work is one image element rather than
+1,537.
+
+### On a phone
+
+The five destinations sit at the bottom, where a thumb reaches them; the filters
+keep one row and slide sideways; the controls are sized to be pressed rather
+than clicked. The reader takes every touch itself — one finger turns, swipes or
+moves a tall page, two pinch — so nothing it does turns into a scroll of the
+page behind it. What the help line says changes with the device: a phone is not
+told about **Esc**.
+
+## Taking it with you
+
+Favorites, the artists you follow and how far you have read are the only things
+tsuburu keeps about you. **Save a copy** on the Favorites or History screen puts
+all three in one JSON file; **Load a copy** puts them back through the same calls
+the interface uses, adding to what is there rather than replacing it. A record
+the program will not accept is skipped and counted; the rest still go in.
 
 ## Reading offline
 

@@ -86,6 +86,21 @@ class Reader {
 
 export const reader = new Reader()
 
+/// Whether this is a finger on glass rather than a pointer with a keyboard
+/// behind it. It decides which way of turning a page is worth explaining.
+class Touching {
+  is = $state(false)
+
+  constructor() {
+    if (typeof matchMedia !== 'function') return
+    const query = matchMedia('(hover: none) and (pointer: coarse)')
+    this.is = query.matches
+    query.addEventListener('change', (event) => (this.is = event.matches))
+  }
+}
+
+export const byTouch = new Touching()
+
 /// Groups page indices the way they are shown side by side.
 ///
 /// With `coverAlone` the first page stands by itself, which is what puts the
@@ -161,6 +176,12 @@ export function forwardForTap(x: number, width: number, direction: Direction): b
   if (x < third) return direction === 'rtl'
   if (x > width - third) return direction === 'ltr'
   return null
+}
+
+/// The small copy of a page. hitomi keeps one for every image and the server
+/// proxies it under the same hash, which is about thirty times less to move.
+export function thumbnailOf(src: string): string {
+  return src.replace(/^\/img\//, '/tn/')
 }
 
 /// The pages worth having decoded already.

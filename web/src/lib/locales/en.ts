@@ -112,9 +112,23 @@ export const en = {
   'reader.fitContain': 'Fit page',
   'reader.fitOriginal': 'Actual size',
   'reader.coverAlone': 'Cover on its own',
+  'reader.pages': 'Pages',
+  'reader.pagesClose': 'Close',
   'reader.fullscreen': 'Full screen',
+  'reader.hintTouch':
+    'Tap the sides or swipe to turn · the middle clears everything else away · pinch to zoom',
   'reader.hintPaged':
     'Tap the sides or swipe to turn · the middle clears everything else away · double-click to zoom · F for full screen · Esc goes back',
+
+  'backup.what':
+    'Favorites, artists you follow and how far you have read, in one file. Loading one adds to what is here rather than replacing it.',
+  'backup.save': 'Save a copy',
+  'backup.load': 'Load a copy',
+  'backup.saved': 'Saved {works} favorites, {artists} artists, {read} read.',
+  'backup.putting': 'Putting it back… {done} / {total}',
+  'backup.restored': 'Put {n} things back.',
+  'backup.restoredSome': 'Put {n} things back; {failed} were refused.',
+  'backup.notOurs': 'That is not a tsuburu file.',
 
   'favorites.artists': 'Artists you follow',
   'favorites.empty': 'No favorites yet. Tap the star on any result to keep it here.',

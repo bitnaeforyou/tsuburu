@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import {
   DEFAULTS,
+  thumbnailOf,
   fitKey,
   fitOf,
   forwardFor,
@@ -183,5 +184,16 @@ describe('fit', () => {
     const settings = { ...DEFAULTS, fit: 'width', pageFit: 'height' } as const
     expect(fitOf({ ...settings, layout: 'scroll' })).toBe('width')
     expect(fitOf({ ...settings, layout: 'spread' })).toBe('height')
+  })
+})
+
+describe('thumbnailOf', () => {
+  test('asks for the small copy under the same hash', () => {
+    expect(thumbnailOf('/img/abc123.avif')).toBe('/tn/abc123.avif')
+  })
+
+  test('leaves anything that is not a page alone', () => {
+    expect(thumbnailOf('/tn/abc123.avif')).toBe('/tn/abc123.avif')
+    expect(thumbnailOf('https://example.test/img/a.avif')).toBe('https://example.test/img/a.avif')
   })
 })

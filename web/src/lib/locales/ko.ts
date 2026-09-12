@@ -112,9 +112,22 @@ export const ko: Messages = {
   'reader.fitContain': '화면 맞춤',
   'reader.fitOriginal': '원본 크기',
   'reader.coverAlone': '표지는 한 장으로',
+  'reader.pages': '쪽 고르기',
+  'reader.pagesClose': '닫기',
   'reader.fullscreen': '전체 화면',
+  'reader.hintTouch': '양옆을 누르거나 밀어서 넘김 · 가운데를 누르면 나머지가 사라짐 · 두 손가락으로 확대',
   'reader.hintPaged':
     '양옆을 누르거나 밀어서 넘김 · 가운데를 누르면 나머지가 사라짐 · 두 번 누르면 확대 · F 전체 화면 · Esc로 뒤로',
+
+  'backup.what':
+    '즐겨찾기, 팔로우한 작가, 어디까지 읽었는지를 파일 하나에 담습니다. 불러오면 지금 있는 것에 더해집니다.',
+  'backup.save': '내보내기',
+  'backup.load': '가져오기',
+  'backup.saved': '즐겨찾기 {works}개, 작가 {artists}명, 기록 {read}개를 담았습니다.',
+  'backup.putting': '되돌리는 중… {done} / {total}',
+  'backup.restored': '{n}개를 되돌렸습니다.',
+  'backup.restoredSome': '{n}개를 되돌렸고 {failed}개는 거절당했습니다.',
+  'backup.notOurs': 'tsuburu 파일이 아닙니다.',
 
   'favorites.artists': '팔로우한 작가',
   'favorites.empty': '아직 없습니다. 결과에서 별을 누르면 여기에 담깁니다.',

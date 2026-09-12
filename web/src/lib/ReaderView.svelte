@@ -20,6 +20,7 @@
     current = $bindable(0),
     onback,
     onchrome,
+    onpages,
   }: {
     pages: Page[]
     current: number
@@ -27,6 +28,9 @@
     /// The middle of the page was tapped, which is how a reader asks for
     /// everything around the pages to get out of the way, and back again.
     onchrome?: () => void
+    /// Asked for the wall of pages. The corner counter is the only way to it
+    /// once everything else has been cleared away.
+    onpages?: () => void
   } = $props()
 
   /// Pages to have decoded ahead of the reader, so a turn never shows white.
@@ -60,7 +64,23 @@
   let zoom = $state(1)
   let pan = $state({ x: 0, y: 0 })
   let fullscreen = $state(false)
-  let held: { x: number; y: number; panX: number; panY: number; at: number } | null = null
+
+  /// Every finger or button currently down on the page. One is a tap, a swipe
+  /// or a drag; two are a pinch.
+  const touching = new Map<number, { x: number; y: number }>()
+  /// The single-pointer gesture in progress, before it is known which it is.
+  let press: { x: number; y: number; at: number; top: number } | null = null
+  /// Dragging a magnified page around.
+  let dragging: { x: number; y: number; panX: number; panY: number } | null = null
+  /// What the two fingers were doing when they landed.
+  let pinching: {
+    span: number
+    zoom: number
+    x: number
+    y: number
+    panX: number
+    panY: number
+  } | null = null
   /// Set when the observer moved `current`, so the effect that follows the
   /// page does not scroll the reader back to where it already is.
   let followed = false
@@ -188,19 +208,99 @@
     return (event.target as HTMLElement | null)?.closest('button') !== null
   }
 
+  /// The distance between the two fingers, and the point between them.
+  function spread(): { span: number; x: number; y: number } {
+    const [a, b] = [...touching.values()]
+    return {
+      span: Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1),
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2,
+    }
+  }
+
   function onPointerDown(event: PointerEvent) {
-    if (!paged || event.button !== 0 || onChrome(event)) return
-    held = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y, at: Date.now() }
+    if (!paged || (event.pointerType === 'mouse' && event.button !== 0) || onChrome(event)) return
+    // Capture keeps a finger that wanders off the page still ours. A browser
+    // that will not give it is no reason to stop reading the gesture.
+    try {
+      surface?.setPointerCapture(event.pointerId)
+    } catch {
+      // Events still arrive while the pointer is over the page.
+    }
+    touching.set(event.pointerId, { x: event.clientX, y: event.clientY })
+
+    if (touching.size === 1) {
+      press = { x: event.clientX, y: event.clientY, at: Date.now(), top: stage?.scrollTop ?? 0 }
+      dragging =
+        zoom > 1 ? { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y } : null
+      return
+    }
+    if (touching.size === 2) {
+      // Two fingers is never a page turn, whatever the first one was doing.
+      press = null
+      dragging = null
+      const now = spread()
+      pinching = { span: now.span, zoom, x: now.x, y: now.y, panX: pan.x, panY: pan.y }
+    }
   }
 
   function onPointerMove(event: PointerEvent) {
-    if (!held || zoom === 1 || event.buttons === 0) return
-    pan = { x: held.panX + (event.clientX - held.x), y: held.panY + (event.clientY - held.y) }
+    if (!touching.has(event.pointerId)) return
+    touching.set(event.pointerId, { x: event.clientX, y: event.clientY })
+
+    if (pinching && touching.size >= 2) {
+      const now = spread()
+      zoom = Math.min(Math.max((pinching.zoom * now.span) / pinching.span, 1), 4)
+      pan =
+        zoom === 1
+          ? { x: 0, y: 0 }
+          : { x: pinching.panX + (now.x - pinching.x), y: pinching.panY + (now.y - pinching.y) }
+      return
+    }
+
+    if (dragging) {
+      pan = {
+        x: dragging.panX + (event.clientX - dragging.x),
+        y: dragging.panY + (event.clientY - dragging.y),
+      }
+      return
+    }
+
+    // A page taller than the frame is moved by the finger that is on it: the
+    // surface takes every touch, so nothing scrolls it otherwise.
+    if (press && stage && scrollable) {
+      const dx = event.clientX - press.x
+      const dy = event.clientY - press.y
+      if (Math.abs(dy) > Math.abs(dx)) stage.scrollTop = press.top - dy
+    }
   }
 
   function onPointerUp(event: PointerEvent) {
-    const start = held
-    held = null
+    touching.delete(event.pointerId)
+    try {
+      surface?.releasePointerCapture(event.pointerId)
+    } catch {
+      // It was never captured, which is the state we wanted anyway.
+    }
+
+    if (pinching) {
+      // A pinch ends when it stops being a pinch; the finger still down is
+      // not the start of anything.
+      if (touching.size < 2) {
+        pinching = null
+        press = null
+        dragging = null
+      }
+      return
+    }
+    if (dragging) {
+      dragging = null
+      press = null
+      return
+    }
+
+    const start = press
+    press = null
     if (!start || !paged || zoom > 1) return
 
     const dx = event.clientX - start.x
@@ -216,6 +316,13 @@
     const forward = forwardForTap(event.clientX - box.left, box.width, settings.direction)
     if (forward === null) onchrome?.()
     else move(forward)
+  }
+
+  function onPointerCancel(event: PointerEvent) {
+    touching.delete(event.pointerId)
+    press = null
+    dragging = null
+    if (touching.size < 2) pinching = null
   }
 
   function onDoubleClick(event: MouseEvent) {
@@ -255,7 +362,7 @@
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
-    onpointercancel={() => (held = null)}
+    onpointercancel={onPointerCancel}
     ondblclick={onDoubleClick}
     onwheel={onWheel}
   >
@@ -279,7 +386,13 @@
       {/each}
     </div>
 
-    <span class="corner where">{where + 1} / {pages.length}</span>
+    {#if onpages}
+      <button class="corner where" onclick={onpages} title={t('reader.pages')}>
+        {where + 1} / {pages.length}
+      </button>
+    {:else}
+      <span class="corner where">{where + 1} / {pages.length}</span>
+    {/if}
 
     <button class="corner full" onclick={toggleFullscreen} title={t('reader.fullscreen')}>
       {fullscreen ? '⤡' : '⤢'}
@@ -318,7 +431,10 @@
     overflow: hidden;
     background: var(--surface);
     border-radius: var(--radius);
-    touch-action: pan-y;
+    /* Every touch belongs to the reader: one finger turns, swipes or moves a
+       tall page, two pinch. Leaving any of it to the browser would turn one
+       of those into a scroll or a zoom of the whole page instead. */
+    touch-action: none;
     user-select: none;
   }
   /* Two rules, not one: a browser that does not know one of these pseudo
@@ -335,7 +451,6 @@
   }
   .surface.zoomed {
     cursor: grab;
-    touch-action: none;
   }
 
   .stage {
@@ -429,7 +544,13 @@
     left: 0.6rem;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
+  }
+  span.where {
     pointer-events: none;
+  }
+  button.where {
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    border-color: transparent;
   }
   .full {
     right: 0.6rem;

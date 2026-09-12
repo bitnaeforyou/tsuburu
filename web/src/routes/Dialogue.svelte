@@ -849,4 +849,28 @@
   .files a {
     margin-right: 0.5rem;
   }
+
+  /* On a phone the line you are trying to remember needs the whole width;
+     the two controls that qualify it go under it. */
+  @media (max-width: 640px) {
+    main {
+      padding: 0.9rem;
+    }
+    .panel {
+      padding: 0.8rem 0.9rem;
+    }
+    .searchbar {
+      flex-wrap: wrap;
+    }
+    .searchbar input {
+      flex: 1 1 100%;
+    }
+    .searchbar select {
+      flex: 1;
+    }
+    .hit {
+      grid-template-columns: 88px 1fr;
+      gap: 0.7rem;
+    }
+  }
 </style>

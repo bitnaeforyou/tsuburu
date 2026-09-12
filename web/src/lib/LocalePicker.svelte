@@ -24,4 +24,10 @@
     border-radius: var(--radius);
     padding: 0.2rem 0.3rem;
   }
+
+  @media (max-width: 640px) {
+    .locale {
+      padding: 0.4rem 0.35rem;
+    }
+  }
 </style>

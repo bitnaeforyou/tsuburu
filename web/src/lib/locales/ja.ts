@@ -112,9 +112,22 @@ export const ja: Messages = {
   'reader.fitContain': '画面に合わせる',
   'reader.fitOriginal': '原寸',
   'reader.coverAlone': '表紙は単独',
+  'reader.pages': 'ページ一覧',
+  'reader.pagesClose': '閉じる',
   'reader.fullscreen': '全画面',
+  'reader.hintTouch': '左右をタップかスワイプでページ送り · 中央をタップで他をすべて隠す · ピンチで拡大',
   'reader.hintPaged':
     '左右をタップかスワイプでページ送り · 中央をタップで他をすべて隠す · ダブルクリックで拡大 · F で全画面 · Esc で戻る',
+
+  'backup.what':
+    'お気に入り、フォロー中の作家、どこまで読んだかをファイル一つにまとめます。読み込むと今あるものに加わります。',
+  'backup.save': '書き出す',
+  'backup.load': '読み込む',
+  'backup.saved': 'お気に入り {works}件、作家 {artists}人、履歴 {read}件を保存しました。',
+  'backup.putting': '戻しています… {done} / {total}',
+  'backup.restored': '{n}件を戻しました。',
+  'backup.restoredSome': '{n}件を戻し、{failed}件は拒否されました。',
+  'backup.notOurs': 'tsuburu のファイルではありません。',
 
   'favorites.artists': 'フォロー中の作家',
   'favorites.empty': 'まだありません。結果の星を押すとここに入ります。',

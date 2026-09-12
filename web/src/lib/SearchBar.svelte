@@ -185,4 +185,35 @@
     border-radius: var(--radius);
     padding: 0.25rem 0.4rem;
   }
+
+  /* A phone has no room for the filters to wrap onto two more rows above the
+     results. They keep one row and slide sideways instead. */
+  @media (max-width: 640px) {
+    .toolbar {
+      padding: 0.6rem 0.9rem;
+      gap: 0.6rem;
+    }
+
+    form {
+      flex: 1 1 100%;
+      max-width: none;
+    }
+
+    .filters {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      width: 100%;
+      gap: 0.75rem;
+      scrollbar-width: none;
+    }
+    .filters::-webkit-scrollbar {
+      display: none;
+    }
+    .filters label {
+      flex: none;
+    }
+    select {
+      padding: 0.35rem 0.4rem;
+    }
+  }
 </style>

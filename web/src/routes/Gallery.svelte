@@ -9,7 +9,8 @@
   import LocalePicker from '../lib/LocalePicker.svelte'
   import ReaderView from '../lib/ReaderView.svelte'
   import ReaderBar from '../lib/ReaderBar.svelte'
-  import { reader } from '../lib/reader.svelte'
+  import PageGrid from '../lib/PageGrid.svelte'
+  import { byTouch, reader } from '../lib/reader.svelte'
 
   let { id, startPage = null }: { id: number; startPage?: number | null } = $props()
 
@@ -30,6 +31,8 @@
   /// Nothing on screen but the pages. Reached by tapping the middle of a page,
   /// left again the same way or with Escape.
   let bare = $state(false)
+  /// The wall of pages, open over everything else.
+  let picking = $state(false)
 
   // Scrolling has no middle to tap, so there would be no way back out.
   $effect(() => {
@@ -205,16 +208,21 @@
       {/if}
 
       {#if !bare}
-        <ReaderBar count={gallery.pages.length} bind:current />
+        <ReaderBar count={gallery.pages.length} bind:current onpages={() => (picking = true)} />
       {/if}
       <ReaderView
         pages={gallery.pages}
         bind:current
         onback={() => (bare ? (bare = false) : back())}
         onchrome={() => (bare = !bare)}
+        onpages={() => (picking = true)}
       />
-      {#if !bare}
-        <p class="hint">{paged ? t('reader.hintPaged') : t('gallery.hint')}</p>
+      <!-- Telling a phone about Esc and the arrow keys is noise, and there is
+           nothing to say about scrolling with a finger. -->
+      {#if !bare && (paged || !byTouch.is)}
+        <p class="hint">
+          {paged ? (byTouch.is ? t('reader.hintTouch') : t('reader.hintPaged')) : t('gallery.hint')}
+        </p>
       {/if}
     </div>
 
@@ -261,6 +269,18 @@
         </p>
       {/if}
     </section>
+
+    {#if picking}
+      <PageGrid
+        pages={gallery.pages}
+        {current}
+        onpick={(page) => {
+          current = page
+          picking = false
+        }}
+        onclose={() => (picking = false)}
+      />
+    {/if}
 
     {#if near.length}
       <section class="near" hidden={bare}>
@@ -416,5 +436,38 @@
   .hint {
     font-size: 0.85rem;
     margin: 0.6rem 0 0;
+  }
+
+  /* A phone spends a third of its screen on the things around the pages
+     unless they are told to be smaller. Tapping the middle of a page takes
+     them away entirely. */
+  @media (max-width: 640px) {
+    header {
+      gap: 0.5rem;
+      padding: 0.6rem 0.75rem;
+    }
+    h1 {
+      font-size: 0.9rem;
+    }
+    main {
+      padding: 0.75rem;
+    }
+    .screen.paged {
+      min-height: calc(100dvh - 5.2rem);
+    }
+    .resume {
+      padding: 0.5rem 0.6rem;
+      margin-bottom: 0.6rem;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+    }
+    .hint {
+      font-size: 0.72rem;
+      margin-top: 0.4rem;
+    }
+    .keep button {
+      font-size: 0.85rem;
+      padding: 0.45rem 0.7rem;
+    }
   }
 </style>
