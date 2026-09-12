@@ -1,0 +1,13 @@
+# Windows builds carry their own C runtime.
+#
+# A Rust program built for MSVC links vcruntime140.dll and msvcp140.dll from
+# the machine it runs on. Those arrive with Visual Studio or with a
+# redistributable nobody downloading a manga reader has any reason to have
+# installed, and without them Windows refuses to start the program at all.
+# Linking the runtime in costs about a megabyte and means the file that was
+# downloaded is the whole program.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
