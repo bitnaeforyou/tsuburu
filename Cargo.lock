@@ -2026,7 +2026,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tsuburu"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -2048,7 +2048,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-dialogue"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "flate2",
  "lz4_flex",
@@ -2066,7 +2066,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-downloads"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "redb",
  "serde",
@@ -2078,7 +2078,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-embed"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "memmap2",
  "serde",
@@ -2090,7 +2090,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-fetch"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "quick_cache",
  "reqwest",
@@ -2102,7 +2102,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-hitomi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "futures-util",
  "serde",
@@ -2114,7 +2114,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-keywords"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "lz4_flex",
  "redb",
@@ -2125,14 +2125,14 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-korean"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "tsuburu-meta"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "lz4_flex",
  "memchr",
@@ -2147,7 +2147,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-ocr"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "objc2",
  "objc2-core-foundation",
@@ -2162,7 +2162,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "http-body-util",
@@ -2191,7 +2191,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-store"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "directories",
  "redb",
@@ -2204,7 +2204,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-text"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "typenum"
