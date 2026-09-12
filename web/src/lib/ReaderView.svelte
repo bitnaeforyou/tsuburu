@@ -404,7 +404,7 @@
   </div>
 {:else}
   <div class="flow">
-    {#each pages as page, at (page.src)}
+    {#each pages as page, at (at)}
       <img
         bind:this={elements[at]}
         data-page={at}

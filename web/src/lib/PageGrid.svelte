@@ -57,7 +57,7 @@
   {/if}
 
   <div class="wall">
-    {#each pages as page, at (page.src)}
+    {#each pages as page, at (at)}
       <button
         class="page"
         class:on={at === current}

@@ -82,6 +82,27 @@ describe('what is on screen', () => {
     expect(screen.container.querySelector('.where')).toHaveTextContent('3 / 3')
   })
 
+  test('a work that uses the same picture twice still renders', async () => {
+    // hitomi works repeat a page often enough - a blank, a spread half - and
+    // keying the list by the picture made the whole screen throw.
+    settings({ layout: 'page' })
+    const twice = [pages[0], pages[1], pages[0], pages[2]]
+    const screen = render(Harness, { pages: twice, start: 2 })
+    await tick()
+
+    const images = screen.container.querySelectorAll('img')
+    expect(images).toHaveLength(1)
+    expect(images[0]).toHaveAttribute('src', '/img/page-0.avif')
+    expect(screen.container.querySelector('.where')).toHaveTextContent('3 / 4')
+  })
+
+  test('scrolling shows every page of a work that repeats one', async () => {
+    const twice = [pages[0], pages[1], pages[0]]
+    const screen = render(Harness, { pages: twice })
+    await tick()
+    expect(screen.container.querySelectorAll('img')).toHaveLength(3)
+  })
+
   test('a work with no pages renders nothing rather than failing', async () => {
     settings({ layout: 'spread' })
     const screen = render(Harness, { pages: [] })

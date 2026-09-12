@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
+  import { untrack } from 'svelte'
   import { t, number } from '../lib/i18n.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import { library } from '../lib/library.svelte'
@@ -21,7 +22,10 @@
   /// which is what you want when you have just found it and are deciding.
   const reading = $derived(startPage !== null)
 
-  let gallery = $state<api.Gallery | null>(null)
+  let loaded = $state<api.Gallery | null>(null)
+  /// The work this address asks for, and only that one. Fetching never blanks
+  /// what is on screen; a result for another id simply is not this screen's.
+  const gallery = $derived(loaded?.id === id ? loaded : null)
   let error = $state<unknown>(null)
   let current = $state(0)
   /// How far the work was read before, from the history. Null until asked.
@@ -33,6 +37,8 @@
   let bare = $state(false)
   let picking = $state(false)
 
+
+
   const favorited = $derived(library.has(id))
   const paged = $derived(reader.settings.layout !== 'scroll')
 
@@ -41,13 +47,23 @@
     if (!paged) bare = false
   })
 
+  // Favorites belong to every screen rather than to this work. Loading them
+  // here put them in the same effect as the gallery, so the moment they
+  // arrived it ran again and started a second fetch on top of the first.
+  $effect(() => {
+    void library.load().catch(() => {})
+  })
+
+  /// Which fetch is the current one. An older one that comes back late must
+  /// not put its answer on the screen, and must not take it off either.
+  let asked = 0
+
   $effect(() => {
     // Both are read here, so that arriving at another work - or at another page
     // of this one - starts again instead of leaving the last one on screen.
     void id
     void startPage
     void load()
-    void library.load().catch(() => {})
   })
 
   // The bar has to keep moving while pages arrive, and stop when they stop.
@@ -105,28 +121,35 @@
   })
 
   async function load() {
+    const mine = ++asked
+    // Read without being watched: an effect that depends on what it is about
+    // to replace runs again in the middle of its own work.
+    const have = untrack(() => loaded)
     // Only the page changed: the work on screen is already the right one, and
-    // refetching it would blank the screen to arrive at the same place.
-    if (gallery?.id === id) {
+    // refetching it would arrive at the same place a second later.
+    if (have?.id === id) {
       if (startPage !== null) current = clamp(startPage)
       return
     }
 
     error = null
     // A page number belongs to the work it was read in, not to the next one.
-    gallery = null
     current = 0
     lastPage = null
+    let found: api.Gallery
     try {
-      gallery = await api.gallery(id)
+      found = await api.gallery(id)
     } catch (cause) {
-      error = cause
+      if (mine === asked) error = cause
       return
     }
+    if (mine !== asked) return
+    loaded = found
     if (startPage !== null) current = clamp(startPage)
 
     try {
       const { items } = await api.history()
+      if (mine !== asked) return
       const previous = items.find((item) => item.id === id)
       if (previous && previous.last_page > 0) lastPage = previous.last_page
     } catch {
