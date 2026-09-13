@@ -12,8 +12,8 @@ use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tsuburu_embed::runner::Progress;
 use tsuburu_dialogue::{Counts, Hit, ImportSummary, Priority, Shard};
+use tsuburu_embed::runner::Progress;
 
 use crate::error::{ApiError, ErrorKind};
 use crate::grinder::{
@@ -428,10 +428,7 @@ fn stored_embedder(grinder: &Grinder) -> EmbedderSettings {
 /// is no address to have - and falling back to whatever was saved before the
 /// switch existed meant blaming the network for a port nobody chose. Once the
 /// switch is on, the model is the answer or the reason there isn't one.
-fn embedder_settings(
-    state: &AppState,
-    grinder: &Grinder,
-) -> Result<EmbedderSettings, ApiError> {
+fn embedder_settings(state: &AppState, grinder: &Grinder) -> Result<EmbedderSettings, ApiError> {
     let mut settings = stored_embedder(grinder);
     if let Some(url) = state.model.url() {
         settings.url = url;
