@@ -9,11 +9,14 @@
     id,
     preset = null,
     progress = null,
+    level = 2,
   }: {
     id: number
     /** 라이브러리 목록은 요약을 이미 갖고 있어 네트워크를 탈 이유가 없다. */
     preset?: api.Summary | null
     progress?: { page: number; pages: number } | null
+    /// Which heading level the title is, counting from the screen's own.
+    level?: 2 | 3
   } = $props()
 
   let card = $state<api.Card | null>(null)
@@ -39,7 +42,7 @@
 
   // 갤러리 메타데이터는 한 건에 수십~수백 KB다. 화면에 들어온 카드만 받는다.
   $effect(() => {
-    if (preset || !element) return
+    if ((preset && preset.thumbnail_hash) || card || !element) return
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((e) => e.isIntersecting)) return
@@ -94,7 +97,7 @@
         </div>
       {/if}
     </div>
-    <h3>{title}</h3>
+    <svelte:element this={`h${level}`} class="title" title={title}>{title}</svelte:element>
     <p class="meta">
       <span class="id">#{id}</span>
       &middot; {t('common.pages', { n: pages })}{language ? ` · ${language}` : ''}
@@ -103,7 +106,7 @@
       <p class="unlisted" title={t('card.unlistedNote')}>{t('card.unlisted')}</p>
     {/if}
     {#if topTags.length}
-      <p class="tags">{topTags.join(' · ')}</p>
+      <p class="tags" title={topTags.join(' · ')}>{topTags.join(' · ')}</p>
     {/if}
   </a>
 
@@ -137,7 +140,7 @@
     position: relative;
     aspect-ratio: 3 / 4;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--image-edge);
     border-radius: var(--radius);
     overflow: hidden;
     display: grid;
@@ -152,14 +155,15 @@
 
   .placeholder {
     color: var(--muted);
-    font-size: 0.8rem;
+    font-size: var(--text-sm);
   }
 
   .progress {
     position: absolute;
     inset: auto 0 0 0;
     background: color-mix(in srgb, var(--bg) 80%, transparent);
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
     padding: 0.15rem 0.35rem;
   }
   .progress::before {
@@ -174,7 +178,7 @@
   .star {
     position: absolute;
     top: 0.3rem;
-    right: 0.3rem;
+    inset-inline-end: 0.3rem;
     padding: 0.1rem 0.35rem;
     line-height: 1.2;
     background: color-mix(in srgb, var(--bg) 70%, transparent);
@@ -187,16 +191,19 @@
   @media (max-width: 640px) {
     .star {
       top: 0.25rem;
-      right: 0.25rem;
+      inset-inline-end: 0.25rem;
       padding: 0.35rem 0.55rem;
     }
   }
 
-  h3 {
+  .title {
     margin: 0.5rem 0 0.15rem;
-    font-size: 0.9rem;
+    font-size: var(--text-md);
     font-weight: 500;
     line-height: 1.3;
+    /* Exactly the two lines it is allowed, so the line under it lands on the
+       same edge across the row. */
+    min-height: 2.6em;
     /* Titles here are often one unbroken token of underscores, which has no
        place to wrap and so spills out of the clamp instead of ending in an
        ellipsis. */
@@ -211,7 +218,7 @@
   .meta {
     margin: 0;
     color: var(--muted);
-    font-size: 0.8rem;
+    font-size: var(--text-sm);
   }
   .id {
     font-variant-numeric: tabular-nums;
@@ -223,13 +230,13 @@
   .unlisted {
     margin: 0.15rem 0 0;
     color: var(--accent);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
   }
 
   .tags {
     margin: 0.1rem 0 0;
     color: var(--muted);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

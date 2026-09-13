@@ -121,7 +121,7 @@
   href: string,
 )}
   <div class="head">
-    <strong>{label}</strong>
+    <h2>{label}</h2>
     {#if section.state === 'loading'}
       <span class="muted">{t('common.loading')}</span>
     {:else if section.state === 'failed'}
@@ -149,7 +149,7 @@
     {@render heading(t('search.scopeLocal'), titles, toSearch({ ...params, scope: 'local' }))}
     <Grid>
       {#each titles.items as id (id)}
-        <Card {id} />
+        <Card {id} level={3} />
       {/each}
     </Grid>
   </section>
@@ -159,7 +159,7 @@
   {@render heading(t('search.scopeHitomi'), tags, toSearch({ ...params, scope: 'hitomi' }))}
   <Grid>
     {#each tags.items as id (id)}
-      <Card {id} />
+      <Card {id} level={3} />
     {/each}
   </Grid>
 </section>
@@ -172,6 +172,10 @@
   section {
     margin-bottom: 2rem;
   }
+  .head h2 {
+    font-size: var(--text-base);
+    margin: 0;
+  }
   .head {
     display: flex;
     align-items: baseline;
@@ -180,11 +184,11 @@
   }
   .muted {
     color: var(--muted);
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   .more {
-    margin-left: auto;
-    font-size: 0.85rem;
+    margin-inline-start: auto;
+    font-size: var(--text-md);
     text-decoration: none;
   }
 </style>

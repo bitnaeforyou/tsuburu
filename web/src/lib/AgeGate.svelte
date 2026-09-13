@@ -28,12 +28,12 @@
   .card {
     max-width: 30rem;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: 1.5rem;
   }
-  h1 { margin: 0 0 0.75rem; font-size: 1.4rem; }
+  h1 { margin: 0 0 0.75rem; }
   p { margin: 0 0 0.75rem; }
-  .muted { color: var(--muted); font-size: 0.9rem; }
+  .muted { color: var(--muted); font-size: var(--text-md); }
   button { margin-top: 0.5rem; }
 </style>

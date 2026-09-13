@@ -7,6 +7,7 @@ export const ja: Messages = {
   'nav.downloads': 'ダウンロード',
   'nav.history': '履歴',
   'nav.locale': '表示言語',
+  'nav.skip': '本文へスキップ',
 
   'update.title': 'アップデート',
   'update.here': '現在 {version}',
@@ -61,7 +62,8 @@ export const ja: Messages = {
   'error.code.import_artifact': '場面で探すには llm-search-index を取り込んでください。',
   'error.code.no_library': 'ローカルのライブラリを開けないため、お気に入り・履歴・フォローが無効です。',
   'error.code.no_recognition': 'このプラットフォームには文字認識がないため、新しく読めません。',
-  'error.code.embedder_unreachable': '埋め込みサーバーが応答しません。起動するか、セリフタブで住所を直してください。',
+  'error.code.embedder_unreachable':
+    '意味を照合するモデルが応答しません。設定で「近い言葉で探す」をオフにして、もう一度オンにしてください。',
   'error.code.corpus_empty': 'まだ何も認識していないため、比べる相手がありません。',
   'error.changedHint': 'tsuburu が更新されるまで、やり直しても直りません。',
 
@@ -170,7 +172,7 @@ export const ja: Messages = {
   'history.clear': '消去',
   'history.confirm': 'すべて消しますか？',
   'history.confirmYes': 'はい、消します',
-  'history.empty': 'まだ読んだものがありません。',
+  'history.empty': 'まだ読んだものがありません。開いた作品が新しい順にここに並びます。',
   'history.count': '最近の{n}件',
 
   'downloads.empty':

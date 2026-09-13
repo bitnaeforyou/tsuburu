@@ -7,6 +7,7 @@ export const ko: Messages = {
   'nav.downloads': '다운로드',
   'nav.history': '기록',
   'nav.locale': '표시 언어',
+  'nav.skip': '본문으로 건너뛰기',
 
   'update.title': '업데이트',
   'update.here': '지금 {version}',
@@ -61,7 +62,8 @@ export const ko: Messages = {
   'error.code.import_artifact': '장면으로 찾으려면 llm-search-index를 가져오세요.',
   'error.code.no_library': '로컬 라이브러리를 열지 못해 즐겨찾기·기록·팔로우가 꺼져 있습니다.',
   'error.code.no_recognition': '이 플랫폼에는 텍스트 인식이 없어 새로 읽을 수 없습니다.',
-  'error.code.embedder_unreachable': '임베딩 서버가 응답하지 않습니다. 띄우거나, 대사 탭에서 주소를 고치세요.',
+  'error.code.embedder_unreachable':
+    '뜻을 맞추는 모델이 응답하지 않습니다. 설정에서 ‘비슷한 말로 찾기’를 껐다가 다시 켜세요.',
   'error.code.corpus_empty': '아직 인식된 것이 없어 견줄 대상이 없습니다.',
   'error.changedHint': 'tsuburu가 갱신되기 전에는 다시 시도해도 소용이 없습니다.',
 
@@ -170,7 +172,7 @@ export const ko: Messages = {
   'history.clear': '비우기',
   'history.confirm': '전부 지울까요?',
   'history.confirmYes': '네, 지웁니다',
-  'history.empty': '아직 읽은 것이 없습니다.',
+  'history.empty': '아직 읽은 것이 없습니다. 연 작품이 최근 순으로 여기에 쌓입니다.',
   'history.count': '최근 {n}편',
 
   'downloads.empty':

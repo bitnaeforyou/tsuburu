@@ -43,6 +43,13 @@ function preferred(): Locale {
 class I18n {
   locale = $state<Locale>(preferred())
 
+  constructor() {
+    // `set` is only called when someone picks; the language we start in is
+    // just as much the document's language, and quoting, hyphenation and
+    // every screen reader's pronunciation read it from there.
+    document.documentElement.lang = this.locale
+  }
+
   set(locale: Locale) {
     this.locale = locale
     document.documentElement.lang = locale

@@ -17,10 +17,10 @@
   /* Not a place to go, so it does not look like the tabs beside it. */
   .locale {
     font: inherit;
-    font-size: 0.85rem;
+    font-size: var(--text-md);
     color: var(--muted);
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--edge);
     border-radius: var(--radius);
     padding: 0.2rem 0.3rem;
   }
@@ -28,6 +28,7 @@
   @media (max-width: 640px) {
     .locale {
       padding: 0.4rem 0.35rem;
+      font-size: var(--text-base);
     }
   }
 </style>

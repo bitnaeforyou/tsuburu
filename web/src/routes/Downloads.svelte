@@ -62,6 +62,7 @@
 <AppHeader active="downloads" />
 
 <main>
+  <h1>{t('nav.downloads')}</h1>
   {#if error}
     <ErrorNote {error} onretry={load} />
   {:else if loading}
@@ -107,6 +108,9 @@
 </main>
 
 <style>
+  h1 {
+    margin: 0.25rem 0 1rem;
+  }
   main {
     max-width: var(--page);
     margin-inline: auto;
@@ -123,9 +127,12 @@
   .bar {
     position: relative;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     border-radius: var(--radius);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
+    /* The count climbs while the job runs; digits that change width make
+       the bar twitch. */
+    font-variant-numeric: tabular-nums;
     padding: 0.15rem 0.4rem;
     overflow: hidden;
   }
@@ -144,7 +151,7 @@
     gap: 0.35rem;
   }
   .actions button {
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
     padding: 0.15rem 0.45rem;
   }
 </style>

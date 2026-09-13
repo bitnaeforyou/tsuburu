@@ -46,7 +46,7 @@
   }
 </script>
 
-<div class="toolbar">
+<search class="toolbar">
   <form onsubmit={submit}>
     <input
       bind:value={input}
@@ -61,8 +61,8 @@
     {/if}
     <button type="submit" class="submit" aria-label={t('nav.search')} title={t('nav.search')}>
       <svg viewBox="0 0 20 20" aria-hidden="true" width="16" height="16">
-        <circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8" />
-        <line x1="13" y1="13" x2="17.5" y2="17.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        <circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <line x1="13" y1="13" x2="17.5" y2="17.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
       </svg>
     </button>
   </form>
@@ -121,7 +121,7 @@
       </select>
     </label>
   </div>
-</div>
+</search>
 
 <style>
   .toolbar {
@@ -131,7 +131,7 @@
     gap: 0.75rem 1.25rem;
     padding: 0.7rem var(--gutter);
     background: var(--bg);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
 
   form {
@@ -144,12 +144,12 @@
 
   input {
     width: 100%;
-    padding-right: 4.2rem;
+    padding-inline-end: 4.2rem;
   }
 
   .submit {
     position: absolute;
-    right: 0.25rem;
+    inset-inline-end: 0.25rem;
     display: grid;
     place-items: center;
     padding: 0.3rem 0.45rem;
@@ -164,12 +164,12 @@
 
   .clear {
     position: absolute;
-    right: 2.2rem;
+    inset-inline-end: 2.2rem;
     padding: 0.1rem 0.4rem;
     background: transparent;
     border-color: transparent;
     color: var(--muted);
-    font-size: 1.1rem;
+    font-size: var(--text-lg);
     line-height: 1;
   }
   .clear:hover {
@@ -181,8 +181,16 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.9rem;
-    font-size: 0.85rem;
+    font-size: var(--text-md);
     color: var(--muted);
+  }
+
+  /* A filter under 16px makes iOS zoom the whole page the moment it opens,
+     and the way back out is a pinch. */
+  @media (max-width: 640px) {
+    .filters select {
+      font-size: var(--text-base);
+    }
   }
 
   .filters label {
@@ -195,13 +203,15 @@
     font: inherit;
     color: var(--text);
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--edge);
     border-radius: var(--radius);
     padding: 0.25rem 0.4rem;
   }
 
-  /* A phone has no room for the filters to wrap onto two more rows above the
-     results. They keep one row and slide sideways instead. */
+  /* A phone fits two of the three filters on a line. They used to keep one
+     line and slide sideways, but the scrollbar was hidden and nothing else
+     said so, which left the third one off the edge of a 320px screen with no
+     way to know it was there. One more row is the cheaper price. */
   @media (max-width: 640px) {
     .toolbar {
       padding: 0.6rem var(--gutter);
@@ -214,17 +224,8 @@
     }
 
     .filters {
-      flex-wrap: nowrap;
-      overflow-x: auto;
       width: 100%;
-      gap: 0.75rem;
-      scrollbar-width: none;
-    }
-    .filters::-webkit-scrollbar {
-      display: none;
-    }
-    .filters label {
-      flex: none;
+      gap: 0.5rem 0.75rem;
     }
     select {
       padding: 0.35rem 0.4rem;

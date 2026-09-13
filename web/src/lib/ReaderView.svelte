@@ -464,7 +464,13 @@
     width: 100%;
     height: 100%;
     transform-origin: center center;
-    transition: transform 120ms ease-out;
+  }
+  /* A page that slides under the finger is the turn; someone who has asked
+     for less motion gets the same turn, arrived at. */
+  @media (prefers-reduced-motion: no-preference) {
+    .stage {
+      transition: transform 120ms ease-out;
+    }
   }
   .stage.rtl {
     flex-direction: row-reverse;
@@ -536,7 +542,7 @@
     position: absolute;
     bottom: 0.6rem;
     opacity: 0.4;
-    font-size: 0.8rem;
+    font-size: var(--text-sm);
     line-height: 1;
     padding: 0.3rem 0.5rem;
   }
@@ -545,7 +551,7 @@
     opacity: 1;
   }
   .where {
-    left: 0.6rem;
+    inset-inline-start: 0.6rem;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
@@ -557,7 +563,7 @@
     border-color: transparent;
   }
   .full {
-    right: 0.6rem;
-    font-size: 0.95rem;
+    inset-inline-end: 0.6rem;
+    font-size: var(--text-md);
   }
 </style>

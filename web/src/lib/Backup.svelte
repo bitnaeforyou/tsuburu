@@ -109,12 +109,14 @@
   .backup {
     margin-top: 2rem;
     padding-top: 1rem;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--line);
   }
   .what {
     margin: 0 0 0.5rem;
     color: var(--muted);
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
+    max-width: 68ch;
+    text-wrap: pretty;
   }
   .row {
     display: flex;
@@ -123,16 +125,16 @@
     gap: 0.5rem;
   }
   .row button {
-    font-size: 0.85rem;
+    font-size: var(--text-md);
     padding: 0.35rem 0.7rem;
   }
   .muted {
     color: var(--muted);
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   .bad {
     color: var(--danger);
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     margin: 0.5rem 0 0;
   }
 </style>

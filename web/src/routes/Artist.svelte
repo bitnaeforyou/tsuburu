@@ -121,7 +121,6 @@
   }
   h1 {
     margin: 0;
-    font-size: 1.2rem;
   }
   .muted {
     color: var(--muted);
@@ -136,19 +135,26 @@
     align-items: center;
     gap: 0.4rem;
     color: var(--muted);
-    font-size: 0.85rem;
+    font-size: var(--text-md);
     margin-bottom: 1rem;
   }
   select {
     font: inherit;
     color: var(--text);
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--edge);
     border-radius: var(--radius);
     padding: 0.25rem 0.4rem;
   }
   .more {
     margin: 1.5rem auto 0;
     display: block;
+  }
+
+  /* Opening a select smaller than 16px zooms iOS Safari into the page. */
+  @media (max-width: 640px) {
+    .filter select {
+      font-size: var(--text-base);
+    }
   }
 </style>

@@ -37,19 +37,22 @@
     margin: 0 0 1rem;
   }
   .chip {
-    font-size: 0.8rem;
+    font-size: var(--text-sm);
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--edge);
     border-radius: 999px;
     padding: 0.2rem 0.6rem;
     color: var(--text);
   }
   .untranslated { color: var(--muted); }
   .arrow { color: var(--muted); margin: 0 0.3rem; }
-  .minus { color: var(--danger); margin-right: 0.15rem; }
-  .note { color: var(--muted); margin-left: 0.35rem; font-style: italic; }
+  .minus { color: var(--danger); margin-inline-end: 0.15rem; }
+  /* No italic: neither Hangul nor kana has one, so the browser slants the
+     upright face instead and the word comes out bent rather than emphasised.
+     Muted already says the same thing. */
+  .note { color: var(--muted); margin-inline-start: 0.35rem; }
   .alt {
-    margin-left: 0.3rem;
+    margin-inline-start: 0.3rem;
     color: var(--accent);
     cursor: help;
   }

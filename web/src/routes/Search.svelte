@@ -189,6 +189,7 @@
 <SearchBar {params} onchange={go} {localAvailable} {dialogueAvailable} />
 
 <main>
+  <h1 class="sr-only">{t('nav.search')}</h1>
   {#if error}
     <ErrorNote {error} onretry={() => load(0)} />
   {/if}

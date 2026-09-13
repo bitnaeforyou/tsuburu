@@ -205,7 +205,13 @@
 
 <header class:bare>
   <button onclick={back}>&larr; {t('gallery.back')}</button>
-  <h1>{gallery?.title ?? `#${id}`}</h1>
+  {#if reading}
+    <!-- While the pages have the screen, the bar is the only thing left
+         saying which work they belong to. -->
+    <h1>{gallery?.title ?? `#${id}`}</h1>
+  {:else}
+    <span class="rest"></span>
+  {/if}
   {#if gallery && !library.unavailable}
     <button
       class="star"
@@ -252,15 +258,15 @@
          have been here before. -->
     <section class="work">
       {#if gallery.pages[0]}
-        <button class="cover" onclick={() => read(lastPage ?? 0)}>
+        <button class="cover" onclick={() => read(lastPage ?? 0)} aria-label={t('gallery.read')}>
           <img src={thumbnailOf(gallery.pages[0].src)} alt="" decoding="async" />
         </button>
       {/if}
 
       <div class="facts">
-        <!-- The header truncates a long title to one line; its own page is
-             where a work gets to be called by its whole name. -->
-        <h2 class="title">{gallery.title ?? `#${id}`}</h2>
+        <!-- The bar truncates a long title to one line; its own page is where
+             a work gets to be called by its whole name. -->
+        <h1 class="title">{gallery.title ?? `#${id}`}</h1>
         {#if gallery.japanese_title && gallery.japanese_title !== gallery.title}
           <p class="other">{gallery.japanese_title}</p>
         {/if}
@@ -288,12 +294,12 @@
 
         <div class="start">
           {#if lastPage !== null}
-            <button class="go" onclick={() => read(lastPage ?? 0)}>
+            <button class="primary" onclick={() => read(lastPage ?? 0)}>
               {t('gallery.resumeAt', { n: lastPage + 1 })}
             </button>
             <button onclick={() => read(0)}>{t('gallery.startOver')}</button>
           {:else}
-            <button class="go" onclick={() => read(0)}>{t('gallery.read')}</button>
+            <button class="primary" onclick={() => read(0)}>{t('gallery.read')}</button>
           {/if}
         </div>
 
@@ -341,11 +347,11 @@
 
     {#if near.length}
       <section class="near">
-        <strong>{t('keyword.near')}</strong>
+        <h2>{t('keyword.near')}</h2>
         <Grid>
           {#each near as other (other.id)}
             <div>
-              <Card id={other.id} />
+              <Card id={other.id} level={3} />
               <p class="shared">{other.shared.join(' · ')}</p>
             </div>
           {/each}
@@ -379,20 +385,25 @@
     height: var(--chrome);
     padding: 0 var(--gutter);
     background: var(--bg);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
   header.bare {
     display: none;
   }
 
-  h1 {
+  /* A label on a bar, not the name of the page: it stays a step under the
+     title the work carries on its own screen. */
+  header h1 {
     margin: 0;
-    font-size: 1rem;
+    font-size: var(--text-md);
     font-weight: 500;
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .rest {
+    flex: 1;
   }
 
   .star.on {
@@ -402,6 +413,9 @@
 
   .counter {
     color: var(--muted);
+    /* Chrome, like everything else on this bar - it was inheriting the body
+       size and out-shouting the title beside it. */
+    font-size: var(--text-md);
     font-variant-numeric: tabular-nums;
   }
 
@@ -453,7 +467,7 @@
     aspect-ratio: 3 / 4;
     object-fit: cover;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--image-edge);
     border-radius: var(--radius);
   }
   .cover:hover img {
@@ -462,23 +476,25 @@
 
   .facts {
     min-width: 0;
+    /* A title and a tag list do not get to be two thousand pixels wide just
+       because the window is. */
+    max-width: 68ch;
   }
   .title {
     margin: 0 0 0.35rem;
-    font-size: 1.15rem;
-    font-weight: 600;
     line-height: 1.3;
+    /* hitomi titles are often one unbroken run of underscores. */
     overflow-wrap: anywhere;
   }
   .other {
     margin: 0 0 0.35rem;
     color: var(--muted);
-    font-size: 0.95rem;
+    font-size: var(--text-md);
   }
   .line {
     margin: 0 0 0.5rem;
     color: var(--muted);
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   .id {
     font-variant-numeric: tabular-nums;
@@ -487,10 +503,10 @@
 
   .credits {
     margin: 0 0 0.9rem;
-    font-size: 0.9rem;
+    font-size: var(--text-md);
   }
   .credits a {
-    margin-right: 0.5rem;
+    margin-inline-end: 0.5rem;
   }
   .series {
     color: var(--muted);
@@ -502,9 +518,9 @@
   .preview {
     margin: 1.5rem 0;
   }
+  /* Naming a part of the work's page, not the page. */
   .preview h2 {
-    font-size: 0.9rem;
-    font-weight: 600;
+    font-size: var(--text-md);
     margin: 0 0 0.6rem;
   }
 
@@ -514,21 +530,16 @@
     gap: 0.5rem;
     margin-bottom: 1rem;
   }
-  .go {
-    color: var(--accent);
-    border-color: var(--accent);
-    font-weight: 500;
-  }
 
   .tags {
     color: var(--muted);
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     margin: 0 0 1rem;
   }
 
   .keywords {
     margin: 0 0 1rem;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
@@ -536,7 +547,7 @@
   }
   .keywords a {
     text-decoration: none;
-    border: 1px solid var(--border);
+    border: 1px solid var(--edge);
     border-radius: 999px;
     padding: 0.1rem 0.55rem;
   }
@@ -544,13 +555,13 @@
   .near {
     margin: 2rem 0 1rem;
   }
-  .near strong {
-    display: block;
-    margin-bottom: 0.6rem;
+  .near h2 {
+    font-size: var(--text-md);
+    margin: 0 0 0.6rem;
   }
   .shared {
     margin: 0.25rem 0 0;
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     color: var(--muted);
   }
 
@@ -559,10 +570,10 @@
     flex-wrap: wrap;
     gap: 0.5rem;
     align-items: center;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   .keep button {
-    font-size: 0.8rem;
+    font-size: var(--text-sm);
     padding: 0.25rem 0.6rem;
   }
   .muted {
@@ -575,7 +586,7 @@
     text-align: center;
   }
   .hint {
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     margin: 0.6rem 0 0;
   }
 
@@ -586,8 +597,8 @@
       gap: 0.5rem;
       padding: 0 var(--gutter);
     }
-    h1 {
-      font-size: 0.9rem;
+    header h1 {
+      font-size: var(--text-sm);
     }
     main {
       padding: 0.75rem;
@@ -600,14 +611,14 @@
       max-width: 140px;
     }
     .title {
-      font-size: 1rem;
+      font-size: var(--text-lg);
     }
     .hint {
-      font-size: 0.72rem;
+      font-size: var(--text-xs);
       margin-top: 0.4rem;
     }
     .keep button {
-      font-size: 0.85rem;
+      font-size: var(--text-md);
       padding: 0.45rem 0.7rem;
     }
   }

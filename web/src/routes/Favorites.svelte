@@ -39,9 +39,10 @@
 <AppHeader active="favorites" />
 
 <main>
+  <h1>{t('nav.favorites')}</h1>
   {#if artists.length}
     <section class="artists">
-      <strong>{t('favorites.artists')}</strong>
+      <h2>{t('favorites.artists')}</h2>
       <ul>
         {#each artists as artist (artist.name)}
           <li>
@@ -70,6 +71,9 @@
 </main>
 
 <style>
+  h1 {
+    margin: 0.25rem 0 1rem;
+  }
   main {
     max-width: var(--page);
     margin-inline: auto;
@@ -77,6 +81,10 @@
   }
   .artists {
     margin-bottom: 1.25rem;
+  }
+  .artists h2 {
+    font-size: var(--text-base);
+    margin: 0;
   }
   .artists ul {
     list-style: none;
@@ -87,17 +95,17 @@
     margin: 0.5rem 0 0;
   }
   .artists li {
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     border-radius: 999px;
     padding: 0.2rem 0.7rem;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   .artists a {
     text-decoration: none;
   }
   .artists .count {
     color: var(--muted);
-    margin-left: 0.4rem;
+    margin-inline-start: 0.4rem;
   }
   .count {
     color: var(--muted);

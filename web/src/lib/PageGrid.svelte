@@ -28,15 +28,29 @@
     if (!inline) sheet?.querySelector('.page.on')?.scrollIntoView({ block: 'center' })
   })
 
+  // Over the reader this is a dialogue: the keyboard belongs to it while it is
+  // open, everything behind it is out of reach, and whatever was focused when
+  // it opened gets the focus back when it closes.
   $effect(() => {
     if (inline || !onclose) return
+    const opener = document.activeElement as HTMLElement | null
+    const behind = [...document.body.children].filter((el) => !el.contains(sheet))
+    for (const el of behind) el.setAttribute('inert', '')
+
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
       onclose()
     }
     addEventListener('keydown', onKey, { capture: true })
-    return () => removeEventListener('keydown', onKey, { capture: true })
+
+    sheet?.querySelector<HTMLElement>('.page.on, .page')?.focus({ preventScroll: true })
+
+    return () => {
+      removeEventListener('keydown', onKey, { capture: true })
+      for (const el of behind) el.removeAttribute('inert')
+      opener?.focus?.()
+    }
   })
 </script>
 
@@ -84,6 +98,7 @@
     display: flex;
     flex-direction: column;
     background: var(--bg);
+    overscroll-behavior: contain;
   }
 
   header {
@@ -91,7 +106,7 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.7rem 1rem;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
   header strong {
     font-weight: 600;
@@ -99,7 +114,7 @@
   .muted {
     color: var(--muted);
     font-variant-numeric: tabular-nums;
-    margin-right: auto;
+    margin-inline-end: auto;
   }
 
   .sheet.inline {
@@ -127,7 +142,7 @@
     background: none;
     border: none;
     color: var(--muted);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     font-variant-numeric: tabular-nums;
     cursor: pointer;
     /* A wall of a thousand pages only paints the part being looked at. */
@@ -140,7 +155,7 @@
     aspect-ratio: 3 / 4;
     object-fit: cover;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--image-edge);
     border-radius: var(--radius);
   }
 

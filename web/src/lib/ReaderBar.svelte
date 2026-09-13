@@ -142,7 +142,7 @@
   }
   .turn button {
     white-space: nowrap;
-    font-size: 0.8rem;
+    font-size: var(--text-sm);
     padding: 0.25rem 0.6rem;
   }
 
@@ -163,17 +163,19 @@
     display: flex;
   }
   .group button {
-    font-size: 0.8rem;
+    font-size: var(--text-sm);
     padding: 0.25rem 0.6rem;
     border-radius: 0;
-    margin-left: -1px;
+    margin-inline-start: -1px;
   }
   .group button:first-child {
-    border-radius: var(--radius) 0 0 var(--radius);
-    margin-left: 0;
+    border-start-start-radius: var(--radius);
+    border-end-start-radius: var(--radius);
+    margin-inline-start: 0;
   }
   .group button:last-child {
-    border-radius: 0 var(--radius) var(--radius) 0;
+    border-start-end-radius: var(--radius);
+    border-end-end-radius: var(--radius);
   }
   .group button.on {
     color: var(--accent);
@@ -183,14 +185,14 @@
 
   .wide,
   select {
-    font-size: 0.8rem;
+    font-size: var(--text-sm);
     padding: 0.25rem 0.6rem;
   }
   select {
     font-family: inherit;
     color: var(--text);
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--edge);
     border-radius: var(--radius);
   }
 
@@ -199,7 +201,7 @@
     align-items: center;
     gap: 0.3rem;
     color: var(--muted);
-    font-size: 0.8rem;
+    font-size: var(--text-sm);
   }
 
   .sr {
@@ -223,16 +225,20 @@
     }
     .turn button,
     .group button,
-    .wide,
+    .wide {
+      font-size: var(--text-md);
+      padding: 0.45rem 0.7rem;
+    }
+    /* Anything below 16px zooms the page when iOS opens it. */
     select {
-      font-size: 0.82rem;
+      font-size: var(--text-base);
       padding: 0.45rem 0.7rem;
     }
     .scrub {
       height: 1.75rem;
     }
     .check {
-      font-size: 0.82rem;
+      font-size: var(--text-md);
     }
   }
 </style>

@@ -332,7 +332,7 @@
         </div>
 
         {#if update?.state === 'found'}
-          <button class="go" onclick={() => void api.applyUpdate().then((u) => (update = u))}>
+          <button class="primary" onclick={() => void api.applyUpdate().then((u) => (update = u))}>
             {t('update.get', { version: update.version ?? '' })}
           </button>
         {:else if update?.published && update.state !== 'fetching' && update.state !== 'ready'}
@@ -489,7 +489,12 @@
       <form onsubmit={submitImport}>
         <h2>{t('dialogue.importHistory')}</h2>
         <p class="muted small">{t('dialogue.importHistoryNote')}</p>
-        <textarea bind:value={importText} rows="3" placeholder="https://hitomi.la/doujinshi/...-1234567.html"></textarea>
+        <textarea
+          bind:value={importText}
+          rows="3"
+          aria-label={t('dialogue.importHistory')}
+          placeholder="https://hitomi.la/doujinshi/…-1234567.html"
+        ></textarea>
         <div class="row">
           <label class="check">
             <input type="checkbox" bind:checked={importForce} />
@@ -511,10 +516,10 @@
             placeholder={t('dialogue.huntPlaceholder')}
             aria-label={t('dialogue.huntTerms')}
           />
-          <select bind:value={hunt.language}>
+          <select bind:value={hunt.language} aria-label={t('search.language')}>
             {#each LANGUAGES as l (l)}<option value={l}>{t(`lang.${l}` as Key)}</option>{/each}
           </select>
-          <select bind:value={hunt.kind}>
+          <select bind:value={hunt.kind} aria-label={t('search.type')}>
             {#each KINDS as k (k)}<option value={k}>{t(`kind.${k}` as Key)}</option>{/each}
           </select>
           <input
@@ -563,7 +568,7 @@
           <ul class="kept">
             {#each cache.items as item (item.id)}
               <li>
-                <div class="thumb"><Card id={item.id} /></div>
+                <div class="thumb"><Card id={item.id} level={3} /></div>
                 <span class="muted small">
                   {t('common.pages', { n: item.pages })} &middot; {formatBytes(item.bytes)}
                 </span>
@@ -700,15 +705,15 @@
   }
 
   h1 {
-    font-size: 1.35rem;
     margin: 0.25rem 0 1rem;
   }
 
   /* Every box says what it is in the same voice, so the page reads as a list
      of things rather than a wall. */
   h2 {
-    font-size: 0.95rem;
-    font-weight: 600;
+    /* The body's size, told apart by weight: ten of these down a page at a
+       step up would be ten headlines shouting over the settings. */
+    font-size: var(--text-base);
     margin: 0;
   }
   h2 + .small {
@@ -721,7 +726,7 @@
   }
   .panel {
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: 0.9rem 1rem;
     margin-bottom: 1rem;
@@ -736,12 +741,16 @@
   .muted {
     color: var(--muted);
   }
+  /* What a setting is for, in a sentence. A sentence that runs the width of
+     this page is one the eye loses its place in. */
   .small {
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     margin: 0.4rem 0 0;
+    max-width: 68ch;
+    text-wrap: pretty;
   }
   .check {
-    margin-right: 0.6rem;
+    margin-inline-end: 0.6rem;
   }
   button.on {
     border-color: var(--accent);
@@ -752,7 +761,7 @@
     font: inherit;
     color: inherit;
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--edge);
     border-radius: var(--radius);
     padding: 0.5rem 0.7rem;
     resize: vertical;
@@ -761,7 +770,7 @@
     font: inherit;
     color: var(--text);
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--edge);
     border-radius: var(--radius);
     padding: 0.25rem 0.4rem;
   }
@@ -774,7 +783,7 @@
   }
   .upload {
     cursor: pointer;
-    border: 1px solid var(--border);
+    border: 1px solid var(--edge);
     border-radius: var(--radius);
     padding: 0.45rem 0.8rem;
     background: var(--surface);
@@ -790,7 +799,7 @@
     gap: 0.25rem;
   }
   .files a {
-    margin-right: 0.5rem;
+    margin-inline-end: 0.5rem;
   }
 
   /* On a phone the line you are trying to remember needs the whole width;
@@ -818,12 +827,6 @@
   .version.offer {
     border-color: var(--accent);
   }
-  .version .go {
-    color: var(--accent);
-    border-color: var(--accent);
-    font-weight: 500;
-    white-space: nowrap;
-  }
 
   /* The one switch a reader is ever likely to touch, so it reads as one:
      what it does on the left, what it costs on the button. */
@@ -850,9 +853,11 @@
     position: relative;
     margin-top: 0.6rem;
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     border-radius: var(--radius);
-    font-size: 0.78rem;
+    font-size: var(--text-xs);
+    /* Counts here climb while a download runs. */
+    font-variant-numeric: tabular-nums;
     padding: 0.2rem 0.5rem;
     overflow: hidden;
   }
@@ -862,7 +867,11 @@
     inset: 0 auto 0 0;
     width: var(--done);
     background: color-mix(in srgb, var(--accent) 35%, transparent);
-    transition: width 200ms linear;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .meter::before {
+      transition: width 200ms linear;
+    }
   }
   .meter span {
     position: relative;
@@ -871,7 +880,8 @@
   .advanced {
     margin-bottom: 1rem;
     color: var(--muted);
-    font-size: 0.9rem;
+    font-size: var(--text-md);
+    max-width: 68ch;
   }
   .advanced summary {
     cursor: pointer;

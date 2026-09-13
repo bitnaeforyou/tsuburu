@@ -26,6 +26,14 @@
   // In the order they are reached for: looking for something, then the things
   // you kept, then what you read, then what is on disk. Settings last, where
   // settings go.
+  function toContent() {
+    const main = document.querySelector('main')
+    if (!main) return
+    main.setAttribute('tabindex', '-1')
+    main.focus()
+    main.scrollIntoView()
+  }
+
   const TABS = [
     { id: 'search', key: 'nav.search', href: toSearch() },
     { id: 'favorites', key: 'nav.favorites', href: '#/favorites' },
@@ -36,6 +44,9 @@
 </script>
 
 <header>
+  <!-- Not a link: the address bar holds the route, so jumping to the content
+       has to move focus rather than change where we are. -->
+  <button class="skip" onclick={toContent}>{t('nav.skip')}</button>
   <a class="brand" href={toSearch()}>tsuburu</a>
 
   {#if actions}
@@ -63,14 +74,14 @@
     gap: 1rem;
     padding: 0.7rem var(--gutter);
     background: var(--bg);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
 
   .brand {
     font-weight: 600;
     text-decoration: none;
     letter-spacing: 0.02em;
-    margin-right: auto;
+    margin-inline-end: auto;
   }
 
   .actions {
@@ -86,7 +97,7 @@
   }
 
   header :global(.locale) {
-    margin-left: 0.5rem;
+    margin-inline-start: 0.5rem;
   }
 
   nav a {
@@ -94,7 +105,7 @@
     color: var(--muted);
     padding: 0.3rem 0.7rem;
     border-radius: var(--radius);
-    font-size: 0.9rem;
+    font-size: var(--text-md);
   }
 
   nav a:hover {
@@ -118,22 +129,21 @@
 
     nav {
       position: fixed;
-      left: 0;
-      right: 0;
+      inset-inline: 0;
       bottom: 0;
       z-index: 3;
       justify-content: space-around;
       gap: 0;
       padding: 0.25rem 0 calc(0.25rem + env(safe-area-inset-bottom));
       background: var(--bg);
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--line);
     }
 
     nav a {
       flex: 1;
       text-align: center;
       padding: 0.5rem 0.2rem;
-      font-size: 0.78rem;
+      font-size: var(--text-xs);
     }
 
     nav a.current {

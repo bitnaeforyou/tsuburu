@@ -25,7 +25,9 @@
   const detail = $derived(error instanceof Error ? error.message : String(error))
 </script>
 
-<div class="note" class:stale={formatChanged}>
+<!-- Something failed where the reader was not looking; a screen reader is
+     told at once rather than on the next thing they touch. -->
+<div class="note" class:stale={formatChanged} role="alert">
   <strong>
     {formatChanged ? t('error.changed') : t('error.generic')}
   </strong>
@@ -44,13 +46,13 @@
 
 <style>
   .note {
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--danger);
+    border: 1px solid var(--line);
+    border-inline-start: 3px solid var(--danger);
     border-radius: var(--radius);
     background: var(--surface);
     padding: 1rem;
     margin: 1rem 0;
   }
   p { margin: 0.4rem 0; }
-  .muted { color: var(--muted); font-size: 0.9rem; }
+  .muted { color: var(--muted); font-size: var(--text-md); }
 </style>

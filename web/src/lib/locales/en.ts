@@ -7,6 +7,7 @@ export const en = {
   'nav.downloads': 'Downloads',
   'nav.history': 'History',
   'nav.locale': 'Interface language',
+  'nav.skip': 'Skip to content',
 
   'update.title': 'Updates',
   'update.here': 'Running {version}',
@@ -37,7 +38,7 @@ export const en = {
   'settings.advancedNote':
     'A corpus somebody else built, and an embedding server of your own instead of the one above.',
 
-  'common.loading': 'Loading...',
+  'common.loading': 'Loading…',
   'common.loadMore': 'Load more',
   'common.retry': 'Try again',
   'common.cancel': 'Cancel',
@@ -62,7 +63,8 @@ export const en = {
   'error.code.import_artifact': 'Import an llm-search-index to search by scene.',
   'error.code.no_library': 'The local library could not be opened, so favorites, history and following are off.',
   'error.code.no_recognition': 'This platform has no text recognition, so nothing new can be read.',
-  'error.code.embedder_unreachable': 'The embedding server is not answering. Start it, or correct its address in the Dialogue tab.',
+  'error.code.embedder_unreachable':
+    'The model that matches meanings is not answering. Turn ‘Say it in your own words’ off and back on in Settings.',
   'error.code.corpus_empty': 'Nothing has been recognised yet, so there is nothing to check against.',
   'error.changedHint': 'Retrying will not help until tsuburu is updated.',
 
@@ -166,13 +168,13 @@ export const en = {
   'backup.notOurs': 'That is not a tsuburu file.',
 
   'favorites.artists': 'Artists you follow',
-  'favorites.empty': 'No favorites yet. Tap the star on any result to keep it here.',
+  'favorites.empty': 'No favorites yet. Press the star on any result to keep it here.',
   'favorites.count': '{n} saved',
 
   'history.clear': 'Clear',
   'history.confirm': 'Clear everything?',
   'history.confirmYes': 'Yes, clear',
-  'history.empty': 'Nothing read yet.',
+  'history.empty': 'Nothing read yet. Works you open are listed here, newest first.',
   'history.count': '{n} recently read',
 
   'downloads.empty':

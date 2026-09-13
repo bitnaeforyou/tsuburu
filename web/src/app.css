@@ -1,25 +1,100 @@
+/* Primitives. Named for what they are; never used in a component.
+   Generated in OKLCH - even steps in perceived lightness, one hue end to
+   end, vividness peaking mid-ramp - and written as hex, which is what the
+   rest of this file speaks. */
+:root {
+  --neutral-50: #fcfcfe;
+  --neutral-100: #f5f6f8;
+  --neutral-200: #e8eaed;
+  --neutral-300: #d9dbde;
+  --neutral-400: #c4c6ca;
+  --neutral-500: #a0a3a8;
+  --neutral-600: #7d8086;
+  --neutral-700: #62656b;
+  --neutral-800: #484b50;
+  --neutral-900: #313338;
+  --neutral-950: #1d1f22;
+  --neutral-975: #0f1113;
+
+  --azure-100: #ddedff;
+  --azure-200: #bdddfe;
+  --azure-400: #6db0f4;
+  --azure-500: #4296e7;
+  --azure-700: #1069b2;
+  --azure-800: #0c5590;
+  --azure-950: #0b2f50;
+
+  --red-200: #fac8c3;
+  --red-400: #ec857d;
+  --red-700: #a93534;
+  --red-950: #4d1a18;
+}
+
+/* Roles. The only tier a component may name.
+   Covers are the loudest thing on any screen here, so the interface around
+   them is near-neutral and one hue means interactive. */
 :root {
   --bg: #ffffff;
-  --surface: #f4f4f5;
-  --border: #e0e0e3;
-  --text: #18181b;
-  --muted: #6b6b76;
-  --accent: #6d3fd4;
-  --danger: #b4232b;
+  --surface: var(--neutral-100);
+  --raised: var(--neutral-200);
+  --text: var(--neutral-900);
+  --muted: var(--neutral-700);
+  /* A hairline between panels, which is decoration. */
+  --line: var(--neutral-200);
+  /* The edge of something you can press, which is not: it carries 3:1 so the
+     control is findable without reading its label. */
+  --edge: var(--neutral-600);
+  --accent: var(--azure-700);
+  --accent-quiet: var(--azure-100);
+  --accent-solid: var(--azure-700);
+  --accent-on: #ffffff;
+  --danger: var(--red-700);
+  --danger-quiet: var(--red-200);
+  --focus: var(--azure-500);
+  /* The hairline around a cover: plain black at a tenth, so it reads as the
+     image's own edge rather than as a border the interface put there. */
+  --image-edge: #0000001a;
+
   --radius: 8px;
+  --radius-sm: 5px;
+  --radius-lg: 12px;
   color-scheme: light dark;
 }
 
+/* Reversed as a starting point, then pulled back: the dark end is widened so
+   two surfaces still read apart, and the accent moves up the ramp rather than
+   keeping a lightness that only worked on white. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #131316;
-    --surface: #1c1c21;
-    --border: #2c2c34;
-    --text: #ececf0;
-    --muted: #9a9aa6;
-    --accent: #a586f0;
-    --danger: #f08a90;
+    --bg: var(--neutral-975);
+    --surface: var(--neutral-950);
+    --raised: var(--neutral-900);
+    --text: var(--neutral-100);
+    --muted: var(--neutral-500);
+    --line: var(--neutral-900);
+    --edge: var(--neutral-600);
+    --accent: var(--azure-400);
+    --accent-quiet: var(--azure-950);
+    --accent-solid: var(--azure-800);
+    --accent-on: #ffffff;
+    --danger: var(--red-400);
+    --danger-quiet: var(--red-950);
+    --focus: var(--azure-400);
+    --image-edge: #ffffff1a;
   }
+}
+
+/* One type scale. Sizes are in rem against the 16px root, so a step means the
+   same thing on every screen, and the base step is the body: nothing has to
+   reason about a body that is one size and a rem that is another. Named for
+   the job, because the job is what the next screen has to match. */
+:root {
+  --text-xs: 0.75rem;    /* 12px - a counter or a badge riding on an image */
+  --text-sm: 0.8125rem;  /* 13px - captions, tag lists, the quieter meta */
+  --text-md: 0.875rem;   /* 14px - controls, labels, dense rows */
+  --text-base: 1rem;     /* 16px - body copy, and what a control inherits */
+  --text-lg: 1.125rem;   /* 18px - the name of the thing on screen */
+  --text-xl: 1.375rem;   /* 22px - the name of the screen */
 }
 
 /* How tall a screen's own sticky header is, so anything else that sticks
@@ -42,14 +117,45 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Hangul and kana carry more strokes per em than latin, so a line of them
+     needs more room above and below than 1.5 leaves it. */
+  font: var(--text-base)/1.55 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* macOS renders text heavier than it was drawn. Said once, here. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Korean wraps between any two syllables by default, so `친구에게` comes
+     back as `친` and `구에게` on the next line. `keep-all` breaks Korean at
+     spaces, the way it is written; `break-word` is what is left for a word
+     that is longer than the line it is on - a Japanese title with no spaces
+     in it, or one of hitomi's runs of underscores. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* Headings descend by level here, so a screen only says a size when it means
+   something other than its level - a title in a bar is chrome, not a heading
+   that outranks the page. */
+h1, h2, h3 {
+  line-height: 1.25;
+  text-wrap: balance;
+}
+h1 { font-size: var(--text-xl); font-weight: 600; }
+h2 { font-size: var(--text-lg); font-weight: 600; }
+h3 { font-size: var(--text-md); font-weight: 600; }
+
+/* Real links take their underline from the font's own metrics rather than
+   wherever the browser would draw it, and let descenders through. */
+a:not([class]) {
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: from-font;
+  text-decoration-skip-ink: auto;
 }
 
 button {
   font: inherit;
   color: inherit;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--edge);
   border-radius: var(--radius);
   padding: 0.45rem 0.8rem;
   cursor: pointer;
@@ -58,21 +164,94 @@ button {
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.5; cursor: default; }
 
+@media (prefers-reduced-motion: no-preference) {
+  button {
+    transition-property: border-color, background-color, color, scale;
+    transition-duration: 120ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+  button:active:not(:disabled) { scale: 0.96; }
+  a, nav a, .filters select, input, select, textarea {
+    transition-property: border-color, color;
+    transition-duration: 120ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+}
+
 input {
   font: inherit;
   color: inherit;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--edge);
   border-radius: var(--radius);
   padding: 0.5rem 0.7rem;
 }
 
-input:focus-visible, button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+/* The ring has a role of its own: it has to be findable on a control whose
+   border is already the accent because the pointer is over it.
+
+   Two pixels is the floor for an indicator you can see, so the weight comes
+   out of the gap rather than the line: on a control that already draws its own
+   edge, the ring takes that edge's place instead of adding a second line
+   outside it. The radius is the control's own - saying one here made every
+   input's corners snap tighter the moment it was focused. */
+:is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
+}
+
+/* Unless there is no edge to take the place of, or the control is already
+   filled with the accent: the ring drawn inside that fill measures 2.5:1
+   against it, so it goes outside, onto the page, where it is plain. */
+:is(a, summary, [tabindex], button.primary):focus-visible {
+  outline-offset: 2px;
+}
+
+/* One action per view gets the fill. Colour on the background, not on the
+   label: accent text on a neutral button reads as a link, not a button. */
+button.primary {
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: var(--accent-on);
+  font-weight: 500;
+}
+button.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
 }
 
 a { color: inherit; }
+
+/* Said, but not shown. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The way past the header, for anyone arriving by keyboard. It is the first
+   thing focus reaches and the only time it is visible. */
+.skip {
+  position: absolute;
+  top: 0.5rem;
+  inset-inline-start: 0.5rem;
+  z-index: 10;
+  transform: translateY(-200%);
+}
+.skip:focus-visible {
+  transform: none;
+}
+
+/* Focus has to be able to land somewhere for the skip to mean anything, and
+   landing there must not draw a ring around the whole page. */
+main:focus {
+  outline: none;
+}
 
 /* A phone is held in one hand: the things you press have to be big enough to
    press, and the way between screens belongs at the bottom where the thumb
@@ -82,8 +261,10 @@ a { color: inherit; }
     --chrome: 3.4rem;
     --gutter: 0.75rem;
   }
-  body { font-size: 16px; }
   body.has-tabs { padding-bottom: calc(3.4rem + env(safe-area-inset-bottom)); }
   button { padding: 0.55rem 0.9rem; }
   input { padding: 0.6rem 0.75rem; }
+  /* Under 16px, iOS Safari zooms the page on focus and the only way back is
+     a pinch. Every typed-into or opened control holds the base size. */
+  input, select, textarea { font-size: var(--text-base); }
 }

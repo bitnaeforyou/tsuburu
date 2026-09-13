@@ -58,6 +58,7 @@
 </AppHeader>
 
 <main>
+  <h1>{t('nav.history')}</h1>
   {#if error}
     <ErrorNote {error} onretry={load} />
   {:else if loading}
@@ -79,12 +80,15 @@
 </main>
 
 <style>
+  h1 {
+    margin: 0.25rem 0 1rem;
+  }
   .confirm {
     display: flex;
     gap: 0.5rem;
     align-items: center;
     color: var(--muted);
-    font-size: 0.85rem;
+    font-size: var(--text-md);
   }
   main {
     max-width: var(--page);

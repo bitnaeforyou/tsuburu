@@ -107,7 +107,7 @@
   }
 
   .hits > li {
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     border-radius: var(--radius);
     background: var(--surface);
     overflow: hidden;
@@ -132,7 +132,7 @@
     display: block;
     aspect-ratio: 3 / 4;
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--image-edge);
     border-radius: var(--radius);
     overflow: hidden;
   }
@@ -152,7 +152,7 @@
   /* The work is what the row is about, so it is what the row says first. */
   .title {
     font-weight: 600;
-    font-size: 0.95rem;
+    font-size: var(--text-md);
     line-height: 1.35;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -160,7 +160,7 @@
   }
 
   .meta {
-    font-size: 0.78rem;
+    font-size: var(--text-sm);
     color: var(--muted);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -170,32 +170,35 @@
   .found {
     display: block;
     margin-top: 0.15rem;
-    padding-left: 0.6rem;
-    border-left: 2px solid var(--border);
+    padding-inline-start: 0.6rem;
+    border-inline-start: 2px solid var(--line);
     /* A quotation that runs the width of an ultrawide stops being one. */
     max-width: 72ch;
   }
   .at {
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     color: var(--muted);
   }
   .found q {
     display: block;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     line-height: 1.4;
     color: var(--muted);
     quotes: '“' '”';
     overflow-wrap: anywhere;
+    /* A found line is a sentence, not a label: no single word left alone
+       on the last line of it. */
+    text-wrap: pretty;
   }
   .row:hover .found q {
     color: var(--text);
   }
 
   .badge {
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     border-radius: 999px;
     padding: 0 0.4rem;
-    margin-left: 0.3rem;
+    margin-inline-start: 0.3rem;
     font-variant-numeric: tabular-nums;
   }
   .badge.fuzzy {
@@ -211,7 +214,6 @@
       padding: 0.55rem 0.6rem;
     }
     .title {
-      font-size: 0.9rem;
       white-space: normal;
       display: -webkit-box;
       -webkit-line-clamp: 2;
