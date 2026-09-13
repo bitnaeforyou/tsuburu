@@ -90,6 +90,7 @@ export const ko: Messages = {
   'search.fromSnapshot': '로컬 스냅샷에서',
   'search.browsingAll': '전체 둘러보는 중',
   'search.noResultsFor': '{query}에 대한 결과가 없습니다.',
+  'search.readSoFar': '지금까지 {n}편의 대사를 읽어 두었습니다',
   'search.noResults': '이 조건에 맞는 것이 없습니다.',
   'search.slowSort': '정렬할 결과가 적어 시간이 조금 걸릴 수 있습니다.',
 

@@ -113,8 +113,19 @@ async fn an_empty_word_is_refused() {
 }
 
 #[tokio::test]
-async fn without_an_import_the_endpoints_say_so_rather_than_failing_blankly() {
+async fn without_an_import_a_work_is_about_nothing_rather_than_failing() {
+    // Asking what a work is about, with no graph to ask, is answered: nobody
+    // knows. Failing instead logged an error for every work a reader opened.
     let (status, body) = get(app_over(None), "/api/keywords/10").await;
-    assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["words"].as_array().unwrap().len(), 0, "{body}");
+
+    let (status, body) = get(app_over(None), "/api/keywords/10/near").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body.as_array().unwrap().len(), 0, "{body}");
+
+    // Looking a word up is asked for by name, so that one still says why not.
+    let (status, body) = get(app_over(None), "/api/keywords/search?q=school").await;
+    assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{body}");
     assert!(body["message"].as_str().unwrap().contains("import-keywords"), "{body}");
 }

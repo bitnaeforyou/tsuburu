@@ -247,7 +247,10 @@ nothing leaves this computer after, and switching it off stops the server and
 keeps the file, so switching it on again is only the time to read the weights.
 It comes back on by itself after a restart, because it was already asked for.
 
-Then **in my own words** appears beside the dialogue in the search box. Write
+Then **in my own words** appears beside the dialogue in the search box. It
+searches whatever has been read: pages are embedded as they are recognised,
+against the model the program is running, so a corpus somebody else built is
+an addition rather than a requirement. Write
 the line the way you half remember it — wrong words, half the sentence — and it
 finds the real one. What it will not do is find a scene from a description of
 it: the index holds short lines of dialogue, so a description only lands near

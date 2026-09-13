@@ -312,6 +312,11 @@ async fn serve(
     // to turn it on every time. Only if its files are here - nothing is
     // fetched without being asked.
     state.model.resume();
+    // The sweep embeds what it reads, and the model it should embed against is
+    // the one this program runs rather than an address from a setting.
+    if let Some(grinder) = &state.grinder {
+        grinder.use_model(Arc::clone(&state.model));
+    }
     // What a previous update left behind on a platform that could not delete
     // it while it was running.
     tsuburu_update::sweep();

@@ -91,6 +91,7 @@ export const en = {
   'search.fromSnapshot': 'from the local snapshot',
   'search.browsingAll': 'browsing everything',
   'search.noResultsFor': 'No results for {query}.',
+  'search.readSoFar': 'the dialogue of {n} works has been read so far',
   'search.noResults': 'Nothing matched these filters.',
   'search.slowSort': 'Few results to sort by popularity, so this may take a moment.',
 

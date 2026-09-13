@@ -125,6 +125,10 @@ pub struct Grinder {
     refill_cursor: RwLock<usize>,
     /// Updated from a blocking thread, hence a std mutex.
     import: std::sync::Mutex<Option<ImportProgress>>,
+    /// The model tsuburu fetched and runs, when it is running. It answers on
+    /// a port chosen at the time, so the address in the settings - which is
+    /// there for a reader who runs their own - cannot name it.
+    running_model: std::sync::RwLock<Option<Arc<tsuburu_embed::runner::Runner>>>,
 }
 
 impl Grinder {
@@ -166,6 +170,7 @@ impl Grinder {
             galleries_done: AtomicU64::new(0),
             refill_cursor: RwLock::new(0),
             import: std::sync::Mutex::new(None),
+            running_model: std::sync::RwLock::new(None),
         }
     }
 
@@ -285,6 +290,23 @@ impl Grinder {
     /// afterwards is scanned beside it, so meaning search reaches what you
     /// have actually read. Without a pack there is nothing to embed with and
     /// this quietly does nothing.
+    /// Tells the sweep about the model the program is running itself.
+    pub fn use_model(&self, model: Arc<tsuburu_embed::runner::Runner>) {
+        if let Ok(mut held) = self.running_model.write() {
+            *held = Some(model);
+        }
+    }
+
+    /// Where to embed against: the model this program runs, if it is running,
+    /// and otherwise whatever server the settings name.
+    fn embedder_url(&self, saved: String) -> String {
+        self.running_model
+            .read()
+            .ok()
+            .and_then(|held| held.as_ref().and_then(|model| model.url()))
+            .unwrap_or(saved)
+    }
+
     async fn embed_read_page(&self, gallery: i32, page: u16, text: &str) {
         let Ok(Some(json)) = self.store.embedder() else { return };
         // The setting holds the address and the model; the width is the
@@ -296,7 +318,7 @@ impl Grinder {
         }
         let Ok(saved) = serde_json::from_str::<Saved>(&json) else { return };
         let config = tsuburu_embed::embedder::EmbedderConfig {
-            url: saved.url,
+            url: self.embedder_url(saved.url),
             model: saved.model,
             ..Default::default()
         };

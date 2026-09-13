@@ -484,6 +484,13 @@ fn similarity_dir(grinder: &Grinder) -> Result<PathBuf, ApiError> {
     })
 }
 
+/// The imported corpus, if there is one. Searching by a phrase does not need
+/// it: the vectors for what this machine has read are searched the same way,
+/// and somebody who has never imported anything still has those.
+fn imported_index(grinder: &Grinder) -> Option<PathBuf> {
+    grinder.store().artifact_dir().ok().flatten()
+}
+
 #[derive(Debug, Deserialize)]
 pub struct PhraseParams {
     pub q: String,
@@ -506,22 +513,36 @@ pub async fn phrase(
     if params.q.trim().is_empty() {
         return Err(ApiError::bad_request("give a phrase to look for"));
     }
-    let dir = similarity_dir(&grinder)?;
+    let dir = imported_index(&grinder);
     let settings = embedder_settings(&state, &grinder);
     let limit = params.limit.clamp(1, MAX_RESULTS);
 
-    let dims = {
-        let state = Arc::clone(&state);
-        let dir = dir.clone();
-        tokio::task::spawn_blocking(move || state.similarity.get(&dir).map(|s| s.dims()))
-            .await
-            .map_err(|e| storage_error(&e))?
-            .map_err(|message| ApiError { error: ErrorKind::Storage, message, code: None })?
+    // Nothing to search at all is worth saying plainly: a reader who has just
+    // switched the model on and read nothing yet is not looking at a fault.
+    if dir.is_none() && grinder.store().vector_count().unwrap_or(0) == 0 {
+        return Err(ApiError {
+            error: ErrorKind::Unsupported,
+            message: "nothing has been read with the model on yet, and no corpus is imported"
+                .into(),
+            code: Some("nothing_embedded"),
+        });
+    }
+
+    let dims = match &dir {
+        Some(dir) => {
+            let state = Arc::clone(&state);
+            let dir = dir.clone();
+            tokio::task::spawn_blocking(move || state.similarity.get(&dir).map(|s| s.dims()))
+                .await
+                .map_err(|e| storage_error(&e))?
+                .map_err(|message| ApiError { error: ErrorKind::Storage, message, code: None })?
+        }
+        // What the model is asked for, which is what the stored vectors are.
+        None => tsuburu_embed::embedder::EmbedderConfig::default().dims,
     };
     let query = embed(&state, &settings, &params.q, dims).await?;
 
     let hits = tokio::task::spawn_blocking(move || -> Result<Vec<SimilarHit>, String> {
-        let similarity = state.similarity.get(&dir)?;
         let store = grinder.store();
         let passage = |work: i32, page: u16| -> Option<Vec<u8>> {
             let pages = store.text(work).ok().flatten()?;
@@ -533,7 +554,10 @@ pub async fn phrase(
         // vector that short sits near everything. They are dropped below, and
         // dropping them from a list of exactly `limit` would leave gaps.
         let wide = (limit * 6).min(MAX_RESULTS * 6);
-        let from_index = similarity.near_vector(&query, wide, &passage);
+        let from_index = match &dir {
+            Some(dir) => state.similarity.get(dir)?.near_vector(&query, wide, &passage),
+            None => Vec::new(),
+        };
         let from_here = crate::similar::near_local(store, &query, wide, None);
         Ok(crate::similar::merge(from_index, from_here, wide)
             .into_iter()

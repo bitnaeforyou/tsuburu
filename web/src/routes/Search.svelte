@@ -28,13 +28,19 @@
   let controller: AbortController | null = null
   let localAvailable = $state(false)
   let dialogueAvailable = $state(false)
+  /// How many works have been read, so a search that finds nothing can say
+  /// how small the haystack was rather than implying the needle is not there.
+  let readSoFar = $state(0)
 
   $effect(() => {
     void library.load().catch(() => {})
     void api.metaStatus().then((s) => (localAvailable = s.available)).catch(() => {})
     void api
       .dialogueStatus()
-      .then((s) => (dialogueAvailable = s.supported && (s.counts?.done ?? 0) > 0))
+      .then((s) => {
+        readSoFar = s.counts?.done ?? 0
+        dialogueAvailable = s.supported && readSoFar > 0
+      })
       .catch(() => {})
   })
 
@@ -201,6 +207,11 @@
   {:else if !loading && !error}
     <p class="count">
       {params.query ? t('search.noResultsFor', { query: params.query }) : t('search.noResults')}
+      <!-- The dialogue is only as big as what has been read, and a reader who
+           has read forty works is not looking at a broken search. -->
+      {#if params.scope === 'dialogue'}
+        &middot; {t('search.readSoFar', { n: number(readSoFar) })}
+      {/if}
     </p>
   {/if}
 

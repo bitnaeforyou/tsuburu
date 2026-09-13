@@ -90,6 +90,7 @@ export const ja: Messages = {
   'search.fromSnapshot': 'ローカルのスナップショットから',
   'search.browsingAll': 'すべて表示中',
   'search.noResultsFor': '{query} に一致するものがありません。',
+  'search.readSoFar': 'これまでに {n} 作品のセリフを読み取っています',
   'search.noResults': 'この条件に合うものがありません。',
   'search.slowSort': '並べ替える件数が少ないため、少し時間がかかります。',
 

@@ -14,12 +14,13 @@ use crate::state::AppState;
 
 const MAX_RESULTS: usize = 100;
 
-fn store(state: &AppState) -> Result<&Arc<tsuburu_keywords::KeywordStore>, ApiError> {
-    state.keywords.as_ref().ok_or_else(|| ApiError {
-        error: ErrorKind::Unsupported,
-        message: "no keywords have been imported (tsuburu import-keywords <graph.csv>)".into(),
-        code: Some("import_keywords"),
-    })
+/// The keyword graph, if one was imported.
+///
+/// Not having imported it is not a failure: the reader asked what a work is
+/// about and the answer is that nothing here knows. Saying that with an error
+/// made every work opened log one, which is noise that hides real faults.
+fn store(state: &AppState) -> Option<&Arc<tsuburu_keywords::KeywordStore>> {
+    state.keywords.as_ref()
 }
 
 fn storage(err: impl std::fmt::Display) -> ApiError {
@@ -43,7 +44,9 @@ pub async fn of(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
 ) -> Result<Json<WordsResponse>, ApiError> {
-    let store = Arc::clone(store(&state)?);
+    let Some(store) = store(&state).map(Arc::clone) else {
+        return Ok(Json(WordsResponse { id, words: Vec::new() }));
+    };
     let words = tokio::task::spawn_blocking(move || store.of(id))
         .await
         .map_err(|e| storage(&e))?
@@ -79,7 +82,9 @@ pub async fn near(
     Path(id): Path<i32>,
     Query(params): Query<NearParams>,
 ) -> Result<Json<Vec<Near>>, ApiError> {
-    let store = Arc::clone(store(&state)?);
+    let Some(store) = store(&state).map(Arc::clone) else {
+        return Ok(Json(Vec::new()));
+    };
     let limit = params.limit.clamp(1, MAX_RESULTS);
     let found = tokio::task::spawn_blocking(move || store.near(id, limit))
         .await
@@ -123,7 +128,11 @@ pub async fn search(
     State(state): State<Arc<AppState>>,
     Query(params): Query<SearchParams>,
 ) -> Result<Json<SearchResponse>, ApiError> {
-    let store = Arc::clone(store(&state)?);
+    let store = Arc::clone(store(&state).ok_or_else(|| ApiError {
+        error: ErrorKind::Unsupported,
+        message: "no keywords have been imported (tsuburu import-keywords <graph.csv>)".into(),
+        code: Some("import_keywords"),
+    })?);
     let word = params.q.trim().to_string();
     if word.is_empty() {
         return Err(ApiError::bad_request("give a word to look for"));
