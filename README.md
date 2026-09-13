@@ -333,6 +333,7 @@ all three files imported.
 | Imported | Size |
 | :-- | --: |
 | Nothing imported | ~2 MB |
+| The model, if the switch is on | 2.4 GB, deleting it turns it off |
 | Recognised dialogue, 108,340 works | 1.8 GB |
 | Metadata, 1,464,390 works | 1.1 GB |
 | Keywords, 106,155 works | 174 MB |
