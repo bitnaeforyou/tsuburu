@@ -12,6 +12,7 @@ use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tsuburu_embed::runner::Progress;
 use tsuburu_dialogue::{Counts, Hit, ImportSummary, Priority, Shard};
 
 use crate::error::{ApiError, ErrorKind};
@@ -420,12 +421,42 @@ fn stored_embedder(grinder: &Grinder) -> EmbedderSettings {
 ///
 /// The model tsuburu fetched and is running answers for itself; the stored
 /// address is only for someone who would rather run their own.
-fn embedder_settings(state: &AppState, grinder: &Grinder) -> EmbedderSettings {
+/// Where to turn a phrase into a vector.
+///
+/// The model this program runs answers on a port it picks at the time, so it
+/// is asked for its address rather than assumed. While it is coming up there
+/// is no address to have - and falling back to whatever was saved before the
+/// switch existed meant blaming the network for a port nobody chose. Once the
+/// switch is on, the model is the answer or the reason there isn't one.
+fn embedder_settings(
+    state: &AppState,
+    grinder: &Grinder,
+) -> Result<EmbedderSettings, ApiError> {
     let mut settings = stored_embedder(grinder);
     if let Some(url) = state.model.url() {
         settings.url = url;
+        return Ok(settings);
     }
-    settings
+    if state.model.wanted() {
+        return Err(match state.model.progress() {
+            Progress::Fetching { .. } => ApiError {
+                error: ErrorKind::Unsupported,
+                message: "the model is still downloading; this works once it is here".into(),
+                code: Some("model_busy"),
+            },
+            Progress::Failed { error } => ApiError {
+                error: ErrorKind::Network,
+                message: format!("the model did not start: {error}"),
+                code: Some("embedder_unreachable"),
+            },
+            _ => ApiError {
+                error: ErrorKind::Unsupported,
+                message: "the model is still starting up; try again in a moment".into(),
+                code: Some("model_busy"),
+            },
+        });
+    }
+    Ok(settings)
 }
 
 pub async fn get_embedder(
@@ -463,8 +494,8 @@ async fn embed(
     let reply = state.fetcher.post_json(&config.url, &body).await.map_err(|err| ApiError {
         error: ErrorKind::Network,
         message: format!(
-            "could not reach the embedding server at {} ({err}). Start one and point \
-                 tsuburu at it.",
+            "could not reach the model at {} ({err}). Turn \"say it in your own words\" \
+             off and back on in settings.",
             config.url
         ),
         code: Some("embedder_unreachable"),
@@ -514,16 +545,26 @@ pub async fn phrase(
         return Err(ApiError::bad_request("give a phrase to look for"));
     }
     let dir = imported_index(&grinder);
-    let settings = embedder_settings(&state, &grinder);
+    let settings = embedder_settings(&state, &grinder)?;
     let limit = params.limit.clamp(1, MAX_RESULTS);
 
     // Nothing to search at all is worth saying plainly: a reader who has just
     // switched the model on and read nothing yet is not looking at a fault.
+    //
+    // But one whose pages cannot be recognised at all is, and that reader has
+    // been opening works and watching nothing happen. The sweep already knows
+    // why; it is said here, where the emptiness is noticed.
     if dir.is_none() && grinder.store().vector_count().unwrap_or(0) == 0 {
+        let blocked = grinder.status().await.last_error;
         return Err(ApiError {
             error: ErrorKind::Unsupported,
-            message: "nothing has been read with the model on yet, and no corpus is imported"
-                .into(),
+            message: match blocked {
+                Some(why) => format!("nothing has been read yet, because: {why}"),
+                None => "nothing has been read with the model on yet. Open a work and read \
+                         it - its pages are recognised as you go, and this searches what \
+                         they said."
+                    .into(),
+            },
             code: Some("nothing_embedded"),
         });
     }
@@ -715,7 +756,7 @@ pub async fn disable_model(State(state): State<Arc<AppState>>) -> Json<ModelStat
 pub async fn check_pack(State(state): State<Arc<AppState>>) -> Result<Json<PackCheck>, ApiError> {
     let grinder = Arc::clone(grinder(&state)?);
     let dir = similarity_dir(&grinder)?;
-    let settings = embedder_settings(&state, &grinder);
+    let settings = embedder_settings(&state, &grinder)?;
 
     // Any indexed gallery will do; take the first one the corpus has.
     let sample = grinder.store().done_ids()?.into_iter().min().ok_or_else(|| {

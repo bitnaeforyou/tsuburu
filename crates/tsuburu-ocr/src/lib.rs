@@ -14,8 +14,8 @@ use std::fmt;
 
 #[derive(Debug, thiserror::Error)]
 pub enum OcrError {
-    #[error("image could not be decoded")]
-    Decode,
+    #[error("image could not be decoded: {0}")]
+    Decode(String),
     #[error("recognition failed: {0}")]
     Recognize(String),
     #[error("text recognition is not available on this platform")]
@@ -118,6 +118,41 @@ pub use winrt::WindowsOcr;
 mod tesseract;
 #[cfg(unix)]
 pub use tesseract::TesseractOcr;
+
+/// What a page's first bytes say it is.
+///
+/// Only enough to name the format in an error: a reader told "image could not
+/// be decoded" has nothing to go on, and one told the file is AVIF and this
+/// system has no AVIF decoder knows exactly what to install.
+pub fn sniff(encoded: &[u8]) -> Option<&'static str> {
+    if encoded.len() >= 12 && &encoded[4..8] == b"ftyp" {
+        return match &encoded[8..12] {
+            b"avif" | b"avis" => Some("AVIF"),
+            b"heic" | b"heix" | b"hevc" | b"mif1" => Some("HEIF"),
+            _ => None,
+        };
+    }
+    if encoded.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some("PNG");
+    }
+    if encoded.starts_with(&[0xff, 0xd8, 0xff]) {
+        return Some("JPEG");
+    }
+    if encoded.len() >= 12 && encoded.starts_with(b"RIFF") && &encoded[8..12] == b"WEBP" {
+        return Some("WebP");
+    }
+    None
+}
+
+/// A decode failure, said in terms of the file rather than the call that
+/// failed.
+pub fn describe(encoded: &[u8]) -> String {
+    match sniff(encoded) {
+        Some(format) => format!("this system has no {format} decoder"),
+        None if encoded.len() < 64 => "the page arrived empty or truncated".into(),
+        None => "the page is not an image this system can read".into(),
+    }
+}
 
 /// The OCR this platform provides, if any.
 pub fn platform_ocr(options: OcrOptions) -> Option<Box<dyn Ocr>> {
@@ -321,5 +356,40 @@ mod tests {
     #[test]
     fn platform_ocr_exists_on_macos() {
         assert!(platform_ocr(OcrOptions::default()).is_some());
+    }
+}
+
+#[cfg(test)]
+mod sniff_tests {
+    use super::{describe, sniff};
+
+    fn ftyp(brand: &[u8; 4]) -> Vec<u8> {
+        let mut bytes = vec![0, 0, 0, 0x20];
+        bytes.extend_from_slice(b"ftyp");
+        bytes.extend_from_slice(brand);
+        bytes.resize(64, 0);
+        bytes
+    }
+
+    #[test]
+    fn names_the_formats_hitomi_serves() {
+        assert_eq!(sniff(&ftyp(b"avif")), Some("AVIF"));
+        let mut webp = b"RIFF\x00\x00\x00\x00WEBP".to_vec();
+        webp.resize(64, 0);
+        assert_eq!(sniff(&webp), Some("WebP"));
+        assert_eq!(sniff(b"\x89PNG\r\n\x1a\n........"), Some("PNG"));
+    }
+
+    /// The point of sniffing: a reader who is told the format knows what is
+    /// missing, where "could not be decoded" leaves them nothing to do.
+    #[test]
+    fn a_page_it_cannot_read_says_which_decoder_is_missing() {
+        assert_eq!(describe(&ftyp(b"avif")), "this system has no AVIF decoder");
+    }
+
+    #[test]
+    fn an_empty_page_is_not_blamed_on_a_codec() {
+        assert_eq!(describe(b""), "the page arrived empty or truncated");
+        assert_eq!(sniff(b""), None);
     }
 }

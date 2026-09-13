@@ -64,6 +64,9 @@ export const ko: Messages = {
   'error.code.no_recognition': '이 플랫폼에는 텍스트 인식이 없어 새로 읽을 수 없습니다.',
   'error.code.embedder_unreachable':
     '뜻을 맞추는 모델이 응답하지 않습니다. 설정에서 ‘비슷한 말로 찾기’를 껐다가 다시 켜세요.',
+  'error.code.model_busy': '모델이 아직 올라오지 않았습니다. 준비되면 바로 됩니다.',
+  'error.code.nothing_embedded':
+    '아직 읽은 것이 없습니다. 작품을 열어 읽으면 페이지가 그때그때 인식되고, 이 검색은 그렇게 읽힌 내용을 찾습니다.',
   'error.code.corpus_empty': '아직 인식된 것이 없어 견줄 대상이 없습니다.',
   'error.changedHint': 'tsuburu가 갱신되기 전에는 다시 시도해도 소용이 없습니다.',
 

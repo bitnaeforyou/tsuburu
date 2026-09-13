@@ -48,7 +48,19 @@ impl WindowsOcr {
     fn decode(&self, encoded: &[u8]) -> Result<SoftwareBitmap, OcrError> {
         self.decode_inner(encoded).map_err(|e| {
             tracing::debug!(detail = %e, "page could not be decoded");
-            OcrError::Decode
+            // hitomi serves AVIF for almost every page, and WIC cannot read it
+            // until the AV1 Video Extension is installed. That is a free
+            // download and the one thing standing between this machine and
+            // reading anything at all, so the error names it rather than
+            // saying the page is bad.
+            match crate::sniff(encoded) {
+                Some("AVIF") => OcrError::Decode(
+                    "Windows cannot read AVIF pages until the AV1 Video Extension is \
+                     installed. It is free in the Microsoft Store."
+                        .into(),
+                ),
+                _ => OcrError::Decode(crate::describe(encoded)),
+            }
         })
     }
 

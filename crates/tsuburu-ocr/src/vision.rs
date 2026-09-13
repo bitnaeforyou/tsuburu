@@ -32,7 +32,8 @@ impl VisionOcr {
 
     fn decode(&self, encoded: &[u8]) -> Result<CFRetained<CGImage>, OcrError> {
         let data = CFData::from_bytes(encoded);
-        let source = unsafe { CGImageSource::with_data(&data, None) }.ok_or(OcrError::Decode)?;
+        let source = unsafe { CGImageSource::with_data(&data, None) }
+            .ok_or_else(|| OcrError::Decode(crate::describe(encoded)))?;
 
         let keys: [&CFString; 2] = unsafe {
             [kCGImageSourceThumbnailMaxPixelSize, kCGImageSourceCreateThumbnailFromImageAlways]
@@ -43,7 +44,7 @@ impl VisionOcr {
         let dictionary = CFDictionary::from_slices(&keys, &values);
 
         unsafe { source.thumbnail_at_index(0, Some(dictionary.as_opaque())) }
-            .ok_or(OcrError::Decode)
+            .ok_or_else(|| OcrError::Decode(crate::describe(encoded)))
     }
 }
 
@@ -113,6 +114,6 @@ mod tests {
     #[test]
     fn garbage_is_a_decode_error() {
         let err = VisionOcr::new(OcrOptions::default()).recognize(b"not an image").unwrap_err();
-        assert!(matches!(err, OcrError::Decode));
+        assert!(matches!(err, OcrError::Decode(_)));
     }
 }

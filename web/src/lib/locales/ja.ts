@@ -64,6 +64,9 @@ export const ja: Messages = {
   'error.code.no_recognition': 'このプラットフォームには文字認識がないため、新しく読めません。',
   'error.code.embedder_unreachable':
     '意味を照合するモデルが応答しません。設定で「近い言葉で探す」をオフにして、もう一度オンにしてください。',
+  'error.code.model_busy': 'モデルがまだ起動していません。準備ができ次第使えます。',
+  'error.code.nothing_embedded':
+    'まだ読んだものがありません。作品を開いて読むと、そのつどページが認識され、ここではその内容を探します。',
   'error.code.corpus_empty': 'まだ何も認識していないため、比べる相手がありません。',
   'error.changedHint': 'tsuburu が更新されるまで、やり直しても直りません。',
 

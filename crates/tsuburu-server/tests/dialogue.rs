@@ -423,6 +423,30 @@ async fn a_page_that_was_read_is_recognised_in_the_works_own_language() {
     assert!(store.job(42).unwrap().unwrap().from_reading);
 }
 
+/// Reading is the only path most readers ever use, and a page that cannot be
+/// recognised on it used to leave no trace anywhere: no text, no error, and a
+/// dialogue search that said nothing had been read without saying why not.
+#[tokio::test]
+async fn a_page_that_cannot_be_read_says_so() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(DialogueStore::open(dir.path().join("dialogue.redb")).unwrap());
+    let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
+    let grinder = Arc::new(Grinder::new(
+        fetcher,
+        Config { scheme: "http".into(), ltn_domain: "127.0.0.1:9".into(), ..Config::default() },
+        Arc::clone(&store),
+        Arc::new(MockOcr { lines: vec![], fail: true }),
+    ));
+
+    assert!(grinder.status().await.last_error.is_none());
+    grinder.recognise_read_page(44, 0, vec![1, 2, 3], "korean").await;
+
+    let said = grinder.status().await.last_error.expect("the failure is recorded");
+    assert!(said.contains("page 1 of 44"), "names the page: {said}");
+    assert!(said.contains("mock failure"), "carries the reason: {said}");
+    assert!(store.text(44).unwrap().is_none());
+}
+
 #[tokio::test]
 async fn reading_the_same_page_again_does_not_double_it() {
     let dir = tempfile::tempdir().unwrap();

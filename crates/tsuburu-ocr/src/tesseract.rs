@@ -136,7 +136,8 @@ impl TesseractOcr {
 impl Ocr for TesseractOcr {
     fn recognize(&self, encoded: &[u8]) -> Result<Vec<Line>, OcrError> {
         let png = self.to_png(encoded)?;
-        let (width, height) = png_size(&png).ok_or(OcrError::Decode)?;
+        let (width, height) =
+            png_size(&png).ok_or_else(|| OcrError::Decode("the converter wrote no PNG".into()))?;
         let languages = tesseract_languages(&self.options.languages);
         // Sparse text (11) beats a uniform block on speech bubbles, and the
         // page is not enlarged: measured against Vision's reading of a Korean
@@ -155,7 +156,7 @@ impl Ocr for TesseractOcr {
 
 fn decode(program: &str, detail: &str) -> OcrError {
     tracing::debug!(program, detail, "page could not be decoded");
-    OcrError::Decode
+    OcrError::Decode(format!("{program}: {detail}"))
 }
 
 fn run(program: &str, args: &[&str], input: &[u8]) -> Result<Vec<u8>, OcrError> {
@@ -413,7 +414,7 @@ mod tests {
     #[ignore = "requires tesseract and a converter"]
     fn garbage_is_a_decode_error() {
         let ocr = TesseractOcr::new(OcrOptions::default()).expect("tesseract and a converter");
-        assert!(matches!(ocr.recognize(b"not an image").unwrap_err(), OcrError::Decode));
+        assert!(matches!(ocr.recognize(b"not an image").unwrap_err(), OcrError::Decode(_)));
     }
 
     #[test]

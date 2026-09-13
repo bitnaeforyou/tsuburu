@@ -65,6 +65,9 @@ export const en = {
   'error.code.no_recognition': 'This platform has no text recognition, so nothing new can be read.',
   'error.code.embedder_unreachable':
     'The model that matches meanings is not answering. Turn ‘Say it in your own words’ off and back on in Settings.',
+  'error.code.model_busy': 'The model is not up yet. This works as soon as it is.',
+  'error.code.nothing_embedded':
+    'Nothing has been read yet. Open a work and read it — its pages are recognised as you go, and this searches what they said.',
   'error.code.corpus_empty': 'Nothing has been recognised yet, so there is nothing to check against.',
   'error.changedHint': 'Retrying will not help until tsuburu is updated.',
 

@@ -279,8 +279,14 @@ impl Grinder {
                 }
             }
             Ok(Ok(_)) => {}
-            Ok(Err(err)) => tracing::debug!(gallery, page, %err, "read page recognition failed"),
-            Err(err) => tracing::debug!(gallery, page, %err, "read page task failed"),
+            Ok(Err(err)) => {
+                tracing::debug!(gallery, page, %err, "read page recognition failed");
+                self.note_error(format!("page {} of {gallery}: {err}", page + 1)).await;
+            }
+            Err(err) => {
+                tracing::debug!(gallery, page, %err, "read page task failed");
+                self.note_error(format!("page {} of {gallery}: {err}", page + 1)).await;
+            }
         }
     }
 
@@ -618,15 +624,18 @@ impl Grinder {
         let ocr_started = Instant::now();
         let mut pages = Vec::new();
         let mut failures = 0usize;
+        let mut why: Option<String> = None;
         while let Some(joined) = tasks.join_next().await {
             match joined {
                 Ok((page, Ok(lines))) => pages.push(PageText { page, lines }),
                 Ok((page, Err(err))) => {
                     failures += 1;
+                    why.get_or_insert_with(|| err.to_string());
                     tracing::debug!(page, %err, "page recognition failed");
                 }
                 Err(err) => {
                     failures += 1;
+                    why.get_or_insert_with(|| err.to_string());
                     tracing::debug!(%err, "recognition task panicked");
                 }
             }
@@ -638,7 +647,10 @@ impl Grinder {
             "recognition drained"
         );
         if pages.is_empty() {
-            return Err(format!("no page could be recognised ({failures} failures)"));
+            return Err(match why {
+                Some(why) => format!("no page could be recognised ({failures} failures): {why}"),
+                None => format!("no page could be recognised ({failures} failures)"),
+            });
         }
         pages.sort_by_key(|p| p.page);
         Ok(pages)
