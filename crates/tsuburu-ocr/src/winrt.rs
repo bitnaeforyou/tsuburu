@@ -45,23 +45,48 @@ impl WindowsOcr {
         })
     }
 
+    /// hitomi serves AVIF for almost every page, and WIC only reads one once
+    /// the AV1 Video Extension is installed - a free download that is not
+    /// there by default, and without which nothing on this machine could be
+    /// read at all. Those are decoded here instead of being handed to
+    /// Windows, so there is nothing to install.
     fn decode(&self, encoded: &[u8]) -> Result<SoftwareBitmap, OcrError> {
+        if tsuburu_avif::is_avif(encoded) {
+            return self.decode_avif(encoded);
+        }
         self.decode_inner(encoded).map_err(|e| {
             tracing::debug!(detail = %e, "page could not be decoded");
-            // hitomi serves AVIF for almost every page, and WIC cannot read it
-            // until the AV1 Video Extension is installed. That is a free
-            // download and the one thing standing between this machine and
-            // reading anything at all, so the error names it rather than
-            // saying the page is bad.
-            match crate::sniff(encoded) {
-                Some("AVIF") => OcrError::Decode(
-                    "Windows cannot read AVIF pages until the AV1 Video Extension is \
-                     installed. It is free in the Microsoft Store."
-                        .into(),
-                ),
-                _ => OcrError::Decode(crate::describe(encoded)),
-            }
+            OcrError::Decode(crate::describe(encoded))
         })
+    }
+
+    /// The page as recognition wants it: one grey value per pixel, written out
+    /// as the four-channel bitmap the engine takes.
+    fn decode_avif(&self, encoded: &[u8]) -> Result<SoftwareBitmap, OcrError> {
+        let page = tsuburu_avif::decode_luma(encoded, self.options.max_side)
+            .map_err(|e| OcrError::Decode(e.to_string()))?;
+        let mut bgra = Vec::with_capacity(page.pixels.len() * 4);
+        for grey in page.pixels {
+            bgra.extend_from_slice(&[grey, grey, grey, 0xff]);
+        }
+        self.bitmap_from_bgra(&bgra, page.width as i32, page.height as i32).map_err(|e| {
+            tracing::debug!(detail = %e, "a decoded page could not be wrapped");
+            OcrError::Decode("the page could not be handed to Windows".into())
+        })
+    }
+
+    fn bitmap_from_bgra(
+        &self,
+        bgra: &[u8],
+        width: i32,
+        height: i32,
+    ) -> windows::core::Result<SoftwareBitmap> {
+        let writer = DataWriter::new()?;
+        writer.WriteBytes(bgra)?;
+        let buffer = writer.DetachBuffer()?;
+        // Every pixel is opaque, so premultiplied and straight are the same
+        // bytes; this is the format the engine is already given.
+        SoftwareBitmap::CreateCopyFromBuffer(&buffer, BitmapPixelFormat::Bgra8, width, height)
     }
 
     fn decode_inner(&self, encoded: &[u8]) -> windows::core::Result<SoftwareBitmap> {

@@ -1,0 +1,14 @@
+[package]
+name = "tsuburu-avif"
+version = "0.3.4"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+# The container is a HEIF box tree; this walks it and hands back the AV1 bytes.
+avif-parse = "2.1"
+# dav1d, ported to Rust. No assembler and no C toolchain, so it cross-compiles
+# to every target this ships to and links into the static CRT on Windows.
+rav1d = { version = "1.1", default-features = false, features = ["bitdepth_8"] }

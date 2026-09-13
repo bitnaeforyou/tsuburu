@@ -10,6 +10,9 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
+# hitomi's pages are AVIF and WIC cannot read one without an extension the
+# machine may not have. This decodes them here instead.
+tsuburu-avif = { path = "../tsuburu-avif" }
 windows = { version = "0.62", features = ["Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr", "Storage_Streams"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
