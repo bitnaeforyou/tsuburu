@@ -40,6 +40,13 @@ jobs:
           # refused by the other account.
           persist-credentials: false
 
+      # Kept before the rewrite, which turns annotated tags into plain ones
+      # and drops what they said. The mirror is the copy people download, so
+      # its release notes are the ones a reader is offered on an update.
+      - name: Keep what the tag says
+        if: steps.configured.outputs.yes == 'true' && startsWith(github.ref, 'refs/tags/')
+        run: git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/tag.txt"
+
       - name: Rewrite the authorship
         if: steps.configured.outputs.yes == 'true'
         env:
@@ -71,6 +78,17 @@ jobs:
             --input "$RUNNER_TEMP/about.json" --silent
           GH_TOKEN="$MIRROR_TOKEN" gh api -X PUT "repos/$MIRROR_REPO/topics" \
             --input "$RUNNER_TEMP/topics.json" --silent
+
+      - name: Say it again on the rewritten tag
+        if: steps.configured.outputs.yes == 'true' && startsWith(github.ref, 'refs/tags/')
+        env:
+          MIRROR_NAME: ${{ secrets.MIRROR_NAME }}
+          MIRROR_EMAIL: ${{ secrets.MIRROR_EMAIL }}
+        run: |
+          [ -s "$RUNNER_TEMP/tag.txt" ] || exit 0
+          git config user.name "$MIRROR_NAME"
+          git config user.email "$MIRROR_EMAIL"
+          git tag -f -a "$GITHUB_REF_NAME" -F "$RUNNER_TEMP/tag.txt" HEAD
 
       - name: Push
         if: steps.configured.outputs.yes == 'true'
