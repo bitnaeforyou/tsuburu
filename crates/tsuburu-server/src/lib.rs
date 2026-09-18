@@ -3,6 +3,7 @@
 pub mod api;
 pub mod artists;
 pub mod assets;
+pub mod boot;
 pub mod dialogue;
 pub mod downloads;
 pub mod error;

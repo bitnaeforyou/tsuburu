@@ -90,7 +90,7 @@ async fn main() -> Result<()> {
 
     match command {
         Command::Serve { port, host, no_open, warm_levels } => {
-            serve(fetcher, cfg, host, port, no_open, warm_levels).await?;
+            serve(cfg, host, port, no_open, warm_levels).await?;
         }
 
         Command::Search { query, limit } => {
@@ -216,7 +216,6 @@ async fn main() -> Result<()> {
 const WARM_LEVELS: usize = 2;
 
 async fn serve(
-    fetcher: HttpFetcher,
     cfg: Config,
     host: String,
     port: u16,
@@ -225,106 +224,18 @@ async fn serve(
 ) -> Result<()> {
     use std::sync::Arc;
 
-    // 라이브러리를 열지 못해도 검색은 계속 동작해야 한다(스펙 7절).
-    let store = match tsuburu_store::Store::open_default() {
-        Ok(store) => {
-            tracing::info!(path = %store.path().display(), "opened the library");
-            Some(store)
-        }
-        // One copy at a time: the databases take a lock. Starting a second
-        // one would come up with favorites, history, dialogue and downloads
-        // all switched off, which looks like a broken program rather than a
-        // program that is already running.
-        Err(err) if already_running(&err.to_string()) => {
+    // Opening the stores, the sweep and the model is the same work on a
+    // desktop and on a phone, so it lives in one place.
+    let state = match tsuburu_server::boot::assemble(cfg).await {
+        Ok(state) => state,
+        Err(tsuburu_server::boot::BootError::AlreadyRunning) => {
             eprintln!("tsuburu is already running.");
             eprintln!("Open http://127.0.0.1:{port}/ , or stop the other one first.");
             std::process::exit(1);
         }
-        Err(err) => {
-            eprintln!("favorites and history are disabled: {err}");
-            None
-        }
+        Err(err) => return Err(anyhow::anyhow!("{err}")),
     };
 
-    let fetcher = Arc::new(fetcher);
-
-    // Dialogue indexing needs the platform's OCR. Where there is none the
-    // feature is reported as unsupported rather than silently missing.
-    let grinder = match tsuburu_ocr::platform_ocr(tsuburu_ocr::OcrOptions::default()) {
-        None => {
-            tracing::info!("no text recognition on this platform; dialogue search disabled");
-            None
-        }
-        Some(ocr) => match tsuburu_store::data_dir().map_err(|e| e.to_string()).and_then(|dir| {
-            tsuburu_dialogue::DialogueStore::open(dir.join("dialogue.redb"))
-                .map_err(|e| e.to_string())
-        }) {
-            Ok(dialogue) => {
-                tracing::info!(path = %dialogue.path().display(), "opened the dialogue index");
-                // Its own connection pool: a page burst must not queue behind
-                // the index warm-up, and must never slow down browsing.
-                let grinder_fetcher = HttpFetcher::new(FetchConfig {
-                    max_concurrent: 8,
-                    cache_entries: 256,
-                    ..FetchConfig::default()
-                })
-                .context("failed to build the indexing HTTP client")?;
-                Some(Arc::new(tsuburu_server::grinder::Grinder::with_factory(
-                    Arc::new(grinder_fetcher),
-                    cfg.clone(),
-                    Arc::new(dialogue),
-                    Arc::from(ocr),
-                    tsuburu_ocr::platform_ocr,
-                )))
-            }
-            Err(err) => {
-                eprintln!("dialogue search is disabled: {err}");
-                None
-            }
-        },
-    };
-    if let Some(grinder) = &grinder {
-        tokio::spawn(Arc::clone(grinder).run());
-    }
-
-    let mut app_state = tsuburu_server::AppState::full(fetcher, cfg, store, grinder);
-    if let Ok(dir) = tsuburu_store::data_dir() {
-        app_state = app_state.with_shards_dir(dir.join("shards"));
-        match tsuburu_downloads::DownloadStore::open(&dir) {
-            Ok(downloads) => {
-                tracing::info!(path = %downloads.images_dir().display(), "opened downloads");
-                app_state = app_state.with_downloads(Arc::new(downloads));
-            }
-            Err(err) => eprintln!("downloads are disabled: {err}"),
-        }
-        let keywords_path = dir.join("keywords.redb");
-        if keywords_path.is_file() {
-            match tsuburu_keywords::KeywordStore::open(&keywords_path) {
-                Ok(keywords) => app_state = app_state.with_keywords(Arc::new(keywords)),
-                Err(err) => eprintln!("keywords are unavailable: {err}"),
-            }
-        }
-        let meta_path = dir.join("meta.redb");
-        if meta_path.is_file() {
-            match tsuburu_meta::MetaStore::open(&meta_path) {
-                Ok(meta) => {
-                    tracing::info!(path = %meta_path.display(), "opened the metadata snapshot");
-                    app_state = app_state.with_meta(Arc::new(meta));
-                }
-                Err(err) => eprintln!("metadata snapshot is disabled: {err}"),
-            }
-        }
-    }
-    let state = Arc::new(app_state);
-    // Switched on once, on again now: a reader who turned it on did not agree
-    // to turn it on every time. Only if its files are here - nothing is
-    // fetched without being asked.
-    state.model.resume();
-    // The sweep embeds what it reads, and the model it should embed against is
-    // the one this program runs rather than an address from a setting.
-    if let Some(grinder) = &state.grinder {
-        grinder.use_model(Arc::clone(&state.model));
-    }
     // What a previous update left behind on a platform that could not delete
     // it while it was running.
     tsuburu_update::sweep();
@@ -365,15 +276,6 @@ async fn serve(
         grinder.shutdown();
     }
     Ok(())
-}
-
-/// Whether a database refused to open because another copy holds it.
-///
-/// redb says so in words rather than a distinct error, so this reads them.
-/// Being wrong in the cautious direction only costs a clearer message.
-fn already_running(message: &str) -> bool {
-    let message = message.to_lowercase();
-    message.contains("already open") || message.contains("acquire lock")
 }
 
 /// Ctrl-C, or the TERM a process manager sends.

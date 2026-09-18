@@ -1,0 +1,37 @@
+[package]
+name = "tsuburu-mobile"
+version = "0.3.6"
+description = "tsuburu on a phone"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+
+# Tauri links the Rust side into the platform project as a library; the binary
+# is only what a desktop build would run.
+[lib]
+name = "tsuburu_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+tsuburu-server = { path = "../../crates/tsuburu-server" }
+tsuburu-hitomi = { path = "../../crates/tsuburu-hitomi" }
+
+# Its own lockfile and profile: the root workspace builds a desktop program
+# and this builds a phone one, and cargo will not have one directory in two
+# workspaces.
+[workspace]
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
+strip = true

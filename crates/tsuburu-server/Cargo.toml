@@ -24,7 +24,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 quick_cache = "0.6"
-rust-embed = { version = "8", features = ["mime-guess"] }
+# `debug-embed` so a debug build carries the frontend too. Without it
+# rust-embed reads the files off disk at runtime, which is invisible on a
+# desktop and on an iOS simulator - both can see the path it was built
+# from - and leaves a phone with no interface at all.
+rust-embed = { version = "8", features = ["mime-guess", "debug-embed"] }
 mime_guess = "2"
 
 [dev-dependencies]

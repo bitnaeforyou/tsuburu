@@ -1,0 +1,15 @@
+# Cargo
+/target/
+
+# Written by `tauri ios init` / `tauri android init` from project.yml and the
+# config. Regenerate them rather than committing them: they hold absolute
+# paths from whichever machine ran the command.
+/gen/schemas/
+/gen/apple/build/
+/gen/apple/Externals/
+/gen/apple/assets/
+/gen/apple/Pods/
+/gen/apple/*.xcodeproj/
+/gen/apple/*.xcworkspace/
+/gen/apple/xcuserdata/
+/gen/android/
