@@ -23,6 +23,12 @@ enum Command {
         #[arg(short, long, default_value_t = 8420)]
         port: u16,
 
+        /// What to listen on. This machine only, unless you say otherwise -
+        /// a container has to say `0.0.0.0`, because a port published out of
+        /// one never reaches the loopback inside it.
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
         /// 브라우저를 자동으로 열지 않는다.
         #[arg(long)]
         no_open: bool,
@@ -73,6 +79,7 @@ async fn main() -> Result<()> {
     // 인자 없이 실행하는 것이 일반 사용자의 경로다. 더블클릭하면 서버가 뜬다.
     let command = cli.command.unwrap_or(Command::Serve {
         port: 8420,
+        host: "127.0.0.1".into(),
         no_open: false,
         warm_levels: WARM_LEVELS,
     });
@@ -82,8 +89,8 @@ async fn main() -> Result<()> {
     let cfg = Config::default();
 
     match command {
-        Command::Serve { port, no_open, warm_levels } => {
-            serve(fetcher, cfg, port, no_open, warm_levels).await?;
+        Command::Serve { port, host, no_open, warm_levels } => {
+            serve(fetcher, cfg, host, port, no_open, warm_levels).await?;
         }
 
         Command::Search { query, limit } => {
@@ -211,6 +218,7 @@ const WARM_LEVELS: usize = 2;
 async fn serve(
     fetcher: HttpFetcher,
     cfg: Config,
+    host: String,
     port: u16,
     no_open: bool,
     warm_levels: usize,
@@ -331,11 +339,16 @@ async fn serve(
         tokio::spawn(async move { state.warm(warm_levels).await });
     }
 
-    let listener = bind(port).await?;
+    let listener = bind(&host, port).await?;
     let addr = listener.local_addr().context("could not read the local address")?;
+    // Nobody can open `http://0.0.0.0/`. Whatever it is listening on, the
+    // address that works from here is the loopback one.
     let url = format!("http://127.0.0.1:{}/", addr.port());
 
     println!("tsuburu is running at {url}");
+    if !is_loopback(&host) {
+        println!("listening on {addr} - anything that can reach this machine can open it");
+    }
     println!("press ctrl+c to stop");
 
     if !no_open && let Err(err) = open::that_detached(&url) {
@@ -393,14 +406,19 @@ async fn stop_signal() {
 
 /// 원하는 포트가 이미 쓰이고 있으면 아무 빈 포트나 잡는다. 일반 사용자에게
 /// "포트가 사용 중입니다"라고 말하고 끝내는 것은 도움이 되지 않는다.
-async fn bind(port: u16) -> Result<tokio::net::TcpListener> {
+async fn bind(host: &str, port: u16) -> Result<tokio::net::TcpListener> {
     if port != 0 {
-        match tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
+        match tokio::net::TcpListener::bind((host, port)).await {
             Ok(listener) => return Ok(listener),
             Err(err) => eprintln!("port {port} is not available ({err}); picking another"),
         }
     }
-    tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.context("could not bind a local port")
+    tokio::net::TcpListener::bind((host, 0)).await.context("could not bind a local port")
+}
+
+/// Whether an address keeps the server on this machine.
+fn is_loopback(host: &str) -> bool {
+    host.parse::<std::net::IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false)
 }
 
 /// 포맷 변경과 네트워크 오류를 구분해 안내한다(스펙 7절).

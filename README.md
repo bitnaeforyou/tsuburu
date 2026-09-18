@@ -4,7 +4,8 @@
 
 **A lightweight desktop client for searching and reading hitomi.la.**
 
-One 3.9 MB file. No Docker, no runtime to install, no index to download.
+One 3.9 MB file. No runtime to install, no index to download. There is a
+container image too, for anyone who would rather have one.
 
 [한국어](README.ko.md) · [Releases](../../releases/latest) · MIT
 
@@ -36,6 +37,7 @@ and a `START-HERE.txt` that says the same thing in two languages.
 | Mac, M1 and later | `…aarch64-apple-darwin.zip` | double-click **Start tsuburu.command** |
 | Mac, Intel | `…x86_64-apple-darwin.zip` | double-click **Start tsuburu.command** |
 | Linux | `…linux-gnu.tar.gz` | run **start.sh** |
+| Docker | `compose.yaml` | `docker compose up -d` |
 
 These builds are not signed, so each system warns once, the first time only:
 
@@ -49,6 +51,22 @@ These builds are not signed, so each system warns once, the first time only:
 
 A browser opens at `http://127.0.0.1:8420/`. Confirm you are an adult once and
 the search screen appears.
+
+### In a container
+
+`compose.yaml` from the release pulls a built image; put it in an empty
+directory and run `docker compose up -d`, then open
+`http://127.0.0.1:8420/` yourself — nothing opens a browser for you. The
+image carries tesseract and ffmpeg, which is what dialogue recognition needs
+on Linux and what a desktop would otherwise ask you to install.
+
+It listens on the loopback address only. The `ports` line says so, and
+changing it lets the rest of your network in — to the whole of hitomi, behind
+no password.
+
+Everything it keeps lives in the `data` volume and survives `docker compose
+down`; `down -v` throws that away too. To build from a checkout instead of
+pulling, the `compose.yaml` in this repository does that.
 
 ### Out of the box
 
@@ -89,6 +107,7 @@ server, and the mode stays hidden until you set it up.
 | macOS | `~/Library/Application Support/la.tsuburu.tsuburu/` |
 | Linux | `~/.local/share/tsuburu/` |
 | Windows | `%APPDATA%\tsuburu\tsuburu\data\` |
+| Docker | the `data` volume, at `/data/tsuburu` inside |
 
 Deleting it resets everything and loses only what you imported and read.
 

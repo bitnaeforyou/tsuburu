@@ -83,8 +83,42 @@ jobs:
             dist/*.zip
             dist/*.tar.gz
 
+  image:
+    name: container image
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lower-cased because a registry will not take a capital letter in a
+      # name, and an account may well have one.
+      - name: Work out where this goes
+        id: where
+        run: |
+          echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.where.outputs.image }}:${{ steps.where.outputs.version }}
+            ${{ steps.where.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   release:
-    needs: build
+    needs: [build, image]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -101,6 +135,47 @@ jobs:
       # What changed goes first. The tag already says it, and the program
       # reads the first lines of this when it offers the update - which was
       # showing people how to unpack a zip instead.
+      # A compose file that pulls the image this tag published, so running it
+      # is one download and one command with nothing to compile. The image
+      # name is written here rather than committed, for the same reason the
+      # update address is: the source does not name where it is published.
+      - name: Write the compose file
+        run: |
+          image="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          version="${GITHUB_REF_NAME#v}"
+          cat > dist/compose.yaml <<COMPOSE
+          # tsuburu, ${GITHUB_REF_NAME}. Put this in an empty directory and run:
+          #
+          #   docker compose up -d
+          #
+          # then open http://127.0.0.1:8420/ . Nothing is compiled and nothing
+          # is installed outside the container.
+          #
+          # Everything it keeps - the databases, anything imported, the model
+          # if you switch it on - lives in the \`data\` volume and survives
+          # \`docker compose down\`. Use \`down -v\` to throw it away too.
+
+          services:
+            tsuburu:
+              image: ${image}:${version}
+              restart: unless-stopped
+              # Loopback only. Change the left-hand side to 8420:8420 to let
+              # the rest of the network in, and know that it is the whole of
+              # hitomi behind no password when you do.
+              ports:
+                - "127.0.0.1:8420:8420"
+              volumes:
+                - data:/data
+              # redb repairs a file that was not closed, and on a large corpus
+              # that costs half a minute and a couple of gigabytes the next
+              # time it starts. The program catches TERM and closes properly,
+              # so give it room to.
+              stop_grace_period: 30s
+
+          volumes:
+            data:
+          COMPOSE
+
       - name: Write the notes
         run: |
           # The whole message, not the body: git calls the first paragraph the
@@ -122,6 +197,7 @@ jobs:
           | **Mac** (M1 and later) | `…aarch64-apple-darwin.zip` | double-click `Start tsuburu.command` |
           | **Mac** (Intel) | `…x86_64-apple-darwin.zip` | double-click `Start tsuburu.command` |
           | **Linux** | `…linux-gnu.tar.gz` | run `start.sh` |
+          | **Docker** | `compose.yaml` | `docker compose up -d` |
 
           These builds are not signed, so each system warns once the first
           time. Windows: *More info → Run anyway*. macOS: right-click
@@ -133,5 +209,6 @@ jobs:
           files: |
             dist/*.zip
             dist/*.tar.gz
+            dist/compose.yaml
           body_path: notes.md
           generate_release_notes: true

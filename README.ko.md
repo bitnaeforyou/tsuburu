@@ -4,7 +4,8 @@
 
 **hitomi.la를 검색하고 읽는 가벼운 데스크톱 클라이언트.**
 
-3.9 MB 파일 하나. Docker도, 따로 깔 런타임도, 처음에 받을 색인도 없습니다.
+3.9 MB 파일 하나. 따로 깔 런타임도, 처음에 받을 색인도 없습니다. 컨테이너로
+쓰고 싶은 분을 위한 이미지도 있습니다.
 
 [English](README.md) · [릴리스](../../releases/latest) · MIT
 
@@ -37,6 +38,7 @@ press ctrl+c to stop
 | Mac, M1 이상 | `…aarch64-apple-darwin.zip` | **Start tsuburu.command** 더블클릭 |
 | Mac, 인텔 | `…x86_64-apple-darwin.zip` | **Start tsuburu.command** 더블클릭 |
 | Linux | `…linux-gnu.tar.gz` | **start.sh** 실행 |
+| Docker | `compose.yaml` | `docker compose up -d` |
 
 서명이 없는 빌드라 각 운영체제가 **처음 한 번만** 경고합니다.
 
@@ -49,6 +51,21 @@ press ctrl+c to stop
 
 브라우저가 `http://127.0.0.1:8420/`로 열립니다. 성인임을 한 번 확인하면 검색
 화면이 나옵니다.
+
+### 컨테이너로 쓰기
+
+릴리스의 `compose.yaml`은 빌드된 이미지를 받아옵니다. 빈 디렉터리에 두고
+`docker compose up -d`를 실행한 뒤 `http://127.0.0.1:8420/`를 직접 여세요.
+브라우저는 열어주지 않습니다. 이미지에 tesseract와 ffmpeg가 들어 있는데,
+리눅스에서 대사 인식에 필요한 것들이고 데스크톱이라면 직접 깔라고 했을
+것들입니다.
+
+루프백 주소에서만 듣습니다. `ports` 줄이 그렇게 되어 있고, 그걸 바꾸면 같은
+네트워크의 다른 기기가 들어올 수 있습니다 — 암호 없이, hitomi 전체로요.
+
+보관하는 것은 전부 `data` 볼륨에 남아 `docker compose down`에도 살아남습니다.
+같이 지우려면 `down -v`입니다. 받아오는 대신 이 저장소에서 직접 빌드하려면
+저장소의 `compose.yaml`이 그렇게 합니다.
 
 ### 받자마자 되는 것
 
@@ -89,6 +106,7 @@ press ctrl+c to stop
 | macOS | `~/Library/Application Support/la.tsuburu.tsuburu/` |
 | Linux | `~/.local/share/tsuburu/` |
 | Windows | `%APPDATA%\tsuburu\tsuburu\data\` |
+| Docker | `data` 볼륨, 컨테이너 안에서는 `/data/tsuburu` |
 
 지우면 전부 초기화됩니다. 잃는 것은 가져온 것과 읽은 것뿐입니다.
 

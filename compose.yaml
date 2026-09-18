@@ -1,0 +1,28 @@
+# Building tsuburu from this checkout and running it.
+#
+# The release carries a compose file that pulls a built image instead, so
+# nothing has to be compiled; this one is for running what is in front of you.
+#
+#   docker compose up -d      then open http://127.0.0.1:8420/
+#
+# Everything it keeps - the databases, anything imported, the model if it is
+# switched on - lives in the `data` volume and survives the container.
+
+services:
+  tsuburu:
+    build: .
+    restart: unless-stopped
+    # Loopback only. Change the left-hand side to 8420:8420 to let the rest of
+    # the network in, and know that it is the whole of hitomi behind no
+    # password when you do.
+    ports:
+      - "127.0.0.1:8420:8420"
+    volumes:
+      - data:/data
+    # redb repairs a file that was not closed, and on a large corpus that costs
+    # half a minute and a couple of gigabytes the next time it starts. The
+    # program catches TERM and closes properly, so give it room to.
+    stop_grace_period: 30s
+
+volumes:
+  data:
