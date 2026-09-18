@@ -108,6 +108,11 @@ jobs:
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/build-push-action@v6
+        env:
+          # Nothing reads these, and they land in the run's artifacts where
+          # the release job has to be told to ignore them.
+          DOCKER_BUILD_SUMMARY: false
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
           push: true
@@ -127,8 +132,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # Only the packaged downloads. The image job leaves a build record
+      # artifact beside them that is not one of ours and does not unpack.
       - uses: actions/download-artifact@v4
         with:
+          pattern: tsuburu-*
           path: dist
           merge-multiple: true
 
