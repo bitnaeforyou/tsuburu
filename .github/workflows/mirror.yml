@@ -19,6 +19,13 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# Pushing a commit and its tag together starts two of these at once, and the
+# second is refused because the first moved the branch under it. They take
+# turns instead.
+concurrency:
+  group: mirror
+  cancel-in-progress: false
+
 jobs:
   mirror:
     runs-on: ubuntu-latest
