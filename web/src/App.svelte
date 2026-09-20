@@ -9,7 +9,6 @@
   import Downloads from './routes/Downloads.svelte'
   import Keyword from './routes/Keyword.svelte'
   import AgeGate from './lib/AgeGate.svelte'
-  import CorpusOffer from './lib/CorpusOffer.svelte'
   import { i18n } from './lib/i18n.svelte'
 
   let route = $state<Route>(parse(location.hash))
@@ -44,9 +43,5 @@
 {:else if route.name === 'keyword'}
   <Keyword word={route.word} />
 {:else}
-  <!-- The one time a reader is certain to see it, before they have gone
-       looking for anything: the dialogue of a hundred thousand works is a
-       button away, and the question is asked once. -->
-  <CorpusOffer ask />
   <Search params={route} />
 {/if}

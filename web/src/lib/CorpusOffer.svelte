@@ -97,7 +97,7 @@
           })}
         </span>
       </div>
-      <button onclick={() => (dismissed = true)}>{t('corpus.background')}</button>
+      <button class="carry" onclick={() => (dismissed = true)}>{t('corpus.background')}</button>
     {:else}
       <div class="answers">
         <button class="primary" onclick={yes}>
@@ -113,8 +113,7 @@
 
 <style>
   .offer {
-    max-width: var(--page);
-    margin: 1rem auto 0;
+    margin: 0 0 1rem;
     padding: 0.9rem 1rem;
     background: var(--surface);
     border: 1px solid var(--accent);
@@ -136,6 +135,8 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+    /* Buttons are the width of what they say, not of the panel. */
+    justify-self: start;
   }
   .meter {
     position: relative;
@@ -162,10 +163,8 @@
   .meter span {
     position: relative;
   }
-
-  @media (max-width: 640px) {
-    .offer {
-      margin-inline: var(--gutter);
-    }
+  .carry {
+    justify-self: start;
   }
+
 </style>

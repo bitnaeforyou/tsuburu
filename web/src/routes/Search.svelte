@@ -191,6 +191,11 @@
 
 <main>
   <h1 class="sr-only">{t('nav.search')}</h1>
+
+  <!-- The one time a reader is certain to see it, before they have gone
+       looking for anything: the dialogue of a hundred thousand works is a
+       button away, and the question is asked once. -->
+  <CorpusOffer ask />
   {#if error}
     <ErrorNote {error} onretry={() => load(0)} />
   {/if}
