@@ -205,6 +205,22 @@ export const en = {
     '{note} — macOS and Windows read pages with their own recognition; elsewhere tsuburu calls tesseract, and a decoder in front of it because hitomi serves AVIF.',
   'dialogue.unsupportedPlain':
     'Recognition is unavailable here. An imported corpus is still searchable.',
+  'corpus.title':
+    'Dialogue of 108,000 works',
+  'corpus.note':
+    'Recognising this many works takes weeks of a machine. The text it produced is published, and this fetches it — about 450 MB, once. What you have read yourself is kept.',
+  'corpus.later': 'Not now',
+  'corpus.background': 'Carry on',
+  'corpus.get':
+    'Fetch it',
+  'corpus.fetching':
+    'Fetching — {done} of {total} parts, {works} works so far',
+  'corpus.ready':
+    '{works} works are in. Dialogue search now reaches all of them.',
+  'corpus.failed':
+    'It could not be fetched: {error}',
+  'corpus.again':
+    'Try again',
   'dialogue.index': 'Index',
   'dialogue.coverageTop1k': 'top 1,000: {percent}%',
   'dialogue.coverageTop10k': 'top 10,000: {percent}%',

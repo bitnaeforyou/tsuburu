@@ -203,6 +203,22 @@ export const ja: Messages = {
     '{note} — macOS と Windows は OS の認識機能を使い、それ以外では tesseract を呼びます。hitomi が AVIF で配るため、その手前にデコーダがもう一つ要ります。',
   'dialogue.unsupportedPlain':
     'ここでは認識を使えません。取り込んだコーパスはそのまま検索できます。',
+  'corpus.title':
+    '10万8千作品のセリフ',
+  'corpus.note':
+    'これだけを認識するには機械が数週間かかります。そうして得たテキストを公開してあり、このボタンが取ってきます — 約450 MB、一度だけ。自分で読んだ分はそのまま残ります。',
+  'corpus.later': 'あとで',
+  'corpus.background': '続ける',
+  'corpus.get':
+    '取ってくる',
+  'corpus.fetching':
+    '取得中 — {total}個中{done}個、これまで{works}作品',
+  'corpus.ready':
+    '{works}作品が入りました。セリフ検索がすべてに届きます。',
+  'corpus.failed':
+    '取得できませんでした: {error}',
+  'corpus.again':
+    'もう一度',
   'dialogue.index': '索引',
   'dialogue.coverageTop1k': '上位1,000: {percent}%',
   'dialogue.coverageTop10k': '上位10,000: {percent}%',

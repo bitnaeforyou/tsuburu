@@ -12,6 +12,7 @@
   import Terms from '../lib/Terms.svelte'
   import AllResults from '../lib/AllResults.svelte'
   import DialogueHitList from '../lib/DialogueHitList.svelte'
+  import CorpusOffer from '../lib/CorpusOffer.svelte'
 
   let { params }: { params: SearchState } = $props()
 
@@ -221,6 +222,9 @@
   {/if}
 
   {#if params.scope === 'dialogue'}
+    <!-- Where it is worth the most: the results are thin, and the reason is
+         that the corpus is not in yet. -->
+    <CorpusOffer />
     <DialogueHitList {hits} />
   {:else}
     <Grid>

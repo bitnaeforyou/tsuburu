@@ -519,6 +519,36 @@ fn imported_index(grinder: &Grinder) -> Option<PathBuf> {
     grinder.store().artifact_dir().ok().flatten()
 }
 
+/// What the published corpus is doing, if anything.
+#[derive(Serialize)]
+pub struct CorpusState {
+    /// False where the build does not know where it was published from, and
+    /// so has nowhere to fetch from.
+    pub available: bool,
+    #[serde(flatten)]
+    pub progress: crate::corpus::Progress,
+}
+
+pub async fn corpus_state(State(state): State<Arc<AppState>>) -> Json<CorpusState> {
+    Json(CorpusState { available: state.corpus.publishable(), progress: state.corpus.progress() })
+}
+
+/// Fetches the published corpus, in the background.
+pub async fn fetch_corpus(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<CorpusState>, ApiError> {
+    let grinder = Arc::clone(grinder(&state)?);
+    if !state.corpus.publishable() {
+        return Err(ApiError {
+            error: ErrorKind::Unsupported,
+            message: "this build does not say where it was published from".into(),
+            code: Some("unpublished"),
+        });
+    }
+    state.corpus.fetch(grinder, Arc::clone(&state.fetcher));
+    Ok(Json(CorpusState { available: true, progress: state.corpus.progress() }))
+}
+
 #[derive(Debug, Deserialize)]
 pub struct PhraseParams {
     pub q: String,

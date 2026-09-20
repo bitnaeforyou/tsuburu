@@ -1,0 +1,49 @@
+name: Corpus
+
+# Copies the dialogue corpus release to the mirror.
+#
+# The corpus is four hundred megabytes of recognised text and is not in git;
+# it is uploaded to this repository's `corpus` release by hand, once, and this
+# carries it across to the account the program is actually published from.
+# Run it from the Actions tab after that upload.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Is a mirror configured
+        id: mirror
+        env:
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+        run: echo "yes=${{ env.MIRROR_REPO != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Take it from here
+        if: steps.mirror.outputs.yes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p corpus
+          gh release download corpus --repo "$GITHUB_REPOSITORY" \
+            --pattern '*.tsd' --dir corpus
+          ls -la corpus | head -5
+          echo "shards: $(ls corpus/*.tsd | wc -l)"
+
+      - name: Put it there
+        if: steps.mirror.outputs.yes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+        run: |
+          # The release is made if it is not there, and its assets replaced if
+          # it is, so running this twice is not two corpora.
+          gh release view corpus --repo "$MIRROR_REPO" >/dev/null 2>&1 || \
+            gh release create corpus --repo "$MIRROR_REPO" \
+              --title "Dialogue corpus" \
+              --notes "Recognised dialogue for 108,349 works, as .tsd shards.
+
+          Fetched by the program itself - Settings, or the offer on the way in.
+          Not something to download by hand."
+          gh release upload corpus corpus/*.tsd --repo "$MIRROR_REPO" --clobber

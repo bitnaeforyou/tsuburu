@@ -761,6 +761,22 @@ impl DialogueStore {
         range_size: i32,
         background_only: bool,
     ) -> Result<Vec<Shard>, DialogueError> {
+        self.export_shards_with(range_size, background_only, false)
+    }
+
+    /// As `export_shards`, but `include_imported` also passes on text that
+    /// came from somebody else's corpus.
+    ///
+    /// Off for the Settings tab, which is one reader sharing their own
+    /// reading. On for building the corpus this project publishes, which is
+    /// that same corpus being put somewhere a reader can reach it without
+    /// being handed a directory to find.
+    pub fn export_shards_with(
+        &self,
+        range_size: i32,
+        background_only: bool,
+        include_imported: bool,
+    ) -> Result<Vec<Shard>, DialogueError> {
         let range_size = range_size.max(1);
         let tx = self.db.begin_read().map_err(db_err)?;
         let texts = tx.open_table(TEXT).map_err(db_err)?;
@@ -775,11 +791,11 @@ impl DialogueStore {
                 .map_err(db_err)?
                 .map(|v| serde_json::from_str(v.value()))
                 .transpose()?;
-            // Text that came from someone else's corpus is never passed on.
-            // A shard says "this machine read these pages"; forwarding an
-            // import would be handing on work that is not ours to hand on,
-            // and the recipient can fetch that corpus themselves.
-            if job.as_ref().is_some_and(|j| j.source.is_some()) {
+            // Text that came from someone else's corpus is not passed on by
+            // a reader sharing their own reading: a shard says "this machine
+            // read these pages", and forwarding an import would be handing on
+            // work that is not theirs to hand on.
+            if !include_imported && job.as_ref().is_some_and(|j| j.source.is_some()) {
                 continue;
             }
             if background_only && job.is_some_and(|j| j.priority != Priority::Background) {

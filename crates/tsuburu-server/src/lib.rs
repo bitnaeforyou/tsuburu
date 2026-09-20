@@ -3,6 +3,7 @@
 pub mod api;
 pub mod artists;
 pub mod assets;
+pub mod corpus;
 pub mod dialogue;
 pub mod downloads;
 pub mod error;
@@ -45,6 +46,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/meta/search", get(meta::search))
         .route("/api/meta/suggest", get(meta::suggest))
         .route("/api/dialogue/status", get(dialogue::status))
+        .route("/api/dialogue/corpus", get(dialogue::corpus_state).post(dialogue::fetch_corpus))
         .route("/api/dialogue/settings", put(dialogue::update_settings))
         .route("/api/dialogue/search", get(dialogue::search))
         .route("/api/dialogue/phrase", get(dialogue::phrase))

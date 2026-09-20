@@ -381,6 +381,12 @@ impl Grinder {
         &self.store
     }
 
+    /// A handle of its own, for work that outlives the borrow - importing on
+    /// a blocking thread, say.
+    pub fn store_handle(&self) -> Arc<DialogueStore> {
+        Arc::clone(&self.store)
+    }
+
     pub fn shutdown(&self) {
         self.stop.store(true, Ordering::Relaxed);
     }

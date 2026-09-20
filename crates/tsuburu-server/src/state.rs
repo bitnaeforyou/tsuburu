@@ -65,6 +65,8 @@ pub struct AppState {
     pub model: Arc<tsuburu_embed::runner::Runner>,
     /// Whether a newer tsuburu has been published, and becoming it.
     pub updater: Arc<tsuburu_update::Updater>,
+    /// The published dialogue corpus, and fetching it.
+    pub corpus: Arc<crate::corpus::Corpus>,
     /// Which works hitomi still lists. A work it has stopped listing keeps
     /// its pages, and is the kind worth keeping a copy of.
     pub listing: Arc<crate::listed::Listing>,
@@ -110,6 +112,7 @@ impl AppState {
                 tsuburu_store::data_dir().unwrap_or_else(|_| std::env::temp_dir()).join("model"),
             ),
             updater: tsuburu_update::Updater::new(),
+            corpus: crate::corpus::Corpus::new(),
             listing: Default::default(),
             version: RwLock::new(None),
             gg: RwLock::new(None),

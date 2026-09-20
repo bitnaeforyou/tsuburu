@@ -208,6 +208,23 @@ export function dialogueStatus(): Promise<DialogueStatus> {
   return request('/api/dialogue/status')
 }
 
+export type CorpusState = {
+  available: boolean
+  state: 'idle' | 'fetching' | 'ready' | 'failed'
+  done?: number
+  total?: number
+  works?: number
+  error?: string
+}
+
+export function corpusState(): Promise<CorpusState> {
+  return request('/api/dialogue/corpus')
+}
+
+export function fetchCorpus(): Promise<CorpusState> {
+  return send('POST', '/api/dialogue/corpus')
+}
+
 export function updateGrinder(settings: GrinderSettings): Promise<GrinderSettings> {
   return send('PUT', '/api/dialogue/settings', settings)
 }

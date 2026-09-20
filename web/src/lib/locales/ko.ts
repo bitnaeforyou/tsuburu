@@ -203,6 +203,22 @@ export const ko: Messages = {
     '{note} — macOS와 Windows는 운영체제의 인식기를 쓰고, 그 밖에서는 tesseract를 부릅니다. hitomi가 AVIF로 주기 때문에 그 앞에 디코더가 하나 더 필요합니다.',
   'dialogue.unsupportedPlain':
     '여기서는 인식을 쓸 수 없습니다. 가져온 코퍼스는 그대로 검색됩니다.',
+  'corpus.title':
+    '10만 8천 편의 대사',
+  'corpus.note':
+    '이만큼을 인식하려면 컴퓨터가 몇 주를 돌아야 합니다. 그렇게 나온 텍스트를 올려두었고, 이 버튼이 그걸 받아옵니다 — 약 450 MB, 한 번만. 직접 읽은 것은 그대로 남습니다.',
+  'corpus.later': '나중에',
+  'corpus.background': '계속 쓰기',
+  'corpus.get':
+    '받아오기',
+  'corpus.fetching':
+    '받는 중 — {total}개 중 {done}개, 지금까지 {works}편',
+  'corpus.ready':
+    '{works}편이 들어왔습니다. 이제 대사 검색이 전부에 닿습니다.',
+  'corpus.failed':
+    '받지 못했습니다: {error}',
+  'corpus.again':
+    '다시 시도',
   'dialogue.index': '색인',
   'dialogue.coverageTop1k': '상위 1,000: {percent}%',
   'dialogue.coverageTop10k': '상위 10,000: {percent}%',
