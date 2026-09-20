@@ -13,6 +13,8 @@
 use redb::{Database, ReadableTable, ReadableTableMetadata, TableDefinition};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::matcher::{Match, Query};
@@ -188,9 +190,29 @@ pub struct Hit {
     pub also: Vec<i32>,
 }
 
+/// How many answers to keep. Asking the same thing twice is common - a reader
+/// tries a phrase, opens a work, comes back to the same phrase - and each
+/// answer is a couple of dozen short rows.
+const REMEMBERED: usize = 64;
+
+/// One remembered answer: the generation it was taken at, what was asked, how
+/// many were wanted, and what came back.
+type Answer = (u64, String, usize, Vec<Hit>);
+
 pub struct DialogueStore {
     db: Database,
     path: PathBuf,
+    /// Bumped whenever what is stored changes, so anything held from before
+    /// can tell it is stale rather than having to be found and cleared.
+    generation: AtomicU64,
+    /// The gallery ids a search partitions its threads over.
+    ///
+    /// Collecting them is a walk of the whole table, and on a full corpus
+    /// that cost more than the search it was preparing for: over a second,
+    /// against four hundred milliseconds of actual matching.
+    keys: RwLock<Option<(u64, Arc<Vec<i32>>)>>,
+    /// The last few answers, newest first.
+    answers: Mutex<Vec<Answer>>,
 }
 
 impl DialogueStore {
@@ -204,7 +226,13 @@ impl DialogueStore {
             .set_cache_size(CACHE_BYTES)
             .create(&path)
             .map_err(|e| DialogueError::Open(e.to_string()))?;
-        let store = Self { db, path };
+        let store = Self {
+            db,
+            path,
+            generation: AtomicU64::new(0),
+            keys: RwLock::new(None),
+            answers: Mutex::new(Vec::new()),
+        };
         store.init_schema()?;
         Ok(store)
     }
@@ -240,7 +268,63 @@ impl DialogueStore {
             }
         }
         tx.commit().map_err(db_err)?;
+        self.changed();
         Ok(())
+    }
+
+    /// Says that what is stored has changed.
+    ///
+    /// Nothing is cleared here: what was held carries the generation it was
+    /// taken at, and finds out for itself.
+    fn changed(&self) {
+        self.generation.fetch_add(1, Ordering::Release);
+    }
+
+    fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Acquire)
+    }
+
+    /// The ids to partition a search over, read once per change.
+    fn search_keys(&self) -> Result<Arc<Vec<i32>>, DialogueError> {
+        let now = self.generation();
+        if let Ok(held) = self.keys.read()
+            && let Some((at, keys)) = held.as_ref()
+            && *at == now
+        {
+            return Ok(Arc::clone(keys));
+        }
+
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let codes = tx.open_table(CODES).map_err(db_err)?;
+        let mut keys = Vec::new();
+        for row in codes.iter().map_err(db_err)? {
+            keys.push(row.map_err(db_err)?.0.value());
+        }
+        let keys = Arc::new(keys);
+        if let Ok(mut held) = self.keys.write() {
+            *held = Some((now, Arc::clone(&keys)));
+        }
+        Ok(keys)
+    }
+
+    fn remembered(&self, query: &str, limit: usize) -> Option<Vec<Hit>> {
+        let now = self.generation();
+        let mut answers = self.answers.lock().ok()?;
+        let at =
+            answers.iter().position(|(at, q, n, _)| *at == now && q == query && *n == limit)?;
+        // Asked again, so it is the most recent thing anyone wanted.
+        let found = answers.remove(at);
+        let hits = found.3.clone();
+        answers.insert(0, found);
+        Some(hits)
+    }
+
+    fn remember(&self, query: &str, limit: usize, hits: &[Hit]) {
+        let now = self.generation();
+        let Ok(mut answers) = self.answers.lock() else { return };
+        answers.retain(|(at, q, n, _)| *at == now && !(q == query && *n == limit));
+        answers.insert(0, (now, query.to_string(), limit, hits.to_vec()));
+        answers.truncate(REMEMBERED);
     }
 
     // --- settings ---
@@ -258,6 +342,7 @@ impl DialogueStore {
             meta.insert(key, value).map_err(db_err)?;
         }
         tx.commit().map_err(db_err)?;
+        self.changed();
         Ok(())
     }
 
@@ -339,6 +424,7 @@ impl DialogueStore {
             }
         }
         tx.commit().map_err(db_err)?;
+        self.changed();
         Ok(added)
     }
 
@@ -403,6 +489,7 @@ impl DialogueStore {
             Self::finish_within(&mut jobs, &mut queue, &mut texts, &mut codes, id, outcome)?;
         }
         tx.commit().map_err(db_err)?;
+        self.changed();
         Ok(())
     }
 
@@ -557,6 +644,7 @@ impl DialogueStore {
             table.insert((id, page), raw.as_slice()).map_err(db_err)?;
         }
         tx.commit().map_err(db_err)?;
+        self.changed();
         Ok(())
     }
 
@@ -614,6 +702,7 @@ impl DialogueStore {
             previous.is_some()
         };
         tx.commit().map_err(db_err)?;
+        self.changed();
         Ok(existed)
     }
 
@@ -722,6 +811,7 @@ impl DialogueStore {
                 }
             }
             tx.commit().map_err(db_err)?;
+            self.changed();
             Ok(())
         };
 
@@ -851,23 +941,18 @@ impl DialogueStore {
 
     /// Scans every stored gallery across all cores. Returns the best page
     /// per gallery, best galleries first, at most `limit`.
-    pub fn search(&self, query: &str, limit: usize) -> Result<Vec<Hit>, DialogueError> {
-        let query = Query::new(query);
+    pub fn search(&self, asked: &str, limit: usize) -> Result<Vec<Hit>, DialogueError> {
+        let query = Query::new(asked);
         if query.is_empty() || limit == 0 {
             return Ok(Vec::new());
+        }
+        if let Some(hits) = self.remembered(asked, limit) {
+            return Ok(hits);
         }
 
         // Galleries cluster in recent ids, so ranges are cut by count, not by
         // id span; otherwise most threads finish early and one does the work.
-        let keys: Vec<i32> = {
-            let tx = self.db.begin_read().map_err(db_err)?;
-            let codes = tx.open_table(CODES).map_err(db_err)?;
-            let mut keys = Vec::new();
-            for row in codes.iter().map_err(db_err)? {
-                keys.push(row.map_err(db_err)?.0.value());
-            }
-            keys
-        };
+        let keys = self.search_keys()?;
         if keys.is_empty() {
             return Ok(Vec::new());
         }
@@ -912,6 +997,7 @@ impl DialogueStore {
         });
         let mut hits = collapse_duplicates(hits);
         hits.truncate(limit);
+        self.remember(asked, limit, &hits);
         Ok(hits)
     }
 
@@ -1435,6 +1521,42 @@ mod tests {
         let hits = store.search("구급차라도 부를까요", 10).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].also, vec![300]);
+    }
+
+    /// A second ask for the same thing is answered from what was kept.
+    #[test]
+    fn the_same_question_is_not_asked_of_the_disk_twice() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = DialogueStore::open(dir.path().join("d.redb")).unwrap();
+        store.complete(1, &[page(0, "구급차라도 부르는 게 좋겠어요")]).unwrap();
+
+        let first = store.search("구급차", 5).unwrap();
+        assert_eq!(first.len(), 1);
+        let again = store.search("구급차", 5).unwrap();
+        assert_eq!(again.len(), first.len());
+        assert_eq!(again[0].gallery_id, first[0].gallery_id);
+        assert_eq!(again[0].snippet, first[0].snippet);
+        assert!(store.remembered("구급차", 5).is_some());
+        // 물어본 적 없는 것은 없다.
+        assert!(store.remembered("구급차", 4).is_none());
+        assert!(store.remembered("소방차", 5).is_none());
+    }
+
+    /// Storing anything makes what was kept stale, answers and keys alike.
+    #[test]
+    fn what_was_kept_does_not_survive_a_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = DialogueStore::open(dir.path().join("d.redb")).unwrap();
+        store.complete(1, &[page(0, "구급차라도 부르는 게 좋겠어요")]).unwrap();
+        assert_eq!(store.search("구급차", 5).unwrap().len(), 1);
+        assert!(store.remembered("구급차", 5).is_some());
+        let keys = store.search_keys().unwrap();
+        assert_eq!(keys.len(), 1);
+
+        store.complete(2, &[page(0, "구급차를 불렀다")]).unwrap();
+        assert!(store.remembered("구급차", 5).is_none(), "the old answer is stale");
+        assert_eq!(store.search_keys().unwrap().len(), 2, "the new work is searchable");
+        assert_eq!(store.search("구급차", 5).unwrap().len(), 2);
     }
 
     #[test]
