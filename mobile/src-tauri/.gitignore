@@ -12,4 +12,10 @@
 /gen/apple/*.xcodeproj/
 /gen/apple/*.xcworkspace/
 /gen/apple/xcuserdata/
-/gen/android/
+# The Android project is generated, but its manifest carries a change that has
+# to survive regeneration, so its sources are kept and only what a build
+# leaves behind is not.
+/gen/android/app/build/
+/gen/android/build/
+/gen/android/.gradle/
+/gen/android/local.properties

@@ -79,6 +79,14 @@ pub struct Store {
 
 /// The per-user directory every tsuburu database lives in.
 pub fn data_dir() -> Result<PathBuf, StoreError> {
+    // A phone has no home directory to keep things under: the operating
+    // system hands the app a place of its own, and the app says where that
+    // is. Nothing else sets this, so a desktop is unaffected.
+    if let Some(given) = std::env::var_os("TSUBURU_DATA_DIR") {
+        let dir = PathBuf::from(given);
+        std::fs::create_dir_all(&dir).map_err(|e| StoreError::Open(e.to_string()))?;
+        return Ok(dir);
+    }
     let dirs =
         directories::ProjectDirs::from("la", "tsuburu", "tsuburu").ok_or(StoreError::NoDataDir)?;
     let dir = dirs.data_dir().to_path_buf();

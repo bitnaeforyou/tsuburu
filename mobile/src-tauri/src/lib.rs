@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use tauri::{WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -21,6 +21,16 @@ pub fn run() {
 
     tauri::Builder::default()
         .setup(|app| {
+            // Where this phone lets the app keep things. `directories` has
+            // nothing to go on here - there is no home directory - so the
+            // place the operating system gave us is passed along.
+            if let Ok(dir) = app.path().app_data_dir() {
+                std::fs::create_dir_all(&dir).ok();
+                // SAFETY: setup runs before anything else is spawned, so
+                // nothing is reading the environment while this writes it.
+                unsafe { std::env::set_var("TSUBURU_DATA_DIR", &dir) };
+                tracing::info!(path = %dir.display(), "keeping things here");
+            }
             // Port 0: the operating system picks one that is free. A phone has
             // no terminal to tell a clash to, and the address is handed
             // straight to the webview anyway, so nothing needs to guess it.
