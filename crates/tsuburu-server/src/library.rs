@@ -111,3 +111,27 @@ pub async fn clear_history(State(state): State<Arc<AppState>>) -> Result<Json<Re
     store(&state)?.clear_history()?;
     Ok(Json(Removed { removed: true }))
 }
+
+/// What the program is holding on to so a screen it has already drawn draws
+/// again without the network, and throwing it away.
+///
+/// Offered because it is the one thing here that grows without the reader
+/// asking for anything: every work whose cover is scrolled past is kept.
+#[derive(Debug, Serialize)]
+pub struct KeptCards {
+    pub cards: usize,
+}
+
+pub async fn kept_cards(State(state): State<Arc<AppState>>) -> Result<Json<KeptCards>, ApiError> {
+    Ok(Json(KeptCards { cards: store(&state)?.remembered_cards()? }))
+}
+
+pub async fn forget_kept_cards(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<KeptCards>, ApiError> {
+    let cards = store(&state)?.forget_cards()?;
+    // The run's own copy goes with it, or the next screen draws from memory
+    // what was just thrown off the disk.
+    state.cards.clear();
+    Ok(Json(KeptCards { cards }))
+}

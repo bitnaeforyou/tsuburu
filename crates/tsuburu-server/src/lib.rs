@@ -36,6 +36,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/favorites", get(library::list_favorites))
         .route("/api/favorites/{id}", put(library::add_favorite).delete(library::remove_favorite))
         .route("/api/history", get(library::list_history).delete(library::clear_history))
+        .route("/api/kept", get(library::kept_cards).delete(library::forget_kept_cards))
         .route("/api/history/{id}", put(library::record_progress))
         .route("/api/artists/following", get(artists::following))
         .route("/api/artists/{name}", get(artists::works))

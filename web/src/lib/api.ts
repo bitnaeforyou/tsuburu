@@ -136,6 +136,17 @@ export function removeFavorite(id: number): Promise<{ removed: boolean }> {
   return send('DELETE', `/api/favorites/${id}`)
 }
 
+export type KeptCards = { cards: number }
+
+/// Covers and titles held from earlier runs, and throwing them away.
+export function keptCards(): Promise<KeptCards> {
+  return request('/api/kept')
+}
+
+export function forgetKeptCards(): Promise<KeptCards> {
+  return send('DELETE', '/api/kept')
+}
+
 export function history(): Promise<{ items: HistoryEntry[] }> {
   return request('/api/history')
 }

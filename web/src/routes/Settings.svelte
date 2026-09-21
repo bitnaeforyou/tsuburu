@@ -310,6 +310,24 @@
     await refreshStatus()
   }
 
+  let kept = $state<api.KeptCards | null>(null)
+  let forgettingKept = $state(false)
+
+  $effect(() => {
+    void api.keptCards().then((k) => (kept = k)).catch(() => {})
+  })
+
+  async function forgetKept() {
+    forgettingKept = true
+    try {
+      kept = await api.forgetKeptCards()
+    } catch {
+      // A library that cannot be written to is already reported elsewhere.
+    } finally {
+      forgettingKept = false
+    }
+  }
+
   const formatBytes = (n: number) =>
     n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`
 
@@ -747,6 +765,23 @@
       </form>
     </details>
   {/if}
+
+  <!-- Not the dialogue's, and not behind its notice: this is what makes the
+       program open quickly on a platform that cannot read dialogue at all. -->
+  <section class="panel">
+    <div class="row">
+      <div>
+        <h2>{t('kept.title')}</h2>
+        <p class="muted small">{t('kept.note')}</p>
+      </div>
+      {#if kept && kept.cards > 0}
+        <button onclick={forgetKept} disabled={forgettingKept}>{t('kept.forget')}</button>
+      {/if}
+    </div>
+    <p class="muted small">
+      {kept && kept.cards > 0 ? t('kept.count', { n: number(kept.cards) }) : t('kept.empty')}
+    </p>
+  </section>
 
   <Backup />
 </main>

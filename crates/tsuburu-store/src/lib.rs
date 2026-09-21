@@ -7,7 +7,7 @@
 //! 메타데이터를 다시 받으면 한 건에 최대 230 KB가 오간다. 요약을 들고 있으면
 //! 목록이 즉시 뜨고 오프라인에서도 보인다.
 
-use redb::{Database, ReadableTable, TableDefinition};
+use redb::{Database, ReadableTable, ReadableTableMetadata, TableDefinition};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -17,6 +17,8 @@ const HISTORY: TableDefinition<i32, &str> = TableDefinition::new("history");
 /// Artist name (lower case) -> when it was followed.
 const ARTISTS: TableDefinition<&str, u64> = TableDefinition::new("artists");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
+/// Gallery id -> the card the server built for it, and when.
+const CARDS: TableDefinition<i32, &str> = TableDefinition::new("cards");
 
 const SCHEMA_VERSION: &str = "1";
 
@@ -252,6 +254,57 @@ impl Store {
         Ok(())
     }
 
+    // --- remembered cards ---
+
+    /// What a work looked like the last time it was drawn.
+    ///
+    /// Every cache the program keeps otherwise lives in memory, so closing it
+    /// threw away everything it had learned and the next launch asked hitomi
+    /// for all of it again - measured at 1.8 s for one screen of twenty-five
+    /// on a wired desktop, and the larger part of the ten seconds a phone was
+    /// waiting. A gallery's title and tags do not change, so they are kept.
+    ///
+    /// The caller decides what a row means and how old is too old; this
+    /// stores and returns the text.
+    pub fn remembered_card(&self, id: i32) -> Result<Option<String>, StoreError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let t = match tx.open_table(CARDS) {
+            Ok(t) => t,
+            // Nothing has been remembered yet, which is not a failure.
+            Err(_) => return Ok(None),
+        };
+        Ok(t.get(id).map_err(db_err)?.map(|v| v.value().to_string()))
+    }
+
+    pub fn remember_card(&self, id: i32, json: &str) -> Result<(), StoreError> {
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut t = tx.open_table(CARDS).map_err(db_err)?;
+            t.insert(id, json).map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(())
+    }
+
+    /// How many are held, and throwing them away. Offered in settings because
+    /// this is the one thing here that grows without the reader asking it to.
+    pub fn remembered_cards(&self) -> Result<usize, StoreError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let Ok(t) = tx.open_table(CARDS) else { return Ok(0) };
+        Ok(t.len().map_err(db_err)? as usize)
+    }
+
+    pub fn forget_cards(&self) -> Result<usize, StoreError> {
+        let held = self.remembered_cards()?;
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut t = tx.open_table(CARDS).map_err(db_err)?;
+            t.retain(|_, _| false).map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(held)
+    }
+
     // --- 공통 ---
 
     fn put<T: Serialize>(
@@ -460,6 +513,30 @@ mod tests {
         let store = Store::open(&path).unwrap();
         assert!(store.favorite(42).unwrap().is_some());
         assert_eq!(store.history_entry(42).unwrap().unwrap().last_page, 9);
+    }
+
+    #[test]
+    fn a_card_outlives_the_run_that_drew_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.redb");
+        {
+            let store = Store::open(&path).unwrap();
+            assert_eq!(store.remembered_card(42).unwrap(), None);
+            store.remember_card(42, r#"{"id":42}"#).unwrap();
+        }
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.remembered_card(42).unwrap().as_deref(), Some(r#"{"id":42}"#));
+        assert_eq!(store.remembered_cards().unwrap(), 1);
+        assert_eq!(store.forget_cards().unwrap(), 1);
+        assert_eq!(store.remembered_card(42).unwrap(), None);
+    }
+
+    #[test]
+    fn asking_for_a_card_before_any_is_kept_is_not_a_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().join("test.redb")).unwrap();
+        assert_eq!(store.remembered_card(1).unwrap(), None);
+        assert_eq!(store.remembered_cards().unwrap(), 0);
     }
 
     #[test]

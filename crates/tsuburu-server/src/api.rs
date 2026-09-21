@@ -7,6 +7,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -98,7 +99,10 @@ pub async fn search(
 }
 
 /// 결과 그리드에 그릴 최소 정보.
-#[derive(Debug, Clone, Serialize)]
+///
+/// Read back as well as written: a card kept from the last run is parsed out
+/// of the library again rather than fetched.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Card {
     pub id: i32,
     pub title: Option<String>,
@@ -111,8 +115,10 @@ pub struct Card {
     pub tags: Vec<String>,
     /// 이 서버의 썸네일 프록시 경로. 브라우저는 hitomi를 직접 보지 않는다.
     pub thumbnail: Option<String>,
-    /// Whether hitomi still lists it. `None` until the list has been read.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Whether hitomi still lists it. `None` until the list has been read,
+    /// and never believed from a kept row: whether a work is still listed is
+    /// this run's question.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub listed: Option<bool>,
 }
 
@@ -177,6 +183,13 @@ pub async fn cards(
             tasks.push(CardTask::Ready(cached));
             continue;
         }
+        // Then what the last run learned. The memory cache above is gone the
+        // moment the program closes, which on a phone is every time.
+        if let Some(kept) = recall_card(&state, id) {
+            state.cards.insert(id, kept.clone());
+            tasks.push(CardTask::Ready(kept));
+            continue;
+        }
         let state = Arc::clone(&state);
         let gg = gg.clone();
         tasks.push(CardTask::Pending(
@@ -191,6 +204,7 @@ pub async fn cards(
             CardTask::Pending(handle, fallback) => match handle.await {
                 Ok(Ok(card)) => {
                     state.cards.insert(card.id, card.clone());
+                    keep_card(&state, &card);
                     out.push(card);
                 }
                 // 한 장이 실패했다고 페이지 전체를 버리지 않는다.
@@ -211,6 +225,44 @@ pub async fn cards(
     }
 
     Ok(Json(out))
+}
+
+/// How long a remembered card is believed. A gallery's title, tags and page
+/// count do not change once it is posted; the month is against the few that
+/// are edited soon after, not against decay.
+const REMEMBERED_FOR: Duration = Duration::from_secs(60 * 60 * 24 * 30);
+
+#[derive(Serialize, Deserialize)]
+struct Remembered {
+    /// Seconds since the epoch, so a row written by another run can be aged.
+    at: u64,
+    card: Card,
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Neither reading nor writing this is worth failing a request over: the card
+/// is still there to be fetched.
+fn recall_card(state: &AppState, id: i32) -> Option<Card> {
+    let store = state.store.as_ref()?;
+    let raw = store.remembered_card(id).ok().flatten()?;
+    let kept: Remembered = serde_json::from_str(&raw).ok()?;
+    let age = now().saturating_sub(kept.at);
+    (age < REMEMBERED_FOR.as_secs()).then_some(kept.card)
+}
+
+fn keep_card(state: &AppState, card: &Card) {
+    let Some(store) = state.store.as_ref() else { return };
+    let kept = Remembered { at: now(), card: card.clone() };
+    let Ok(json) = serde_json::to_string(&kept) else { return };
+    if let Err(err) = store.remember_card(card.id, &json) {
+        tracing::debug!(%err, "could not remember a card");
+    }
 }
 
 /// The names among them, at most two: a result has room for that much.
