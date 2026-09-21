@@ -83,6 +83,7 @@ export const ja: Messages = {
   'search.scopeHitomi': 'hitomi のタグ',
   'search.scopeDialogue': 'セリフ',
   'search.scopeLocal': 'ローカルのタイトル・作家',
+  'search.filters': 'フィルタ',
   'search.sort': '並び順',
   'search.sortDate': '新着順',
   'search.sortToday': '今日の人気',

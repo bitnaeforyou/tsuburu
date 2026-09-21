@@ -83,6 +83,7 @@ export const ko: Messages = {
   'search.scopeHitomi': 'hitomi 태그',
   'search.scopeDialogue': '대사',
   'search.scopeLocal': '로컬 제목·작가',
+  'search.filters': '필터',
   'search.sort': '정렬',
   'search.sortDate': '최신순',
   'search.sortToday': '오늘 인기',

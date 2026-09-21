@@ -35,6 +35,31 @@
     input = params.query
   })
 
+  // Five of these side by side want 884px and a phone has 390, so they wrapped
+  // to three rows above every screen. On a phone they fold away behind one
+  // line that says what is currently narrowed; on anything wider they are
+  // simply there, and the line is not drawn.
+  let wide = $state(true)
+  let opened = $state(false)
+
+  $effect(() => {
+    const roomy = matchMedia('(min-width: 641px)')
+    const read = () => (wide = roomy.matches)
+    read()
+    roomy.addEventListener('change', read)
+    return () => roomy.removeEventListener('change', read)
+  })
+
+  /// What the filters are set to, for the line that stands in for them.
+  const narrowed = $derived(
+    [
+      params.scope !== 'all' ? t(`search.scope${params.scope[0].toUpperCase()}${params.scope.slice(1)}` as Key) : null,
+      params.sort !== 'date' ? t(SORTS.find((s) => s.value === params.sort)?.key ?? 'search.sortDate') : null,
+      params.language !== 'all' ? t(`lang.${params.language}` as Key) : null,
+      params.kind !== 'all' ? t(`kind.${params.kind}` as Key) : null,
+    ].filter(Boolean),
+  )
+
   function submit(event: SubmitEvent) {
     event.preventDefault()
     onchange({ query: input.trim() })
@@ -67,62 +92,67 @@
     </button>
   </form>
 
-  <div class="filters">
-    {#if localAvailable || dialogueAvailable}
-      <label>
-        <span>{t('search.in')}</span>
-        <select value={params.scope} onchange={(e) => onchange({ scope: e.currentTarget.value as Scope })}>
-          <option value="all">{t('search.scopeAll')}</option>
-          <option value="hitomi">{t('search.scopeHitomi')}</option>
-          {#if localAvailable}<option value="local">{t('search.scopeLocal')}</option>{/if}
-          {#if dialogueAvailable}<option value="dialogue">{t('search.scopeDialogue')}</option>{/if}
-        </select>
-      </label>
-    {/if}
+  <details class="fold" open={wide || opened} ontoggle={(e) => (opened = e.currentTarget.open)}>
+    <summary>
+      {narrowed.length ? narrowed.join(' · ') : t('search.filters')}
+    </summary>
+    <div class="filters">
+      {#if localAvailable || dialogueAvailable}
+        <label>
+          <span>{t('search.in')}</span>
+          <select value={params.scope} onchange={(e) => onchange({ scope: e.currentTarget.value as Scope })}>
+            <option value="all">{t('search.scopeAll')}</option>
+            <option value="hitomi">{t('search.scopeHitomi')}</option>
+            {#if localAvailable}<option value="local">{t('search.scopeLocal')}</option>{/if}
+            {#if dialogueAvailable}<option value="dialogue">{t('search.scopeDialogue')}</option>{/if}
+          </select>
+        </label>
+      {/if}
 
-    <!-- Only the dialogue can be asked either way, so only there is it asked. -->
-    {#if params.scope === 'dialogue'}
+      <!-- Only the dialogue can be asked either way, so only there is it asked. -->
+      {#if params.scope === 'dialogue'}
+        <label>
+          <span>{t('dialogue.mode')}</span>
+          <select
+            value={params.mode}
+            onchange={(e) => onchange({ mode: e.currentTarget.value as Mode })}
+          >
+            <option value="words">{t('dialogue.modeWords')}</option>
+            <option value="meaning">{t('dialogue.modeMeaning')}</option>
+          </select>
+        </label>
+      {/if}
+      <!-- The snapshot has no popularity data, so sorting is offered wherever
+           hitomi is being asked - which includes asking every source at once,
+           where it was already being honoured but could not be reached. -->
+      {#if params.scope === 'hitomi' || params.scope === 'all'}
+        <label>
+          <span>{t('search.sort')}</span>
+          <select value={params.sort} onchange={(e) => onchange({ sort: e.currentTarget.value as Sort })}>
+            {#each SORTS as option (option.value)}
+              <option value={option.value}>{t(option.key)}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
       <label>
-        <span>{t('dialogue.mode')}</span>
-        <select
-          value={params.mode}
-          onchange={(e) => onchange({ mode: e.currentTarget.value as Mode })}
-        >
-          <option value="words">{t('dialogue.modeWords')}</option>
-          <option value="meaning">{t('dialogue.modeMeaning')}</option>
-        </select>
-      </label>
-    {/if}
-    <!-- The snapshot has no popularity data, so sorting is offered wherever
-         hitomi is being asked - which includes asking every source at once,
-         where it was already being honoured but could not be reached. -->
-    {#if params.scope === 'hitomi' || params.scope === 'all'}
-      <label>
-        <span>{t('search.sort')}</span>
-        <select value={params.sort} onchange={(e) => onchange({ sort: e.currentTarget.value as Sort })}>
-          {#each SORTS as option (option.value)}
-            <option value={option.value}>{t(option.key)}</option>
+        <span>{t('search.language')}</span>
+        <select value={params.language} onchange={(e) => onchange({ language: e.currentTarget.value })}>
+          {#each LANGUAGES as value (value)}
+            <option {value}>{t(`lang.${value}` as Key)}</option>
           {/each}
         </select>
       </label>
-    {/if}
-    <label>
-      <span>{t('search.language')}</span>
-      <select value={params.language} onchange={(e) => onchange({ language: e.currentTarget.value })}>
-        {#each LANGUAGES as value (value)}
-          <option {value}>{t(`lang.${value}` as Key)}</option>
-        {/each}
-      </select>
-    </label>
-    <label>
-      <span>{t('search.type')}</span>
-      <select value={params.kind} onchange={(e) => onchange({ kind: e.currentTarget.value })}>
-        {#each KINDS as value (value)}
-          <option {value}>{t(`kind.${value}` as Key)}</option>
-        {/each}
-      </select>
-    </label>
-  </div>
+      <label>
+        <span>{t('search.type')}</span>
+        <select value={params.kind} onchange={(e) => onchange({ kind: e.currentTarget.value })}>
+          {#each KINDS as value (value)}
+            <option {value}>{t(`kind.${value}` as Key)}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
+  </details>
 </search>
 
 <style>
@@ -179,6 +209,13 @@
     border-color: transparent;
   }
 
+  .fold {
+    flex: 1 1 auto;
+  }
+  .fold > summary {
+    display: none;
+  }
+
   .filters {
     display: flex;
     flex-wrap: wrap;
@@ -192,6 +229,26 @@
   @media (max-width: 640px) {
     .filters select {
       font-size: var(--text-base);
+    }
+
+    .fold {
+      flex-basis: 100%;
+    }
+    /* The line that stands in for them names what is narrowed, so nothing is
+       hidden without saying so. */
+    .fold > summary {
+      display: list-item;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: var(--text-md);
+      padding: 0.15rem 0;
+      list-style-position: inside;
+    }
+    .fold[open] > summary {
+      margin-bottom: 0.6rem;
+    }
+    .filters {
+      gap: 0.75rem 0.9rem;
     }
   }
 

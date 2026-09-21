@@ -84,6 +84,7 @@ export const en = {
   'search.scopeHitomi': 'hitomi tags',
   'search.scopeDialogue': 'Dialogue',
   'search.scopeLocal': 'local titles & artists',
+  'search.filters': 'Filters',
   'search.sort': 'Sort',
   'search.sortDate': 'Newest',
   'search.sortToday': 'Popular today',
