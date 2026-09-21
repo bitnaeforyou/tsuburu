@@ -4,9 +4,20 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The other two platforms once a week, so drift between releases is found
+  # by a run nobody had to remember to start.
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
+
+# A push that lands while the last one is still building makes that build
+# answer a question nobody is asking any more.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -15,7 +26,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        # This repository is private, so its minutes are charged, and a macOS
+        # minute is charged as ten. The tests are the same tests on every
+        # platform - there is no platform-specific code under them - and a
+        # release builds all three anyway, so a plain push is checked on the
+        # cheap one and the full set runs on a pull request, on the weekly
+        # schedule, and by hand.
+        os: >-
+          ${{ fromJSON(github.event_name == 'push'
+          && '["ubuntu-latest"]'
+          || '["macos-latest","ubuntu-latest","windows-latest"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
