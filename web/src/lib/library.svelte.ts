@@ -47,3 +47,32 @@ class Library {
 }
 
 export const library = new Library()
+
+/// How far into each work the reader got.
+///
+/// The history screen drew a progress bar on every cover and no other screen
+/// did, so a search result gave no sign you had already read it. One list,
+/// read once, and every card can say.
+class Read {
+  entries = $state(new Map<number, { page: number; pages: number }>())
+  private asked = false
+
+  async load() {
+    if (this.asked) return
+    this.asked = true
+    try {
+      const { items } = await api.history()
+      this.entries = new Map(
+        items.map((item) => [item.id, { page: item.last_page, pages: item.pages }]),
+      )
+    } catch {
+      // Without a library there is no history, and a search still works.
+    }
+  }
+
+  of(id: number) {
+    return this.entries.get(id) ?? null
+  }
+}
+
+export const read = new Read()
