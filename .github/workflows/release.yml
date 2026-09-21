@@ -116,6 +116,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            TSUBURU_RELEASES=${{ github.repository }}
           tags: |
             ${{ steps.where.outputs.image }}:${{ steps.where.outputs.version }}
             ${{ steps.where.outputs.image }}:latest

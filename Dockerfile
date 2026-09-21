@@ -24,7 +24,11 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 # rust-embed reads this at compile time; the frontend is already built.
 COPY --from=web /web/dist/ web/dist/
-RUN cargo build --release --locked -p tsuburu
+# Where this was published from, so the program can offer the corpus and say
+# when there is a newer one. Not written in the source: the image may be built
+# somewhere other than where it is published.
+ARG TSUBURU_RELEASES=""
+RUN TSUBURU_RELEASES="$TSUBURU_RELEASES" cargo build --release --locked -p tsuburu
 
 FROM debian:bookworm-slim
 # kor/jpn/eng are what the works are in; `osd` is what tesseract wants for
