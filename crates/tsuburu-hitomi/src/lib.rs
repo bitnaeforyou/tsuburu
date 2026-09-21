@@ -14,6 +14,8 @@ pub mod node;
 pub mod nozomi;
 pub mod search;
 
+use std::collections::HashSet;
+
 pub use fetcher::{FetchError, Fetcher};
 pub use gallery::{Gallery, GalleryError, GalleryFile, parse_gallery_info};
 pub use image::{GgMap, ImageError, image_url, parse_gg, thumbnail_url};
@@ -165,6 +167,10 @@ pub struct SearchRequest<'a> {
     pub sort: Sort,
     pub offset: usize,
     pub limit: usize,
+    /// Works the reader has said they never want to see, whatever they asked
+    /// for. Empty for everyone who has said nothing, which is the path that
+    /// reads only the bytes for the page.
+    pub hidden: &'a HashSet<i32>,
 }
 
 /// 페이지 단위 검색. 정렬과 필터를 함께 받는다.
@@ -181,18 +187,19 @@ pub async fn search_page(
     version: &str,
     request: &SearchRequest<'_>,
 ) -> Result<SearchPage, SearchError> {
-    let SearchRequest { query, filters, sort, offset, limit } = *request;
+    let SearchRequest { query, filters, sort, offset, limit, hidden } = *request;
     let language = filters.language_or_all();
 
     if query.include.is_empty() {
-        return browse(fetcher, cfg, filters, sort, offset, limit).await;
+        return browse(fetcher, cfg, filters, sort, offset, limit, hidden).await;
     }
 
     // 검색어가 하나뿐이고 필터도 정렬도 기본이면, 데이터 블록 앞부분만 읽는
     // 기존의 값싼 경로를 그대로 쓴다.
     let single_word = query.include.len() == 1
         && !query.include[0].contains(char::is_whitespace)
-        && query.exclude.is_empty();
+        && query.exclude.is_empty()
+        && hidden.is_empty();
     if single_word && filters.is_empty() && sort.is_date() {
         let term = &query.include[0];
         let key = hash_term(&term.to_lowercase());
@@ -220,6 +227,10 @@ pub async fn search_page(
         ids.retain(|id| allowed.contains(id));
     }
 
+    if !hidden.is_empty() {
+        ids.retain(|id| !hidden.contains(id));
+    }
+
     let total = ids.len();
     if sort.is_date() {
         // B-tree 결과와 nozomi 목록은 둘 다 최신순이라 이미 정렬돼 있다.
@@ -227,9 +238,9 @@ pub async fn search_page(
         return Ok(SearchPage { total, ids: page });
     }
 
-    let allowed: std::collections::HashSet<i32> = ids.into_iter().collect();
+    let allowed: HashSet<i32> = ids.into_iter().collect();
     let url = cfg.sort_list_url(sort, language);
-    let page = nozomi::reorder(fetcher, &url, &allowed, offset, limit).await?;
+    let page = nozomi::reorder(fetcher, &url, &allowed, hidden, offset, limit).await?;
     Ok(SearchPage { total, ids: page })
 }
 
@@ -241,27 +252,28 @@ async fn browse(
     sort: Sort,
     offset: usize,
     limit: usize,
+    hidden: &HashSet<i32>,
 ) -> Result<SearchPage, SearchError> {
     let language = filters.language_or_all();
 
     let Some(kind) = &filters.kind else {
         let url = cfg.sort_list_url(sort, language);
-        let total = nozomi::count(fetcher, &url).await?;
-        let ids = nozomi::page(fetcher, &url, offset, limit).await?;
+        let total = nozomi::count_without(fetcher, &url, hidden).await?;
+        let ids = nozomi::page_without(fetcher, &url, hidden, offset, limit).await?;
         return Ok(SearchPage { total, ids });
     };
 
     // 종류별 목록도 최신순이므로, 날짜순이면 그 목록을 그대로 페이징하면 된다.
     let type_url = cfg.type_list_url(kind, language);
-    let total = nozomi::count(fetcher, &type_url).await?;
+    let total = nozomi::count_without(fetcher, &type_url, hidden).await?;
     if sort.is_date() {
-        let ids = nozomi::page(fetcher, &type_url, offset, limit).await?;
+        let ids = nozomi::page_without(fetcher, &type_url, hidden, offset, limit).await?;
         return Ok(SearchPage { total, ids });
     }
 
     let allowed = nozomi::id_set(fetcher, &type_url).await?;
     let sort_url = cfg.sort_list_url(sort, language);
-    let ids = nozomi::reorder(fetcher, &sort_url, &allowed, offset, limit).await?;
+    let ids = nozomi::reorder(fetcher, &sort_url, &allowed, hidden, offset, limit).await?;
     Ok(SearchPage { total, ids })
 }
 

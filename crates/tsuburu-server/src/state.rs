@@ -4,7 +4,7 @@
 //! 바뀌지 않으므로 TTL을 두고 캐시한다.
 
 use quick_cache::sync::Cache;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -75,6 +75,11 @@ pub struct AppState {
     /// 갤러리 메타 JSON은 최대 200 KB를 넘기도 한다. 카드 한 장으로 줄여
     /// 캐시해두면 같은 결과를 다시 그릴 때 네트워크를 타지 않는다.
     pub cards: Cache<i32, Card>,
+    /// The works behind the reader's hidden tags, resolved once.
+    ///
+    /// Each tag costs the whole of its id list, which is why it is not
+    /// resolved per request. Emptied when the list is changed.
+    hidden: RwLock<Option<Cached<Arc<HashSet<i32>>>>>,
 }
 
 impl AppState {
@@ -117,6 +122,7 @@ impl AppState {
             version: RwLock::new(None),
             gg: RwLock::new(None),
             cards: Cache::new(4096),
+            hidden: RwLock::new(None),
         }
     }
 
@@ -173,6 +179,49 @@ impl AppState {
         *self.version.write().await =
             Some(Cached { value: fresh.clone(), fetched_at: Instant::now() });
         Ok(fresh)
+    }
+
+    /// The works the reader has hidden, as one set to check against.
+    ///
+    /// An empty list gives an empty set, which every search path treats as
+    /// "nothing hidden" and takes its cheap route for.
+    pub async fn hidden(&self) -> Arc<HashSet<i32>> {
+        if let Some(cached) = self.hidden.read().await.as_ref()
+            && cached.is_fresh()
+        {
+            return Arc::clone(&cached.value);
+        }
+        let tags = self.store.as_ref().and_then(|s| s.hidden_tags().ok()).unwrap_or_default();
+        let mut ids = HashSet::new();
+        if !tags.is_empty()
+            && let Ok(version) = self.version().await
+        {
+            for tag in &tags {
+                match tsuburu_hitomi::search_term(
+                    self.fetcher.as_ref(),
+                    &self.cfg,
+                    &version,
+                    tag,
+                    None,
+                )
+                .await
+                {
+                    Ok(found) => ids.extend(found),
+                    // A tag hitomi does not know hides nothing, which is not
+                    // a reason to fail the search it was asked of.
+                    Err(err) => tracing::debug!(%err, tag, "could not resolve a hidden tag"),
+                }
+            }
+        }
+        let fresh = Arc::new(ids);
+        *self.hidden.write().await =
+            Some(Cached { value: Arc::clone(&fresh), fetched_at: Instant::now() });
+        fresh
+    }
+
+    /// Said when the list changes, so the next search resolves it again.
+    pub async fn forget_hidden(&self) {
+        *self.hidden.write().await = None;
     }
 
     /// 인덱스 상위 노드를 미리 받아 캐시에 얹는다.

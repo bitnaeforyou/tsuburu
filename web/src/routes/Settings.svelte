@@ -310,6 +310,33 @@
     await refreshStatus()
   }
 
+  let hidden = $state<string[]>([])
+  let hiddenDraft = $state('')
+  let hiddenBusy = $state(false)
+
+  $effect(() => {
+    void api.hiddenTags().then((h) => (hidden = h.tags)).catch(() => {})
+  })
+
+  async function saveHidden(next: string[]) {
+    hiddenBusy = true
+    try {
+      hidden = (await api.setHiddenTags(next)).tags
+    } catch {
+      // A library that cannot be written to is already reported elsewhere.
+    } finally {
+      hiddenBusy = false
+    }
+  }
+
+  async function addHidden(event: SubmitEvent) {
+    event.preventDefault()
+    const tag = hiddenDraft.trim()
+    if (!tag) return
+    hiddenDraft = ''
+    await saveHidden([...hidden, tag])
+  }
+
   let kept = $state<api.KeptCards | null>(null)
   let forgettingKept = $state(false)
 
@@ -766,8 +793,40 @@
     </details>
   {/if}
 
-  <!-- Not the dialogue's, and not behind its notice: this is what makes the
-       program open quickly on a platform that cannot read dialogue at all. -->
+  <!-- Neither of the two below is the dialogue's, so neither sits behind its
+       notice: one is what a reader never wants to see, the other is what
+       makes the program open quickly on a platform that cannot read dialogue
+       at all. -->
+  <section class="panel">
+    <h2>{t('hidden.title')}</h2>
+    <p class="muted small">{t('hidden.note')}</p>
+    <form class="row" onsubmit={addHidden}>
+      <input bind:value={hiddenDraft} placeholder="yaoi" aria-label={t('hidden.add')} />
+      <button type="submit" disabled={hiddenBusy || !hiddenDraft.trim()}>
+        {t('hidden.addButton')}
+      </button>
+    </form>
+    {#if hidden.length}
+      <ul class="chips">
+        {#each hidden as tag (tag)}
+          <li>
+            <span>{tag}</span>
+            <button
+              class="drop"
+              disabled={hiddenBusy}
+              onclick={() => saveHidden(hidden.filter((t) => t !== tag))}
+              aria-label={t('hidden.remove', { tag })}
+              title={t('hidden.remove', { tag })}
+            >&times;</button>
+          </li>
+        {/each}
+      </ul>
+      <p class="muted small">{t('hidden.slower')}</p>
+    {:else}
+      <p class="muted small">{t('hidden.empty')}</p>
+    {/if}
+  </section>
+
   <section class="panel">
     <div class="row">
       <div>
@@ -787,6 +846,35 @@
 </main>
 
 <style>
+  .chips {
+    list-style: none;
+    padding: 0;
+    margin: 0.7rem 0 0.4rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .chips li {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.15rem 0.2rem 0.15rem 0.5rem;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: var(--text-md);
+  }
+  .chips .drop {
+    padding: 0.1rem 0.4rem;
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+    line-height: 1;
+  }
+  .chips .drop:hover {
+    color: var(--danger);
+    border-color: transparent;
+  }
+
   .kept {
     list-style: none;
     padding: 0;

@@ -254,6 +254,42 @@ impl Store {
         Ok(())
     }
 
+    // --- hidden tags ---
+
+    /// Tags the reader never wants to see, whatever they asked for.
+    ///
+    /// hitomi's own screens have no such thing, so a reader who does not want
+    /// one kind of work had to read past it every time. Kept here rather than
+    /// in the address because it is a standing answer, not one search.
+    pub fn hidden_tags(&self) -> Result<Vec<String>, StoreError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let Ok(t) = tx.open_table(META) else { return Ok(Vec::new()) };
+        match t.get("hidden_tags").map_err(db_err)? {
+            Some(v) => Ok(serde_json::from_str(v.value())?),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    pub fn set_hidden_tags(&self, tags: &[String]) -> Result<Vec<String>, StoreError> {
+        // Lower case and deduplicated, because that is how they are looked up
+        // and a list with `Yaoi` and `yaoi` in it hides one thing twice.
+        let mut cleaned: Vec<String> = Vec::new();
+        for tag in tags {
+            let tag = tag.trim().to_lowercase();
+            if !tag.is_empty() && !cleaned.contains(&tag) {
+                cleaned.push(tag);
+            }
+        }
+        let json = serde_json::to_string(&cleaned)?;
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut t = tx.open_table(META).map_err(db_err)?;
+            t.insert("hidden_tags", json.as_str()).map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(cleaned)
+    }
+
     // --- remembered cards ---
 
     /// What a work looked like the last time it was drawn.
@@ -513,6 +549,27 @@ mod tests {
         let store = Store::open(&path).unwrap();
         assert!(store.favorite(42).unwrap().is_some());
         assert_eq!(store.history_entry(42).unwrap().unwrap().last_page, 9);
+    }
+
+    #[test]
+    fn hidden_tags_are_kept_lower_case_and_once_each() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.redb");
+        {
+            let store = Store::open(&path).unwrap();
+            assert!(store.hidden_tags().unwrap().is_empty());
+            let saved = store
+                .set_hidden_tags(&["Yaoi".into(), " yaoi ".into(), "".into(), "big breasts".into()])
+                .unwrap();
+            assert_eq!(saved, vec!["yaoi".to_string(), "big breasts".to_string()]);
+        }
+        let store = Store::open(&path).unwrap();
+        assert_eq!(
+            store.hidden_tags().unwrap(),
+            vec!["yaoi".to_string(), "big breasts".to_string()]
+        );
+        assert!(store.set_hidden_tags(&[]).unwrap().is_empty());
+        assert!(store.hidden_tags().unwrap().is_empty());
     }
 
     #[test]

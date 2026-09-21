@@ -136,6 +136,17 @@ export function removeFavorite(id: number): Promise<{ removed: boolean }> {
   return send('DELETE', `/api/favorites/${id}`)
 }
 
+export type HiddenTags = { tags: string[] }
+
+/// Tags no screen ever shows, whatever was asked for.
+export function hiddenTags(): Promise<HiddenTags> {
+  return request('/api/hidden')
+}
+
+export function setHiddenTags(tags: string[]): Promise<HiddenTags> {
+  return send('PUT', '/api/hidden', { tags })
+}
+
 export type KeptCards = { cards: number }
 
 /// Covers and titles held from earlier runs, and throwing them away.

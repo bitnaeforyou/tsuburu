@@ -81,6 +81,7 @@ pub async fn search(
 
     let limit = params.limit.clamp(1, MAX_LIMIT);
     let version = state.version().await?;
+    let hidden = state.hidden().await;
     let page = tsuburu_hitomi::search_page(
         state.fetcher.as_ref(),
         &state.cfg,
@@ -91,6 +92,7 @@ pub async fn search(
             sort,
             offset: params.offset,
             limit,
+            hidden: &hidden,
         },
     )
     .await?;

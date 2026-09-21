@@ -147,10 +147,41 @@ pub async fn reorder(
     fetcher: &dyn Fetcher,
     url: &str,
     allowed: &HashSet<i32>,
+    hidden: &HashSet<i32>,
     offset: usize,
     limit: usize,
 ) -> Result<Vec<i32>, SearchError> {
-    if allowed.is_empty() || limit == 0 {
+    if allowed.is_empty() {
+        return Ok(Vec::new());
+    }
+    walk(fetcher, url, offset, limit, |id| allowed.contains(&id) && !hidden.contains(&id)).await
+}
+
+/// 목록을 순서대로 훑으며 `hidden`에 든 ID만 건너뛴다.
+///
+/// Browsing with nothing hidden reads only the bytes for the page asked for -
+/// a hundred of them for twenty-five works. A reader who has hidden something
+/// cannot be served that way, because what to skip is only known by looking,
+/// so the list is walked in chunks and stops as soon as the page is full. A
+/// tag covering a twentieth of the catalogue costs a twentieth more reading.
+pub async fn page_without(
+    fetcher: &dyn Fetcher,
+    url: &str,
+    hidden: &HashSet<i32>,
+    offset: usize,
+    limit: usize,
+) -> Result<Vec<i32>, SearchError> {
+    walk(fetcher, url, offset, limit, |id| !hidden.contains(&id)).await
+}
+
+async fn walk(
+    fetcher: &dyn Fetcher,
+    url: &str,
+    offset: usize,
+    limit: usize,
+    keep: impl Fn(i32) -> bool,
+) -> Result<Vec<i32>, SearchError> {
+    if limit == 0 {
         return Ok(Vec::new());
     }
     let total_bytes = fetcher.length(url).await?;
@@ -165,7 +196,7 @@ pub async fn reorder(
             break;
         }
         for id in decode_ids(&chunk) {
-            if allowed.contains(&id) {
+            if keep(id) {
                 matched.push(id);
                 if matched.len() >= wanted {
                     break;
@@ -176,6 +207,22 @@ pub async fn reorder(
     }
 
     Ok(matched.into_iter().skip(offset).collect())
+}
+
+/// 목록에서 숨긴 것을 뺀 개수.
+///
+/// 전체를 훑어야 하므로 목록 하나를 통째로 읽는다. 캐시에 얹히니 페이지를
+/// 넘길 때마다 다시 읽지는 않는다.
+pub async fn count_without(
+    fetcher: &dyn Fetcher,
+    url: &str,
+    hidden: &HashSet<i32>,
+) -> Result<usize, SearchError> {
+    if hidden.is_empty() {
+        return count(fetcher, url).await;
+    }
+    let bytes = all_ids(fetcher, url).await?;
+    Ok(decode_ids(&bytes).into_iter().filter(|id| !hidden.contains(id)).count())
 }
 
 #[cfg(test)]
@@ -239,14 +286,17 @@ mod tests {
         // 목록은 인기순, allowed는 검색 결과라고 하자.
         let f = MockFetcher::with("pop", nozomi(&[5, 9, 1, 7, 3]));
         let allowed: HashSet<i32> = [1, 3, 5].into_iter().collect();
-        assert_eq!(reorder(&f, "pop", &allowed, 0, 10).await.unwrap(), vec![5, 1, 3]);
+        assert_eq!(
+            reorder(&f, "pop", &allowed, &HashSet::new(), 0, 10).await.unwrap(),
+            vec![5, 1, 3]
+        );
     }
 
     #[tokio::test]
     async fn reorder_honours_offset_and_limit() {
         let f = MockFetcher::with("pop", nozomi(&[5, 9, 1, 7, 3]));
         let allowed: HashSet<i32> = [1, 3, 5].into_iter().collect();
-        assert_eq!(reorder(&f, "pop", &allowed, 1, 1).await.unwrap(), vec![1]);
+        assert_eq!(reorder(&f, "pop", &allowed, &HashSet::new(), 1, 1).await.unwrap(), vec![1]);
     }
 
     #[tokio::test]
@@ -257,7 +307,7 @@ mod tests {
         // 맨 앞에 몰려 있는 결과 -> 첫 청크에서 끝나야 한다
         let allowed: HashSet<i32> = (39_990..40_000).collect();
 
-        let got = reorder(&f, "pop", &allowed, 0, 5).await.unwrap();
+        let got = reorder(&f, "pop", &allowed, &HashSet::new(), 0, 5).await.unwrap();
         assert_eq!(got.len(), 5);
         // length 1회 + range 1회. 두 번째 청크까지 갔다면 3회가 된다.
         assert_eq!(f.call_count(), 1, "must not scan past the first chunk");
@@ -266,7 +316,9 @@ mod tests {
     #[tokio::test]
     async fn reorder_with_an_empty_set_does_no_work() {
         let f = MockFetcher::with("pop", nozomi(&[1, 2, 3]));
-        assert!(reorder(&f, "pop", &HashSet::new(), 0, 10).await.unwrap().is_empty());
+        assert!(
+            reorder(&f, "pop", &HashSet::new(), &HashSet::new(), 0, 10).await.unwrap().is_empty()
+        );
         assert_eq!(f.call_count(), 0);
     }
 
@@ -275,5 +327,35 @@ mod tests {
         let f = MockFetcher::with("l", nozomi(&[4, 8, 15]));
         let set = id_set(&f, "l").await.unwrap();
         assert_eq!(set, [4, 8, 15].into_iter().collect());
+    }
+
+    #[tokio::test]
+    async fn what_is_hidden_is_left_out_of_a_reordering() {
+        let f = MockFetcher::with("pop", nozomi(&[5, 4, 1, 3, 2]));
+        let allowed: HashSet<i32> = [1, 3, 5].into_iter().collect();
+        let hidden: HashSet<i32> = [3].into_iter().collect();
+        assert_eq!(reorder(&f, "pop", &allowed, &hidden, 0, 10).await.unwrap(), vec![5, 1]);
+    }
+
+    #[tokio::test]
+    async fn browsing_skips_what_is_hidden_and_still_fills_the_page() {
+        let f = MockFetcher::with("list", nozomi(&[9, 8, 7, 6, 5, 4, 3, 2, 1]));
+        let hidden: HashSet<i32> = [8, 6, 4].into_iter().collect();
+        assert_eq!(
+            page_without(&f, "list", &hidden, 0, 3).await.unwrap(),
+            vec![9, 7, 5],
+            "a page is three works, not three minus the hidden ones"
+        );
+        assert_eq!(page_without(&f, "list", &hidden, 3, 3).await.unwrap(), vec![3, 2, 1]);
+        assert_eq!(count_without(&f, "list", &hidden).await.unwrap(), 6);
+    }
+
+    #[tokio::test]
+    async fn hiding_nothing_reads_only_the_page_asked_for() {
+        let f = MockFetcher::with("list", nozomi(&[9, 8, 7, 6, 5]));
+        assert_eq!(count_without(&f, "list", &HashSet::new()).await.unwrap(), 5);
+        // `count` asks for the length alone; with something hidden it would
+        // have had to read the whole list to know what was left.
+        assert_eq!(f.call_count(), 0, "a length is not a read");
     }
 }

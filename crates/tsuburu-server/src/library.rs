@@ -135,3 +135,27 @@ pub async fn forget_kept_cards(
     state.cards.clear();
     Ok(Json(KeptCards { cards }))
 }
+
+/// Tags the reader never wants to see.
+///
+/// A standing answer rather than one search, so it lives here beside the
+/// favorites and applies to every screen that asks hitomi.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HiddenTags {
+    pub tags: Vec<String>,
+}
+
+pub async fn hidden_tags(State(state): State<Arc<AppState>>) -> Result<Json<HiddenTags>, ApiError> {
+    Ok(Json(HiddenTags { tags: store(&state)?.hidden_tags()? }))
+}
+
+pub async fn set_hidden_tags(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<HiddenTags>,
+) -> Result<Json<HiddenTags>, ApiError> {
+    let tags = store(&state)?.set_hidden_tags(&body.tags)?;
+    // The set of works behind them is resolved once and held; a new list is a
+    // different set.
+    state.forget_hidden().await;
+    Ok(Json(HiddenTags { tags }))
+}
