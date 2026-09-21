@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
-  import { t } from '../lib/i18n.svelte'
+  import { t, type Key } from '../lib/i18n.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -10,6 +10,25 @@
   let bytes = $state(0)
   let error = $state<unknown>(null)
   let loading = $state(true)
+
+  type Order = 'added' | 'title' | 'pages' | 'bytes'
+  let order = $state<Order>('added')
+
+  const ORDERS: { value: Order; key: Key }[] = [
+    { value: 'added', key: 'sort.added' },
+    { value: 'title', key: 'sort.title' },
+    { value: 'pages', key: 'sort.pages' },
+    { value: 'bytes', key: 'downloads.biggest' },
+  ]
+
+  const ordered = $derived.by(() => {
+    const sorted = [...items]
+    if (order === 'title') sorted.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
+    else if (order === 'pages') sorted.sort((a, b) => b.pages - a.pages)
+    else if (order === 'bytes') sorted.sort((a, b) => b.bytes - a.bytes)
+    else sorted.sort((a, b) => b.added_at - a.added_at)
+    return sorted
+  })
 
   $effect(() => {
     void load()
@@ -70,12 +89,24 @@
   {:else if items.length === 0}
     <p class="muted">{t('downloads.empty')}</p>
   {:else}
-    <p class="muted">
-      {items.length === 1 ? t('downloads.work') : t('downloads.works', { n: items.length })}
-      &middot; {t('downloads.onDisk', { size: size(bytes) })}
-    </p>
+    <div class="tidy">
+      <p class="muted">
+        {items.length === 1 ? t('downloads.work') : t('downloads.works', { n: items.length })}
+        &middot; {t('downloads.onDisk', { size: size(bytes) })}
+      </p>
+      {#if items.length > 1}
+        <label class="order">
+          <span>{t('sort.by')}</span>
+          <select bind:value={order}>
+            {#each ORDERS as option (option.value)}
+              <option value={option.value}>{t(option.key)}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
+    </div>
     <Grid>
-      {#each items as item (item.id)}
+      {#each ordered as item (item.id)}
         <div class="entry">
           <Card
             id={item.id}
@@ -108,6 +139,21 @@
 </main>
 
 <style>
+  .tidy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.4rem 1rem;
+  }
+  .order {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--muted);
+    font-size: var(--text-md);
+  }
+
   h1 {
     margin: 0.25rem 0 1rem;
   }

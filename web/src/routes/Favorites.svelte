@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
-  import { t, number } from '../lib/i18n.svelte'
+  import { t, number, type Key } from '../lib/i18n.svelte'
   import { library } from '../lib/library.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -12,6 +12,16 @@
   let artists = $state<api.FollowedArtist[]>([])
   let error = $state<unknown>(null)
   let loading = $state(true)
+
+  type Order = 'added' | 'title' | 'pages'
+  let shelf = $state<string | null | 'all'>('all')
+  let order = $state<Order>('added')
+
+  const ORDERS: { value: Order; key: Key }[] = [
+    { value: 'added', key: 'sort.added' },
+    { value: 'title', key: 'sort.title' },
+    { value: 'pages', key: 'sort.pages' },
+  ]
 
   $effect(() => {
     void load()
@@ -33,7 +43,53 @@
   }
 
   // 별을 끄면 목록에서 바로 사라져야 한다. 서버를 다시 묻지 않고 화면에서 뺀다.
-  const visible = $derived(items.filter((item) => library.has(item.id)))
+  const starred = $derived(items.filter((item) => library.has(item.id)))
+
+  /// The shelves in use, counted from the works on them: there is no folder
+  /// apart from the works that name one, so none is ever left behind empty.
+  const shelves = $derived.by(() => {
+    const counts = new Map<string, number>()
+    for (const item of starred) {
+      if (item.folder) counts.set(item.folder, (counts.get(item.folder) ?? 0) + 1)
+    }
+    return [...counts].sort(([a], [b]) => a.localeCompare(b))
+  })
+  const loose = $derived(starred.filter((item) => !item.folder).length)
+
+  const visible = $derived.by(() => {
+    const picked = starred.filter((item) =>
+      shelf === 'all' ? true : shelf === null ? !item.folder : item.folder === shelf,
+    )
+    const sorted = [...picked]
+    if (order === 'title') {
+      sorted.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
+    } else if (order === 'pages') {
+      sorted.sort((a, b) => b.pages - a.pages)
+    }
+    // `added` is the order the server already sends: newest first.
+    return sorted
+  })
+
+  async function move(item: api.Favorite, to: string | null) {
+    const was = item.folder ?? null
+    // Shown before the server answers, and put back if it refuses.
+    items = items.map((each) => (each.id === item.id ? { ...each, folder: to } : each))
+    try {
+      await api.setFolder(item.id, to)
+    } catch (cause) {
+      items = items.map((each) => (each.id === item.id ? { ...each, folder: was } : each))
+      error = cause
+    }
+  }
+
+  function pick(item: api.Favorite, chosen: string) {
+    if (chosen === '__new__') {
+      const name = prompt(t('folders.name'))?.trim()
+      if (name) void move(item, name)
+      return
+    }
+    void move(item, chosen === '' ? null : chosen)
+  }
 </script>
 
 <AppHeader active="favorites" />
@@ -61,10 +117,56 @@
   {:else if visible.length === 0}
     <p class="count">{t('favorites.empty')}</p>
   {:else}
+    <div class="tidy">
+      <ul class="shelves">
+        <li>
+          <button class:on={shelf === 'all'} onclick={() => (shelf = 'all')}>
+            {t('folders.all')} <span class="count">{starred.length}</span>
+          </button>
+        </li>
+        {#each shelves as [name, works] (name)}
+          <li>
+            <button class:on={shelf === name} onclick={() => (shelf = name)}>
+              {name} <span class="count">{works}</span>
+            </button>
+          </li>
+        {/each}
+        {#if loose > 0 && shelves.length > 0}
+          <li>
+            <button class:on={shelf === null} onclick={() => (shelf = null)}>
+              {t('folders.loose')} <span class="count">{loose}</span>
+            </button>
+          </li>
+        {/if}
+      </ul>
+      <label class="order">
+        <span>{t('sort.by')}</span>
+        <select bind:value={order}>
+          {#each ORDERS as option (option.value)}
+            <option value={option.value}>{t(option.key)}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
+
     <p class="count">{t('favorites.count', { n: visible.length })}</p>
     <Grid>
       {#each visible as item (item.id)}
-        <Card id={item.id} preset={item} />
+        <div class="filed">
+          <Card id={item.id} preset={item} />
+          <select
+            class="shelf"
+            value={item.folder ?? ''}
+            aria-label={t('folders.move', { title: item.title ?? `#${item.id}` })}
+            onchange={(e) => pick(item, e.currentTarget.value)}
+          >
+            <option value="">{t('folders.none')}</option>
+            {#each shelves as [name] (name)}
+              <option value={name}>{name}</option>
+            {/each}
+            <option value="__new__">{t('folders.new')}</option>
+          </select>
+        </div>
       {/each}
     </Grid>
   {/if}
@@ -110,5 +212,56 @@
   .count {
     color: var(--muted);
     margin: 0 0 1rem;
+  }
+
+  .tidy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem 1rem;
+    margin-bottom: 0.9rem;
+  }
+  .shelves {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0;
+    margin: 0;
+  }
+  .shelves button {
+    font-size: var(--text-md);
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    color: var(--muted);
+  }
+  .shelves button.on {
+    color: var(--accent-on);
+    background: var(--accent-solid);
+    border-color: var(--accent-solid);
+  }
+  .shelves .count {
+    margin: 0 0 0 0.2rem;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.75;
+  }
+  .order {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--muted);
+    font-size: var(--text-md);
+  }
+
+  .filed {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .shelf {
+    width: 100%;
+    font-size: var(--text-xs);
+    padding: 0.2rem 0.3rem;
+    color: var(--muted);
   }
 </style>

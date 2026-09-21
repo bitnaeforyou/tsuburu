@@ -159,3 +159,40 @@ pub async fn set_hidden_tags(
     state.forget_hidden().await;
     Ok(Json(HiddenTags { tags }))
 }
+
+// --- folders ---
+//
+// A shelf is only its name and the works that name it, so there is nothing
+// to create and nothing left empty when the last work moves off it.
+
+#[derive(Debug, Serialize)]
+pub struct Folder {
+    pub name: String,
+    pub works: usize,
+}
+
+pub async fn list_folders(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<Folder>>, ApiError> {
+    Ok(Json(
+        store(&state)?.folders()?.into_iter().map(|(name, works)| Folder { name, works }).collect(),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FolderBody {
+    /// Empty or absent takes it off every shelf.
+    #[serde(default)]
+    pub folder: Option<String>,
+}
+
+pub async fn set_folder(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i32>,
+    Json(body): Json<FolderBody>,
+) -> Result<Json<Favorite>, ApiError> {
+    store(&state)?
+        .set_favorite_folder(id, body.folder.as_deref())?
+        .map(Json)
+        .ok_or_else(|| ApiError::bad_request("that work is not in the favorites"))
+}

@@ -63,6 +63,10 @@ pub struct Favorite {
     #[serde(flatten)]
     pub summary: Summary,
     pub added_at: u64,
+    /// Which shelf the reader put it on, if any. One folder per work: a work
+    /// that is in two places is in neither as far as finding it goes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -145,11 +149,12 @@ impl Store {
     pub fn add_favorite(&self, summary: Summary) -> Result<Favorite, StoreError> {
         // 이미 있으면 추가 시각을 유지한다. 다시 누른다고 목록 맨 위로 튀어
         // 오르면 사용자가 정리해둔 순서가 흐트러진다.
-        let added_at = match self.favorite(summary.id)? {
+        let existing = self.favorite(summary.id)?;
+        let added_at = match &existing {
             Some(existing) => existing.added_at,
             None => now_millis(),
         };
-        let favorite = Favorite { summary, added_at };
+        let favorite = Favorite { summary, added_at, folder: existing.and_then(|e| e.folder) };
         self.put(FAVORITES, favorite.summary.id, &favorite)?;
         Ok(favorite)
     }
@@ -167,6 +172,33 @@ impl Store {
         let mut all: Vec<Favorite> = self.list(FAVORITES)?;
         all.sort_unstable_by_key(|f| std::cmp::Reverse(f.added_at));
         Ok(all)
+    }
+
+    /// Moves one onto a shelf, or off every shelf with `None`.
+    ///
+    /// Renaming or emptying a folder is this, done to each work in it: there
+    /// is no folder apart from the works that name one, so none is left
+    /// behind empty.
+    pub fn set_favorite_folder(
+        &self,
+        id: i32,
+        folder: Option<&str>,
+    ) -> Result<Option<Favorite>, StoreError> {
+        let Some(mut favorite) = self.favorite(id)? else { return Ok(None) };
+        favorite.folder = folder.map(str::trim).filter(|f| !f.is_empty()).map(str::to_string);
+        self.put(FAVORITES, id, &favorite)?;
+        Ok(Some(favorite))
+    }
+
+    /// The shelves in use and how much is on each, by name.
+    pub fn folders(&self) -> Result<Vec<(String, usize)>, StoreError> {
+        let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
+        for favorite in self.favorites()? {
+            if let Some(folder) = favorite.folder {
+                *counts.entry(folder).or_default() += 1;
+            }
+        }
+        Ok(counts.into_iter().collect())
     }
 
     // --- 작가 팔로우 ---
@@ -549,6 +581,41 @@ mod tests {
         let store = Store::open(&path).unwrap();
         assert!(store.favorite(42).unwrap().is_some());
         assert_eq!(store.history_entry(42).unwrap().unwrap().last_page, 9);
+    }
+
+    #[test]
+    fn a_favorite_keeps_its_shelf_when_it_is_starred_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().join("test.redb")).unwrap();
+        store.add_favorite(summary(7)).unwrap();
+        store.set_favorite_folder(7, Some("  읽는 중  ")).unwrap();
+        assert_eq!(store.favorite(7).unwrap().unwrap().folder.as_deref(), Some("읽는 중"));
+
+        // Un-starring and starring again is how a reader fixes a misclick;
+        // it should not empty the shelf they put it on.
+        store.add_favorite(summary(7)).unwrap();
+        assert_eq!(store.favorite(7).unwrap().unwrap().folder.as_deref(), Some("읽는 중"));
+
+        store.set_favorite_folder(7, None).unwrap();
+        assert_eq!(store.favorite(7).unwrap().unwrap().folder, None);
+        assert_eq!(store.set_favorite_folder(999, Some("x")).unwrap(), None);
+    }
+
+    #[test]
+    fn folders_are_counted_from_the_works_that_name_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().join("test.redb")).unwrap();
+        for id in [1, 2, 3] {
+            store.add_favorite(summary(id)).unwrap();
+        }
+        store.set_favorite_folder(1, Some("나중에")).unwrap();
+        store.set_favorite_folder(2, Some("나중에")).unwrap();
+        assert_eq!(store.folders().unwrap(), vec![("나중에".to_string(), 2)]);
+
+        // Emptying the last one leaves no folder behind.
+        store.set_favorite_folder(1, Some("")).unwrap();
+        store.set_favorite_folder(2, None).unwrap();
+        assert!(store.folders().unwrap().is_empty());
     }
 
     #[test]

@@ -90,7 +90,8 @@ export type Summary = {
   thumbnail_hash: string | null
 }
 
-export type Favorite = Summary & { added_at: number }
+export type Favorite = Summary & { added_at: number; folder?: string | null }
+export type Folder = { name: string; works: number }
 export type HistoryEntry = Summary & { last_seen_at: number; last_page: number }
 
 export type SearchParams = {
@@ -134,6 +135,16 @@ export function addFavorite(id: number, summary: Omit<Summary, 'id'>): Promise<F
 
 export function removeFavorite(id: number): Promise<{ removed: boolean }> {
   return send('DELETE', `/api/favorites/${id}`)
+}
+
+/// Shelves are only their names and the works that name them, so there is
+/// nothing to create and none is left behind empty.
+export function folders(): Promise<Folder[]> {
+  return request('/api/folders')
+}
+
+export function setFolder(id: number, folder: string | null): Promise<Favorite> {
+  return send('PUT', `/api/favorites/${id}/folder`, { folder })
 }
 
 export type HiddenTags = { tags: string[] }
