@@ -323,17 +323,7 @@
 
 <main>
   <h1>{t('nav.settings')}</h1>
-  {#if status && !status.supported}
-    <div class="panel">
-      <strong>{t('dialogue.unsupported')}</strong>
-      <p class="muted">
-        {status.note
-          ? t('dialogue.unsupportedNote', { note: status.note })
-          : t('dialogue.unsupportedPlain')}
-      </p>
-    </div>
-  {:else}
-    <section class="panel version" class:offer={update?.state === 'found'}>
+  <section class="panel version" class:offer={update?.state === 'found'}>
       <div class="row">
         <div>
           <h2>{t('update.title')}</h2>
@@ -373,6 +363,20 @@
       <p class="muted small">{t('update.here', { version: update?.here ?? '' })}</p>
     </section>
 
+  <!-- Everything below reads dialogue out of pictures, which not every
+       platform can do. The notice replaces those panels alone: an update and
+       a backup are no business of the dialogue's, and hiding them left a
+       phone with a settings screen that was one sentence long. -->
+  {#if status && !status.supported}
+    <div class="panel">
+      <strong>{t('dialogue.unsupported')}</strong>
+      <p class="muted">
+        {status.note
+          ? t('dialogue.unsupportedNote', { note: status.note })
+          : t('dialogue.unsupportedPlain')}
+      </p>
+    </div>
+  {:else}
     <section class="panel switch">
         <div class="row">
           <div>
@@ -742,9 +746,9 @@
         {/if}
       </form>
     </details>
-
-    <Backup />
   {/if}
+
+  <Backup />
 </main>
 
 <style>
