@@ -24,14 +24,6 @@ fn library(state: &AppState) -> Result<&tsuburu_store::Store, ApiError> {
     })
 }
 
-fn meta(state: &AppState) -> Result<&Arc<tsuburu_meta::MetaStore>, ApiError> {
-    state.meta.as_ref().ok_or_else(|| ApiError {
-        error: ErrorKind::Unsupported,
-        message: "no metadata snapshot has been imported (tsuburu import-meta <data.db>)".into(),
-        code: Some("import_meta"),
-    })
-}
-
 #[derive(Debug, Deserialize)]
 pub struct WorksParams {
     #[serde(default)]
@@ -56,18 +48,83 @@ pub struct ArtistResponse {
     pub languages: Vec<(String, usize)>,
 }
 
+/// The languages an artist's page offers to narrow by, when the count has to
+/// come from hitomi rather than the snapshot. One HEAD each, and only the
+/// ones a reader is offered in the first place.
+const LANGUAGES: [&str; 5] = ["korean", "japanese", "english", "chinese", "spanish"];
+
+/// One artist's or one series' works, from hitomi's own lists.
+///
+/// Used when there is no snapshot to ask, which is every phone: hitomi keeps
+/// a list per name per language beside its search index, so the page works
+/// with nothing imported.
+async fn from_hitomi(
+    state: &AppState,
+    namespace: &str,
+    name: &str,
+    params: &WorksParams,
+    limit: usize,
+) -> Result<(usize, Vec<i32>, Vec<(String, usize)>), ApiError> {
+    let language = params.language.as_deref().filter(|l| !l.is_empty()).unwrap_or("all");
+    let url = state.cfg.name_list_url(namespace, name, language);
+    let fetcher = state.fetcher.as_ref();
+    let total = tsuburu_hitomi::nozomi::count(fetcher, &url).await.unwrap_or(0);
+    if total == 0 {
+        return Ok((0, Vec::new(), Vec::new()));
+    }
+    let ids = tsuburu_hitomi::nozomi::page(fetcher, &url, params.offset, limit).await?;
+
+    let mut languages = Vec::new();
+    if params.offset == 0 {
+        for one in LANGUAGES {
+            let url = state.cfg.name_list_url(namespace, name, one);
+            if let Ok(n) = tsuburu_hitomi::nozomi::count(fetcher, &url).await
+                && n > 0
+            {
+                languages.push((one.to_string(), n));
+            }
+        }
+        languages.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    }
+    Ok((total, ids, languages))
+}
+
+/// One series' works. Only hitomi indexes these by name.
+pub async fn series(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Query(params): Query<WorksParams>,
+) -> Result<Json<ArtistResponse>, ApiError> {
+    let name = name.trim().to_lowercase();
+    if name.is_empty() {
+        return Err(ApiError::bad_request("give a series name"));
+    }
+    let limit = params.limit.clamp(1, MAX_LIMIT);
+    let (total, ids, languages) = from_hitomi(&state, "series", &name, &params, limit).await?;
+    Ok(Json(ArtistResponse { name, total, ids, following: false, languages }))
+}
+
 /// One artist's works, newest first.
 pub async fn works(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Query(params): Query<WorksParams>,
 ) -> Result<Json<ArtistResponse>, ApiError> {
-    let meta = Arc::clone(meta(&state)?);
     let name = name.trim().to_lowercase();
     if name.is_empty() {
         return Err(ApiError::bad_request("give an artist name"));
     }
     let limit = params.limit.clamp(1, MAX_LIMIT);
+    let following =
+        state.store.as_ref().and_then(|s| s.follows_artist(&name).ok()).unwrap_or(false);
+
+    // Tapping an artist used to be a dead end wherever no snapshot had been
+    // imported, which is every phone. hitomi lists them itself.
+    let Some(meta) = state.meta.as_ref() else {
+        let (total, ids, languages) = from_hitomi(&state, "artist", &name, &params, limit).await?;
+        return Ok(Json(ArtistResponse { name, total, ids, following, languages }));
+    };
+    let meta = Arc::clone(meta);
     let offset = params.offset;
     let language = params.language.filter(|l| !l.is_empty() && l != "all");
 
@@ -103,8 +160,6 @@ pub async fn works(
     .map_err(|e| storage(&e))?
     .map_err(storage)?;
 
-    let following =
-        state.store.as_ref().and_then(|s| s.follows_artist(&name).ok()).unwrap_or(false);
     Ok(Json(ArtistResponse { name, total: page.total, ids: page.ids, following, languages }))
 }
 

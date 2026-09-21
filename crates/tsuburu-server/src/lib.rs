@@ -39,6 +39,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/history/{id}", put(library::record_progress))
         .route("/api/artists/following", get(artists::following))
         .route("/api/artists/{name}", get(artists::works))
+        .route("/api/series/{name}", get(artists::series))
         .route("/api/artists/{name}/follow", put(artists::follow).delete(artists::unfollow))
         .route("/api/keywords/search", get(keywords::search))
         .route("/api/keywords/{id}", get(keywords::of))

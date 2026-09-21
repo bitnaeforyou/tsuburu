@@ -368,9 +368,30 @@ export function artist(
   limit = 25,
   language?: string,
 ): Promise<ArtistResponse> {
+  return byName('artists', name, offset, limit, language)
+}
+
+/// A series reads the same way an artist does, and comes from the same kind
+/// of list; only hitomi indexes them by name at all.
+export function series(
+  name: string,
+  offset = 0,
+  limit = 25,
+  language?: string,
+): Promise<ArtistResponse> {
+  return byName('series', name, offset, limit, language)
+}
+
+function byName(
+  where: 'artists' | 'series',
+  name: string,
+  offset: number,
+  limit: number,
+  language?: string,
+): Promise<ArtistResponse> {
   const params = new URLSearchParams({ offset: String(offset), limit: String(limit) })
   if (language && language !== 'all') params.set('language', language)
-  return request(`/api/artists/${encodeURIComponent(name)}?${params}`)
+  return request(`/api/${where}/${encodeURIComponent(name)}?${params}`)
 }
 
 export type FollowedArtist = { name: string; works: number; recent: number[] }

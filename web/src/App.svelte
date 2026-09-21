@@ -38,6 +38,8 @@
   <Settings />
 {:else if route.name === 'artist'}
   <Artist artist={route.artist} />
+{:else if route.name === 'series'}
+  <Artist artist={route.series} namespace="series" />
 {:else if route.name === 'downloads'}
   <Downloads />
 {:else if route.name === 'keyword'}

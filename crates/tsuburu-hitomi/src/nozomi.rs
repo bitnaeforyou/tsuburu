@@ -84,6 +84,17 @@ impl Config {
     pub fn type_list_url(&self, kind: &str, language: &str) -> String {
         self.nozomi_url(&format!("type/{kind}-{language}.nozomi"))
     }
+
+    /// One artist's or one series' works, as hitomi itself lists them.
+    ///
+    /// The search index has no `artist:` key - asking it for one finds
+    /// nothing - but these lists exist beside it, one file per name per
+    /// language. The name goes in as written and lowercased, with its spaces
+    /// percent-encoded: `amano-ameno` and `amanoameno` are both 404.
+    pub fn name_list_url(&self, namespace: &str, name: &str, language: &str) -> String {
+        let escaped = name.to_lowercase().replace(' ', "%20");
+        self.nozomi_url(&format!("{namespace}/{escaped}-{language}.nozomi"))
+    }
 }
 
 pub fn decode_ids(bytes: &[u8]) -> Vec<i32> {

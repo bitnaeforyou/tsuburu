@@ -6,7 +6,11 @@
   import Grid from '../lib/Grid.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
 
-  let { artist }: { artist: string } = $props()
+  // A series lists the same way an artist does and comes from the same kind
+  // of list; the only thing an artist has that a series does not is somebody
+  // to follow.
+  let { artist, namespace = 'artist' }: { artist: string; namespace?: 'artist' | 'series' } =
+    $props()
 
   const PAGE = 25
 
@@ -17,7 +21,7 @@
   let error = $state<unknown>(null)
 
   $effect(() => {
-    const key = `${artist}:${language}`
+    const key = `${namespace}:${artist}:${language}`
     void key
     ids = []
     info = null
@@ -28,7 +32,10 @@
     loading = true
     error = null
     try {
-      const page = await api.artist(artist, from, PAGE, language)
+      const page =
+        namespace === 'series'
+          ? await api.series(artist, from, PAGE, language)
+          : await api.artist(artist, from, PAGE, language)
       info = page
       ids = from === 0 ? page.ids : [...ids, ...page.ids]
     } catch (cause) {
@@ -68,7 +75,7 @@
         </p>
       {/if}
     </div>
-    {#if info}
+    {#if info && namespace === 'artist'}
       <button class:on={info.following} onclick={toggleFollow}>
         {info.following ? `★ ${t('artist.following')}` : `☆ ${t('artist.follow')}`}
       </button>
