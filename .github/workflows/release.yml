@@ -124,8 +124,41 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  ios:
+    name: iOS package
+    runs-on: macos-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mobile/src-tauri
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: brew install xcodegen
+      - name: Build the frontend
+        working-directory: web
+        run: npm ci && npm run build
+
+      # Nobody signs this. Whoever wants it signs it with their own Apple ID,
+      # because ours would not work for them and the only way to hand over a
+      # signed app is the paid programme.
+      - name: Build the package
+        working-directory: mobile
+        run: ./build-ios-unsigned.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tsuburu-ios
+          path: mobile/dist/*.ipa
+
   release:
-    needs: [build, image]
+    needs: [build, image, ios]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -208,10 +241,17 @@ jobs:
           | **Mac** (Intel) | `…x86_64-apple-darwin.zip` | double-click `Start tsuburu.command` |
           | **Linux** | `…linux-gnu.tar.gz` | run `start.sh` |
           | **Docker** | `compose.yaml` | `docker compose up -d` |
+          | **iPhone** | `…unsigned.ipa` | sign it yourself, below |
 
           These builds are not signed, so each system warns once the first
           time. Windows: *More info → Run anyway*. macOS: right-click
           `Start tsuburu.command` and choose *Open*.
+
+          The iPhone package is not signed by anybody, because Apple only lets
+          an app be signed by an Apple account and ours would not work for
+          you. Sign it with your own through **AltStore** or **SideStore** on
+          the phone, or **Sideloadly** from a computer. A free Apple ID lasts
+          seven days before it has to be signed again; a paid one lasts a year.
           TAIL
 
       - uses: softprops/action-gh-release@v2
@@ -219,6 +259,7 @@ jobs:
           files: |
             dist/*.zip
             dist/*.tar.gz
+            dist/*.ipa
             dist/compose.yaml
           body_path: notes.md
           generate_release_notes: true
