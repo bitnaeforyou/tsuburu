@@ -105,9 +105,8 @@ jobs:
   image:
     name: container image
     needs: where
-    if: needs.where.outputs.public == 'true'
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: needs.where.outputs.public == 'true' && startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
       packages: write
