@@ -18,7 +18,12 @@ use crate::gallery::GalleryFile;
 use std::collections::HashSet;
 
 /// 실측으로 확인한 썸네일 디렉터리. `webpsmallsmalltn`은 404다.
-const THUMBNAIL_DIR: &str = "avifsmallsmalltn";
+///
+/// `smallsmalltn` is 106x150, which a phone draws at three times its own
+/// pixels and so shows as a blur. `smalltn` is 212x300 for 9.6 KB against
+/// 3.6 KB - a page of twenty-five costs 240 KB rather than 90. `bigtn` is
+/// 453x640 but 26 KB, which is a two-thirds of a megabyte a page.
+const THUMBNAIL_DIR: &str = "avifsmalltn";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ImageError {
@@ -253,7 +258,7 @@ mod tests {
         let url = thumbnail_url(&Config::default(), &gg, HASH).unwrap();
         assert_eq!(
             url,
-            format!("https://atn.gold-usergeneratedcontent.net/avifsmallsmalltn/2/3e/{HASH}.avif")
+            format!("https://atn.gold-usergeneratedcontent.net/avifsmalltn/2/3e/{HASH}.avif")
         );
     }
 
