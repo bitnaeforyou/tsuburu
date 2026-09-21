@@ -177,13 +177,20 @@ jobs:
     needs: key
     if: needs.key.outputs.configured == 'true'
     runs-on: ubuntu-latest
+    env:
+      NDK: 27.1.12297006
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
+      # `tools` is the action's default and no longer exists in the SDK, which
+      # fails the whole step. The NDK comes from here rather than a later
+      # sdkmanager call so the licences are accepted in one place.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools ndk;${{ env.NDK }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
@@ -194,10 +201,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install the NDK
-        run: |
-          sdkmanager --install "ndk;27.1.12297006" >/dev/null
-          echo "NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> "$GITHUB_ENV"
+      - name: Point the build at the NDK
+        run: echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK" >> "$GITHUB_ENV"
 
       - name: Build the frontend
         working-directory: web

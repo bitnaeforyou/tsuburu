@@ -33,6 +33,9 @@ echo "==> dependencies"
 rustup target add aarch64-apple-ios >/dev/null
 
 echo "==> generating the Xcode project"
+# project.yml lists these as source directories, and git does not carry an
+# empty one - so a fresh clone fails spec validation before xcodegen starts.
+mkdir -p src-tauri/gen/apple/Externals src-tauri/gen/apple/assets
 # `ios init` writes project.yml from the Tauri templates, which would take the
 # signing settings below with it, so the project is generated from the
 # project.yml this repository carries instead.
