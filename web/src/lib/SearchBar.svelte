@@ -93,8 +93,10 @@
         </select>
       </label>
     {/if}
-    <!-- The snapshot has no popularity data, so sorting only applies to hitomi. -->
-    {#if params.scope === 'hitomi'}
+    <!-- The snapshot has no popularity data, so sorting is offered wherever
+         hitomi is being asked - which includes asking every source at once,
+         where it was already being honoured but could not be reached. -->
+    {#if params.scope === 'hitomi' || params.scope === 'all'}
       <label>
         <span>{t('search.sort')}</span>
         <select value={params.sort} onchange={(e) => onchange({ sort: e.currentTarget.value as Sort })}>
