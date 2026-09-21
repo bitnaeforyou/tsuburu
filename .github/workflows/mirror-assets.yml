@@ -1,0 +1,68 @@
+name: Mirror assets
+
+# Carries the release assets the mirror cannot build for itself.
+#
+# The Android package has to be signed, and the signing key lives here: a
+# mirrored push takes no secrets with it, and the account that owns the mirror
+# is not the one that holds the key. So it is built and signed here and copied
+# across, the same way the corpus is.
+#
+# Runs itself after a release, and can be run by hand for a tag that went out
+# before this existed.
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release to copy from, e.g. v0.3.8
+        required: true
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Which release
+        id: what
+        env:
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+          FROM_RUN: ${{ github.event.workflow_run.head_branch }}
+          FROM_HAND: ${{ inputs.tag }}
+        run: |
+          tag="${FROM_HAND:-$FROM_RUN}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # A Release run on a branch has no tag to copy, and an unpaired
+          # repository has nowhere to copy it to.
+          case "$tag" in v*) ;; *) echo "go=false" >> "$GITHUB_OUTPUT"; exit 0 ;; esac
+          echo "go=${{ env.MIRROR_REPO != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Take it from here
+        if: steps.what.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.what.outputs.tag }}
+        run: |
+          mkdir -p dist
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*.apk' --dir dist
+          ls -l dist
+
+      - name: Put it there
+        if: steps.what.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+          TAG: ${{ steps.what.outputs.tag }}
+        run: |
+          set -eu
+          # The mirror builds its own release from the same tag and usually
+          # gets there first, but not always - so wait rather than fail.
+          for _ in $(seq 30); do
+            gh release view "$TAG" --repo "$MIRROR_REPO" >/dev/null 2>&1 && break
+            echo "waiting for $TAG on the mirror"
+            sleep 20
+          done
+          gh release upload "$TAG" dist/*.apk --repo "$MIRROR_REPO" --clobber
