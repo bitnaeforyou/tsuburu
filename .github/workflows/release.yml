@@ -354,3 +354,41 @@ jobs:
             dist/compose.yaml
           body_path: notes.md
           generate_release_notes: true
+
+  # The mirror is where people actually download from, and it cannot hold the
+  # signing key: secrets do not travel with a mirrored push, and the account
+  # that owns it is not the one that signs. So the package is built and signed
+  # here and carried across, the same way the corpus is.
+  apk:
+    name: Android package to the mirror
+    needs: [android, release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Is a mirror configured
+        id: mirror
+        env:
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+        run: echo "yes=${{ env.MIRROR_REPO != '' }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        if: steps.mirror.outputs.yes == 'true'
+        with:
+          name: tsuburu-android
+          path: dist
+
+      - name: Put it there
+        if: steps.mirror.outputs.yes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+        run: |
+          set -eu
+          # The mirror builds its own release from the same tag and usually
+          # gets there first, but not always - so wait rather than fail.
+          for _ in $(seq 30); do
+            gh release view "$GITHUB_REF_NAME" --repo "$MIRROR_REPO" >/dev/null 2>&1 && break
+            echo "waiting for $GITHUB_REF_NAME on the mirror"
+            sleep 20
+          done
+          gh release upload "$GITHUB_REF_NAME" dist/*.apk \
+            --repo "$MIRROR_REPO" --clobber
