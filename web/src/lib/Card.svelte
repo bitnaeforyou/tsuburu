@@ -1,7 +1,8 @@
 <script lang="ts">
   import * as api from './api'
   import * as cards from './cards.svelte'
-  import { library } from './library.svelte'
+  import { library, read } from './library.svelte'
+  import { split as splitTag } from './tags'
   import { toGallery } from './router'
   import { t } from './i18n.svelte'
 
@@ -34,11 +35,16 @@
   /// What the work is, in the three words a card has room for. Namespaced
   /// tags say female:/male:; the part after the colon is the word.
   const topTags = $derived(
-    (card?.tags ?? [])
-      .map((tag) => tag.split(':').pop() ?? tag)
-      .filter((tag) => tag.length > 0)
-      .slice(0, 3),
+    (card?.tags ?? []).map(splitTag).filter((tag) => tag.word.length > 0).slice(0, 3),
   )
+
+  /// Given outright by a screen that already has it, looked up otherwise.
+  const readSoFar = $derived(progress ?? read.of(id))
+
+  // Asked once for the whole session, whichever screen gets there first.
+  $effect(() => {
+    if (!progress) void read.load()
+  })
 
   // 갤러리 메타데이터는 한 건에 수십~수백 KB다. 화면에 들어온 카드만 받는다.
   $effect(() => {
@@ -91,9 +97,9 @@
       {:else if failed}
         <span class="placeholder">{t('card.unavailable')}</span>
       {/if}
-      {#if progress && progress.pages > 0}
-        <div class="progress" style:--read={`${((progress.page + 1) / progress.pages) * 100}%`}>
-          <span>{progress.page + 1} / {progress.pages}</span>
+      {#if readSoFar && readSoFar.pages > 0}
+        <div class="progress" style:--read={`${((readSoFar.page + 1) / readSoFar.pages) * 100}%`}>
+          <span>{readSoFar.page + 1} / {readSoFar.pages}</span>
         </div>
       {/if}
     </div>
@@ -106,7 +112,11 @@
       <p class="unlisted" title={t('card.unlistedNote')}>{t('card.unlisted')}</p>
     {/if}
     {#if topTags.length}
-      <p class="tags" title={topTags.join(' · ')}>{topTags.join(' · ')}</p>
+      <p class="tags" title={topTags.map((tag) => tag.word).join(' · ')}>
+        {#each topTags as tag, i (tag.word)}
+          {#if i > 0}<span class="dot">·</span>{/if}<span class={tag.who ?? 'plain'}>{tag.word}</span>
+        {/each}
+      </p>
     {/if}
   </a>
 
@@ -241,4 +251,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .tags .female { color: var(--tag-female); }
+  .tags .male { color: var(--tag-male); }
+  .tags .dot { margin: 0 0.2rem; }
 </style>

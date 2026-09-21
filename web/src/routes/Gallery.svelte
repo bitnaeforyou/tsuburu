@@ -5,6 +5,7 @@
   import ErrorNote from '../lib/ErrorNote.svelte'
   import { library } from '../lib/library.svelte'
   import { toArtist, toGallery, toKeyword, toSearch, toSeries } from '../lib/router'
+  import { split as splitTag } from '../lib/tags'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
   import LocalePicker from '../lib/LocalePicker.svelte'
@@ -292,6 +293,18 @@
           </p>
         {/if}
 
+        <!-- Beside the cover, where the decision to read is made. These used
+             to sit under the page preview, which on a phone is a screen and a
+             half of scrolling away. -->
+        {#if gallery.tags.length}
+          <ul class="tags">
+            {#each gallery.tags as tag (tag)}
+              {@const parsed = splitTag(tag)}
+              <li class={parsed.who ?? 'plain'}>{parsed.word}</li>
+            {/each}
+          </ul>
+        {/if}
+
         <div class="start">
           {#if lastPage !== null}
             <button class="primary" onclick={() => read(lastPage ?? 0)}>
@@ -331,10 +344,6 @@
         onpick={(page) => read(page)}
       />
     </section>
-
-    {#if gallery.tags.length}
-      <p class="tags">{gallery.tags.join(' · ')}</p>
-    {/if}
 
     {#if keywords.length}
       <p class="keywords">
@@ -532,9 +541,27 @@
   }
 
   .tags {
-    color: var(--muted);
-    font-size: var(--text-sm);
+    list-style: none;
+    padding: 0;
     margin: 0 0 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+  .tags li {
+    font-size: var(--text-xs);
+    padding: 0.12rem 0.45rem;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--muted);
+  }
+  .tags li.female {
+    background: var(--tag-female-quiet);
+    color: var(--tag-female);
+  }
+  .tags li.male {
+    background: var(--tag-male-quiet);
+    color: var(--tag-male);
   }
 
   .keywords {

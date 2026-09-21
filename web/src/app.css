@@ -28,6 +28,19 @@
   --red-400: #ec857d;
   --red-700: #a93534;
   --red-950: #4d1a18;
+
+  /* Two hues that exist only to tell one kind of tag from another. Held well
+     away from azure, which means interactive here, and from red, which means
+     destructive - a tag is neither. */
+  --rose-100: #ffe4ec;
+  --rose-400: #f38fb1;
+  --rose-700: #b0044e;
+  --rose-950: #460a22;
+
+  --violet-100: #e7e6fd;
+  --violet-400: #a5a1f5;
+  --violet-700: #4f46c4;
+  --violet-950: #221f5c;
 }
 
 /* Roles. The only tier a component may name.
@@ -55,6 +68,14 @@
      image's own edge rather than as a border the interface put there. */
   --image-edge: #0000001a;
 
+  /* Who a tag is about. hitomi namespaces them `female:` and `male:`, and a
+     reader scanning thirty of them should not have to read the prefix. The
+     rest stay neutral: a colour that means nothing is noise. */
+  --tag-female: var(--rose-700);
+  --tag-female-quiet: var(--rose-100);
+  --tag-male: var(--violet-700);
+  --tag-male-quiet: var(--violet-100);
+
   --radius: 8px;
   --radius-sm: 5px;
   --radius-lg: 12px;
@@ -81,6 +102,10 @@
     --danger-quiet: var(--red-950);
     --focus: var(--azure-400);
     --image-edge: #ffffff1a;
+    --tag-female: var(--rose-400);
+    --tag-female-quiet: var(--rose-950);
+    --tag-male: var(--violet-400);
+    --tag-male-quiet: var(--violet-950);
   }
 }
 
