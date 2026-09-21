@@ -1,0 +1,16 @@
+{
+  "name": "tsuburu-mobile",
+  "version": "0.3.7",
+  "description": "tsuburu on a phone",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "tauri": "tauri"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4"
+  },
+  "private": true
+}
