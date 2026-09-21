@@ -120,7 +120,7 @@
     /* Scrolling reading is all scroll, so the controls have to come with you;
        `--chrome` is how tall the header above them is. */
     position: sticky;
-    top: var(--chrome, 0);
+    top: calc(var(--chrome) + var(--safe-top));
     z-index: 1;
     background: var(--bg);
     padding: 0.5rem 0;

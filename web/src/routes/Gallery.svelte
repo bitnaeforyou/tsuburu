@@ -382,8 +382,8 @@
     display: flex;
     gap: 1rem;
     align-items: center;
-    height: var(--chrome);
-    padding: 0 var(--gutter);
+    height: calc(var(--chrome) + var(--safe-top));
+    padding: var(--safe-top) var(--gutter) 0;
     background: var(--bg);
     border-bottom: 1px solid var(--line);
   }

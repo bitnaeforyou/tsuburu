@@ -105,7 +105,8 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.7rem 1rem;
+    /* Covers the whole window, so it meets the clock strip too. */
+    padding: calc(0.7rem + var(--safe-top)) 1rem 0.7rem;
     border-bottom: 1px solid var(--line);
   }
   header strong {
@@ -120,6 +121,10 @@
   .sheet.inline {
     position: static;
     background: none;
+  }
+  /* In the page rather than over it, so the clock strip is not its problem. */
+  .sheet.inline header {
+    padding-top: 0.7rem;
   }
   .sheet.inline .wall {
     overflow: visible;

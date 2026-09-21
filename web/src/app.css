@@ -101,6 +101,10 @@
    below it knows where the window really begins. */
 :root {
   --chrome: 4rem;
+  /* The strip a phone draws its clock and battery into. Zero on a desktop,
+     and on a phone held sideways. Anything pinned to the top of the window
+     has to start below it. */
+  --safe-top: env(safe-area-inset-top, 0px);
   /* How wide a page gets before it stops growing, and stands in the middle
      of what is left. A window can be three thousand pixels wide; a line of
      text that wide cannot be read, and a grid that wide is a wall. */

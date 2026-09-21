@@ -72,7 +72,10 @@
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 0.7rem var(--gutter);
+    /* The phone draws its clock and battery over the top of the page, so the
+       first row has to start below them. Zero everywhere that has no such
+       strip. */
+    padding: calc(0.7rem + var(--safe-top)) var(--gutter) 0.7rem;
     background: var(--bg);
     border-bottom: 1px solid var(--line);
   }
@@ -123,7 +126,7 @@
      reaches them, and stop eating three rows of the top of every screen. */
   @media (max-width: 640px) {
     header {
-      padding: 0.6rem var(--gutter);
+      padding: calc(0.6rem + var(--safe-top)) var(--gutter) 0.6rem;
       gap: 0.5rem;
     }
 
