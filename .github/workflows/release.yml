@@ -9,8 +9,27 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Which of the pair we are.
+  #
+  # The source is mirrored to a public repository, and GitHub charges nothing
+  # for a public one's runners - a macOS minute on the private side is charged
+  # as ten. So everything that only needs a compiler is built over there, and
+  # this side builds the one thing that cannot be: the Android package, whose
+  # signing key is here and is not going anywhere else.
+  where:
+    runs-on: ubuntu-latest
+    outputs:
+      public: ${{ steps.look.outputs.public }}
+    steps:
+      - id: look
+        env:
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+        run: echo "public=${{ env.MIRROR_REPO == '' }}" >> "$GITHUB_OUTPUT"
+
   build:
     name: ${{ matrix.target }}
+    needs: where
+    if: needs.where.outputs.public == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -85,6 +104,8 @@ jobs:
 
   image:
     name: container image
+    needs: where
+    if: needs.where.outputs.public == 'true'
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -126,8 +147,9 @@ jobs:
 
   ios:
     name: iOS package
+    needs: where
     runs-on: macos-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: needs.where.outputs.public == 'true' && startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -245,10 +267,12 @@ jobs:
     needs: [build, image, ios, android]
     # The Android job is skipped where no key is configured; the release still
     # goes out with everything else.
+    # Each half of the pair skips what the other half builds, so a skipped
+    # job is the normal case and only a failed one stops the release.
     if: >-
       always() && startsWith(github.ref, 'refs/tags/')
-      && needs.build.result == 'success' && needs.image.result == 'success'
-      && needs.ios.result == 'success' && needs.android.result != 'failure'
+      && needs.build.result != 'failure' && needs.image.result != 'failure'
+      && needs.ios.result != 'failure' && needs.android.result != 'failure'
     runs-on: ubuntu-latest
     permissions:
       contents: write

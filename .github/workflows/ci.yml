@@ -20,8 +20,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The same test run costs nothing on the public mirror and is charged here,
+  # so it happens there. This side only decides which side it is.
+  where:
+    runs-on: ubuntu-latest
+    outputs:
+      public: ${{ steps.look.outputs.public }}
+    steps:
+      - id: look
+        env:
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+        run: echo "public=${{ env.MIRROR_REPO == '' }}" >> "$GITHUB_OUTPUT"
+
   test:
     name: test (${{ matrix.os }})
+    needs: where
+    if: needs.where.outputs.public == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
