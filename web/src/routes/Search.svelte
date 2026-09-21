@@ -2,6 +2,7 @@
   import * as api from '../lib/api'
   import { t, number } from '../lib/i18n.svelte'
   import { defaultSearch, galleryNamed, toGallery, toSearch, type SearchState } from '../lib/router'
+  import { remember as rememberSearch } from '../lib/preferences'
   import { library } from '../lib/library.svelte'
   import { markScroll, recall, remember } from '../lib/results.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
@@ -171,6 +172,12 @@
   }
 
   function go(changes: Partial<SearchState>) {
+    // Choosing a language or a kind here says what to read from now on, not
+    // just what to read now: it is remembered, and the address stops carrying
+    // it because it no longer has to.
+    if (changes.language !== undefined || changes.kind !== undefined) {
+      rememberSearch({ language: changes.language, kind: changes.kind })
+    }
     const next = { ...params, ...changes }
     // A number or a hitomi address is the work itself, not something to look
     // for. Searching for it could only ever find nothing.

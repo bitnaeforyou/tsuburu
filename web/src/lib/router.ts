@@ -3,6 +3,8 @@
 // 정렬과 필터도 해시에 담는다. 그래야 뒤로가기와 새로고침, 링크 공유가
 // 사용자가 기대하는 대로 동작한다.
 
+import { preferred } from './preferences'
+
 export type Sort = 'date' | 'today' | 'week' | 'month' | 'year'
 
 export type Scope = 'all' | 'hitomi' | 'local' | 'dialogue'
@@ -32,6 +34,7 @@ export type Route =
   | { name: 'history' }
   | { name: 'settings' }
   | { name: 'artist'; artist: string }
+  | { name: 'series'; series: string }
   | { name: 'downloads' }
   | { name: 'keyword'; word: string }
 
@@ -70,11 +73,13 @@ export function parse(hash: string): Route {
   if (head === '/dialogue') {
     const asked = params.get('q')
     if (!asked) return { name: 'settings' }
-    return { name: 'search', ...defaultSearch, query: asked, scope: 'dialogue' }
+    return { name: 'search', ...defaultSearch, ...preferred, query: asked, scope: 'dialogue' }
   }
   if (head === '/downloads') return { name: 'downloads' }
   const artist = /^\/artist\/(.+)$/.exec(head)
   if (artist) return { name: 'artist', artist: decodeURIComponent(artist[1]) }
+  const series = /^\/series\/(.+)$/.exec(head)
+  if (series) return { name: 'series', series: decodeURIComponent(series[1]) }
   const keyword = /^\/keyword\/(.+)$/.exec(head)
   if (keyword) return { name: 'keyword', word: decodeURIComponent(keyword[1]) }
 
@@ -84,20 +89,24 @@ export function parse(hash: string): Route {
     name: 'search',
     query: params.get('q') ?? '',
     sort: sort && SORTS.includes(sort) ? sort : 'date',
-    language: params.get('language') || 'all',
-    kind: params.get('kind') || 'all',
+    language: params.get('language') || preferred.language,
+    kind: params.get('kind') || preferred.kind,
     scope: asScope(params.get('scope')),
     mode: mode && MODES.includes(mode) ? mode : 'words',
   }
 }
 
 export function toSearch(state: Partial<SearchState> = {}): string {
-  const merged = { ...defaultSearch, ...state }
+  // The reader's usual language and kind stand in for the defaults, so a
+  // bare address means "what I read" rather than "everything".
+  const merged = { ...defaultSearch, ...preferred, ...state }
   const params = new URLSearchParams()
   if (merged.query) params.set('q', merged.query)
   if (merged.sort !== 'date') params.set('sort', merged.sort)
-  if (merged.language !== 'all') params.set('language', merged.language)
-  if (merged.kind !== 'all') params.set('kind', merged.kind)
+  // Against what this reader usually asks for, not against `all`: leaving it
+  // out is what makes the next launch pick the preference back up.
+  if (merged.language !== preferred.language) params.set('language', merged.language)
+  if (merged.kind !== preferred.kind) params.set('kind', merged.kind)
   if (merged.scope !== defaultSearch.scope) params.set('scope', merged.scope)
   if (merged.mode !== defaultSearch.mode) params.set('mode', merged.mode)
   const query = params.toString()
@@ -128,10 +137,11 @@ export function galleryNamed(query: string): number | null {
   return found ? Number(found[1]) : null
 }
 
-/// A series, looked for where series are indexed: the local snapshot. hitomi's
-/// own tag index has no term for one.
+/// A series, on a screen of its own. hitomi's search index has no term for
+/// one, but it keeps a list per name beside it, which is what that screen
+/// reads - so this works with nothing imported.
 export function toSeries(name: string): string {
-  return toSearch({ ...defaultSearch, query: `series:${name}`, scope: 'local' })
+  return `#/series/${encodeURIComponent(name)}`
 }
 
 export function toArtist(name: string): string {
@@ -149,5 +159,5 @@ export function toSettings(): string {
 /// The dialogue is asked for in the one search box like everything else; this
 /// is the address that narrows it to that source.
 export function toDialogue(query = '', mode: Mode = 'words'): string {
-  return toSearch({ ...defaultSearch, query, scope: 'dialogue', mode })
+  return toSearch({ query, scope: 'dialogue', mode })
 }
