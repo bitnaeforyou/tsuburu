@@ -118,10 +118,23 @@ signature has to come from an Apple account:
   ad-hoc distribution against device identifiers collected in advance, or the
   App Store, which this would not pass.
 
-The remaining route is the one sideloading tools take: hand out an `.ipa` and
-let each reader sign it with their own Apple ID through AltStore, SideStore or
-Sideloadly. Building an unsigned `.ipa` needs a signing bypass the Tauri CLI
-does not expose today, so it is not set up here.
+So the package this repository builds is deliberately unsigned, and whoever
+wants it signs it themselves:
+
+```console
+$ ./build-ios-unsigned.sh          # -> dist/tsuburu-<version>-unsigned.ipa
+```
+
+Then AltStore or SideStore on the phone, or Sideloadly from a computer, signs
+it with *your* Apple ID. Nothing of ours is in that signature and no account
+of ours is involved. A free Apple ID lasts seven days before the app stops
+opening and has to be signed again; a paid one lasts a year.
+
+The script stops one step short of what `tauri ios build` would do: the final
+export is what needs a team, so it is allowed to fail and the app is taken
+from the archive the build already wrote. It clears the previous build first,
+so a failure cannot leave the last one behind to be packaged as if it were
+this one.
 
 ## Sizes
 
