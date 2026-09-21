@@ -76,8 +76,52 @@ for Windows and one for tesseract, and Android is none of those, so dialogue
 recognition reports itself unsupported and everything else works. Reading what
 somebody else has already recognised - an imported index - is unaffected.
 
-A release build is `npx tauri android build --target aarch64 --apk`, and comes
-out unsigned; signing it is a keystore this repository does not carry.
+### Signing an Android release
+
+Android will not install an APK with no signature at all, but it does not care
+who signed it: a key you made yourself is what every sideloaded app carries.
+The keystore is not in this repository - losing it means the next version
+cannot replace this one on a phone that has it, so keep a copy somewhere safe.
+
+Making one, once:
+
+```console
+$ keytool -genkeypair -v -keystore tsuburu.jks -alias tsuburu \
+    -keyalg RSA -keysize 4096 -validity 10950
+```
+
+Then, for each release:
+
+```console
+$ npx tauri android build --target aarch64 --apk
+$ zipalign -p -f 4 <the unsigned apk> aligned.apk
+$ apksigner sign --ks tsuburu.jks --ks-key-alias tsuburu \
+    --out tsuburu-<version>.apk aligned.apk
+$ apksigner verify --print-certs tsuburu-<version>.apk
+```
+
+A phone will still warn once, because the key is not one Google knows: allow
+installing from the browser or file manager that handed it over. That is the
+same warning every sideloaded app produces and is not a property of this one.
+
+### Signing an iOS build
+
+There is no equivalent. Apple does not install an unsigned app at all, and the
+signature has to come from an Apple account:
+
+- **A simulator** needs nothing, which is what the build above uses.
+- **Your own phone** needs an Apple ID signed into Xcode. A free one works and
+  the app stops running after seven days; a paid one lasts a year. Set
+  `developmentTeam` under `bundle > iOS` in `tauri.conf.json` - it is left out
+  here because it names whoever built it.
+- **Anybody else's phone** needs the paid Apple Developer Program, and either
+  ad-hoc distribution against device identifiers collected in advance, or the
+  App Store, which this would not pass.
+
+The remaining route is the one sideloading tools take: hand out an `.ipa` and
+let each reader sign it with their own Apple ID through AltStore, SideStore or
+Sideloadly. Building an unsigned `.ipa` needs a signing bypass the Tauri CLI
+does not expose today, so it is not set up here.
 
 ## Sizes
 
