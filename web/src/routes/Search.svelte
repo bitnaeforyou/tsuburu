@@ -172,17 +172,22 @@
   }
 
   function go(changes: Partial<SearchState>) {
-    // Choosing a language or a kind here says what to read from now on, not
-    // just what to read now: it is remembered, and the address stops carrying
-    // it because it no longer has to.
-    if (changes.language !== undefined || changes.kind !== undefined) {
-      rememberSearch({ language: changes.language, kind: changes.kind })
-    }
     const next = { ...params, ...changes }
     // A number or a hitomi address is the work itself, not something to look
     // for. Searching for it could only ever find nothing.
     const named = galleryNamed(next.query)
-    location.hash = named === null ? toSearch(next) : toGallery(named)
+    const to = named === null ? toSearch(next) : toGallery(named)
+
+    // Choosing a language or a kind says what to read from now on, not just
+    // what to read now. Remembered *after* the address is built: an address
+    // leaves out whatever matches the preference, so writing it first made
+    // the new choice the thing being left out - the address came out
+    // identical to the one already showing, nothing navigated, and the
+    // change only appeared after going to another screen and back.
+    if (changes.language !== undefined || changes.kind !== undefined) {
+      rememberSearch({ language: changes.language, kind: changes.kind })
+    }
+    location.hash = to
   }
 
   const hasMore = $derived(params.scope !== 'dialogue' && ids.length < total)
