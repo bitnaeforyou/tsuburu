@@ -3,7 +3,7 @@
   import { untrack } from 'svelte'
   import { t, number } from '../lib/i18n.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
-  import { library } from '../lib/library.svelte'
+  import { library, read as readSoFar } from '../lib/library.svelte'
   import { toArtist, toGallery, toKeyword, toSearch, toSeries } from '../lib/router'
   import { split as splitTag } from '../lib/tags'
   import Card from '../lib/Card.svelte'
@@ -43,9 +43,38 @@
   const favorited = $derived(library.has(id))
   const paged = $derived(reader.settings.layout !== 'scroll')
 
-  // Scrolling has no middle to tap, so there would be no way back out.
+  // Scrolling has no middle to tap, so there would be no way back out of
+  // `bare` there; the chrome gets out of the way by itself instead.
   $effect(() => {
     if (!paged) bare = false
+  })
+
+  /// Whether the bars are out of the way while scrolling down.
+  ///
+  /// A scrolling reader kept the header and the controls pinned to the top
+  /// for the whole work, which on a phone is a third of the window spent
+  /// saying what you are already looking at. They go as you read down and
+  /// come back the moment you go up - no tap target to find, and nothing to
+  /// get stuck in.
+  let tucked = $state(false)
+
+  $effect(() => {
+    if (paged || !reading) {
+      tucked = false
+      return
+    }
+    let last = scrollY
+    const onScroll = () => {
+      const y = scrollY
+      // A drift of a few pixels is not a decision, and the top of a work is
+      // where its title belongs.
+      if (y < 96) tucked = false
+      else if (y - last > 8) tucked = true
+      else if (last - y > 8) tucked = false
+      last = y
+    }
+    addEventListener('scroll', onScroll, { passive: true })
+    return () => removeEventListener('scroll', onScroll)
   })
 
   // Favorites belong to every screen rather than to this work. Loading them
@@ -179,7 +208,11 @@
     const page = current
     if (!gallery || !reading || library.unavailable) return
     const timer = setTimeout(() => {
-      void api.recordProgress(id, page, summary()).catch(() => {})
+      const pages = gallery?.pages.length ?? 0
+      void api
+        .recordProgress(id, page, summary())
+        .then(() => readSoFar.note(id, page, pages))
+        .catch(() => {})
     }, SAVE_DELAY)
     return () => clearTimeout(timer)
   })
@@ -204,7 +237,7 @@
     kind ? t(`kind.${kind}` as 'kind.manga', {}) : null
 </script>
 
-<header class:bare>
+<header class:bare class:tucked>
   <button onclick={back}>&larr; {t('gallery.back')}</button>
   {#if reading}
     <!-- While the pages have the screen, the bar is the only thing left
@@ -240,7 +273,12 @@
          the hint share the window and everything else waits below it. -->
     <div class="screen" class:paged class:bare>
       {#if !bare}
-        <ReaderBar count={gallery.pages.length} bind:current onpages={() => (picking = true)} />
+        <ReaderBar
+          count={gallery.pages.length}
+          bind:current
+          {tucked}
+          onpages={() => (picking = true)}
+        />
       {/if}
       <ReaderView
         pages={gallery.pages}
@@ -398,6 +436,16 @@
   }
   header.bare {
     display: none;
+  }
+  /* Slid rather than removed: taking it out of the flow would pull the page
+     up by its own height on every scroll. */
+  header.tucked {
+    transform: translateY(-100%);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    header {
+      transition: transform 160ms ease-out;
+    }
   }
 
   /* A label on a bar, not the name of the page: it stays a step under the

@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as api from '../lib/api'
   import { t } from '../lib/i18n.svelte'
-  import { library } from '../lib/library.svelte'
+  import { library, read } from '../lib/library.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
@@ -33,6 +33,8 @@
     try {
       await api.clearHistory()
       items = []
+      // The covers on every other screen read from the same list.
+      read.forget()
     } catch (cause) {
       error = cause
     } finally {

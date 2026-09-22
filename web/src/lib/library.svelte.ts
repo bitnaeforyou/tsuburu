@@ -73,6 +73,20 @@ class Read {
   of(id: number) {
     return this.entries.get(id) ?? null
   }
+
+  /// Said as a work is read, so a cover shows where you got to the moment
+  /// you come back to it rather than the next time the program opens.
+  note(id: number, page: number, pages: number) {
+    if (pages <= 0) return
+    const next = new Map(this.entries)
+    next.set(id, { page, pages })
+    this.entries = next
+  }
+
+  /// Said when the history is thrown away.
+  forget() {
+    this.entries = new Map()
+  }
 }
 
 export const read = new Read()
