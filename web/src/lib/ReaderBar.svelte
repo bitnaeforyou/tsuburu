@@ -8,11 +8,16 @@
     count,
     current = $bindable(0),
     onpages,
+    tucked = false,
   }: {
     count: number
     current: number
     /// Asked for the wall of pages. Which page comes back is the caller's.
     onpages?: () => void
+    /// Out of the way while the reader is going down the page. It slides
+    /// rather than being taken out of the flow, or the pages under it would
+    /// jump by its own height every time it went.
+    tucked?: boolean
   } = $props()
 
   const settings = $derived(reader.settings)
@@ -36,7 +41,7 @@
   }
 </script>
 
-<div class="bar">
+<div class="bar" class:tucked>
   <div class="turn" class:rtl>
     <button onclick={() => move(false)} disabled={current === 0}>
       {rtl ? '→' : '←'}
@@ -122,6 +127,11 @@
     position: sticky;
     top: calc(var(--chrome) + var(--safe-top));
     z-index: 1;
+    transition: transform 160ms ease-out;
+  }
+  .bar.tucked {
+    /* The header above it goes at the same time, so it clears both. */
+    transform: translateY(calc(-100% - var(--chrome) - var(--safe-top)));
     background: var(--bg);
     padding: 0.5rem 0;
     margin-bottom: 0.1rem;
@@ -239,6 +249,12 @@
     }
     .check {
       font-size: var(--text-md);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bar {
+      transition: none;
     }
   }
 </style>
