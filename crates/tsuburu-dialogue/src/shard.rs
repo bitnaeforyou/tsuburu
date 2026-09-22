@@ -17,6 +17,14 @@ use std::io::{Read, Write};
 const MAGIC: &[u8; 4] = b"TSDX";
 const VERSION: u16 = 1;
 
+/// How many gallery ids one shard covers. Ids run past four million, so this
+/// keeps the file count in the tens.
+///
+/// Every producer uses this, so a file written from the settings tab and one
+/// written from the command line land on the same boundaries, and a reader
+/// importing both is never handed two shards that half-overlap.
+pub const RANGE: i32 = 100_000;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ShardError {
     #[error("not a tsuburu dialogue shard")]
@@ -28,7 +36,6 @@ pub enum ShardError {
     #[error("shard hash does not match its name")]
     HashMismatch,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShardEntry {
     pub gallery_id: i32,

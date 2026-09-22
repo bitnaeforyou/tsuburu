@@ -250,10 +250,6 @@ pub async fn hunt(
 // machine's work travel to another as a file; how the file travels is the
 // user's business.
 
-/// Galleries per shard file. Ids run past four million, so this keeps the
-/// file count in the tens.
-const SHARD_RANGE: i32 = 100_000;
-
 fn shards_dir(state: &AppState) -> Result<&PathBuf, ApiError> {
     state.shards_dir.as_ref().ok_or_else(|| ApiError {
         error: ErrorKind::Storage,
@@ -303,7 +299,7 @@ pub async fn export(
     std::fs::create_dir_all(&dir).map_err(|e| storage_error(&e))?;
 
     let shards = tokio::task::spawn_blocking(move || {
-        grinder.store().export_shards(SHARD_RANGE, body.background_only)
+        grinder.store().export_shards(tsuburu_dialogue::SHARD_RANGE, body.background_only)
     })
     .await
     .map_err(|e| storage_error(&e))??;

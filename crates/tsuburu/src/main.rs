@@ -61,6 +61,25 @@ enum Command {
     },
     /// `graph.csv`에서 작품별 키워드를 가져온다. 서버를 먼저 끈다.
     ImportKeywords { csv: std::path::PathBuf },
+    /// Writes every recognised page out as `.tsd` shards.
+    ///
+    /// This is how the corpus this project publishes is built. The Settings
+    /// tab has an export too, but that one deliberately leaves out anything
+    /// that came from somebody else's corpus - a reader sharing their own
+    /// reading should not be forwarding work that is not theirs. Building
+    /// the published corpus is the other case: it is that same corpus being
+    /// put back where a reader can reach it.
+    ///
+    /// Stop the server first; the store is held open while it runs.
+    ExportCorpus {
+        /// Where to write them. Created if it is not there.
+        dir: std::path::PathBuf,
+
+        /// Leave out what was indexed on request - history and hunts - which
+        /// is the part that says what somebody read.
+        #[arg(long)]
+        background_only: bool,
+    },
     /// 갤러리 한 편의 메타데이터와 이미지 URL을 출력한다.
     Gallery {
         id: i32,
@@ -122,6 +141,37 @@ async fn main() -> Result<()> {
                 stats.cache_hits,
                 stats.bytes
             );
+        }
+
+        Command::ExportCorpus { dir, background_only } => {
+            let path = tsuburu_store::data_dir()?.join("dialogue.redb");
+            let store = tsuburu_dialogue::DialogueStore::open(&path)
+                .map_err(|e| anyhow::anyhow!("{e} (is the server running? stop it first)"))?;
+            std::fs::create_dir_all(&dir)
+                .with_context(|| format!("could not make {}", dir.display()))?;
+
+            let started = Instant::now();
+            let shards = store
+                .export_shards_with(tsuburu_dialogue::SHARD_RANGE, background_only, true)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+            let mut works = 0usize;
+            let mut bytes = 0usize;
+            for shard in &shards {
+                let encoded = shard.encode().map_err(|e| anyhow::anyhow!("{e}"))?;
+                let name = shard.file_name(&encoded);
+                std::fs::write(dir.join(&name), &encoded)
+                    .with_context(|| format!("could not write {name}"))?;
+                works += shard.entries.len();
+                bytes += encoded.len();
+            }
+            println!(
+                "{} shards, {works} works, {:.0} MB in {:.1}s",
+                shards.len(),
+                bytes as f64 / 1_048_576.0,
+                started.elapsed().as_secs_f64()
+            );
+            println!("{}", dir.display());
         }
 
         Command::ImportArtifact { dir } => {

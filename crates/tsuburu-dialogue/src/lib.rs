@@ -12,7 +12,7 @@ pub mod shard;
 pub mod store;
 
 pub use matcher::{Match, Query};
-pub use shard::{Shard, ShardEntry, ShardError};
+pub use shard::{RANGE as SHARD_RANGE, Shard, ShardEntry, ShardError};
 pub use store::{
     Counts, DialogueError, DialogueStore, Hit, ImportSummary, JobRecord, PageText, Priority,
     Status, Stored, decode_pages, encode_pages,
