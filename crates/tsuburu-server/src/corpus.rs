@@ -111,12 +111,22 @@ impl Corpus {
         let release: Release = serde_json::from_str(&body)
             .map_err(|e| format!("the corpus listing is not what was expected: {e}"))?;
 
-        let shards: Vec<Asset> =
+        let mut shards: Vec<Asset> =
             release.assets.into_iter().filter(|a| a.name.ends_with(".tsd")).collect();
         if shards.is_empty() {
             return Err("the corpus release carries no shards".into());
         }
+        // A name carries the hash of the bytes under it, so one already taken
+        // in names a file already on the disk. Coming back for a corpus that
+        // has grown costs the part that is new and not the rest of it again.
+        let taken = grinder.store().taken_shards().unwrap_or_default();
+        let published = shards.len();
+        shards.retain(|a| !taken.contains(&a.name));
         let total = shards.len();
+        if total == 0 {
+            tracing::info!(published, "the corpus is already here");
+            return Ok(0);
+        }
         tracing::info!(
             total,
             bytes = shards.iter().map(|a| a.size).sum::<u64>(),
@@ -143,6 +153,11 @@ impl Corpus {
                 .map_err(|e| e.to_string())?
                 .map_err(|e| format!("{}: {e}", asset.name))?;
             works += summary.added;
+            // Noted after it is in, never before: a shard that failed to
+            // merge has to be fetched again.
+            if let Err(err) = grinder.store().note_shard(&asset.name) {
+                tracing::debug!(%err, "could not note a shard as taken");
+            }
             self.set(Progress::Fetching { done: done + 1, total, works });
         }
         tracing::info!(works, "the corpus is in");
