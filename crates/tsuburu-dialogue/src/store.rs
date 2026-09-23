@@ -197,10 +197,13 @@ const REMEMBERED: usize = 64;
 
 /// How much of an answer is held for paging through.
 ///
-/// A common phrase matches tens of thousands of works, and holding every one
-/// of them for sixty-four queries would be gigabytes. Twenty pages is further
-/// than anyone reads before narrowing what they asked; past that the count
-/// still says how many there are.
+/// Measured at 122 bytes a hit, most of it the snippet, so five hundred of
+/// them is 60 KB and sixty-four such answers is under four megabytes - next
+/// to nothing beside the store they came out of. The limit is not really
+/// memory: a common phrase matches tens of thousands of works (`괜찮아` is
+/// forty-six thousand), and nobody reads to the end of that. Twenty pages is
+/// further than anyone goes before narrowing what they asked, and past it the
+/// count still says how many there were.
 pub const KEPT: usize = 500;
 
 /// One remembered answer: the generation it was taken at, what was asked, how
