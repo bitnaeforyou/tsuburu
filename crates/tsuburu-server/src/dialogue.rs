@@ -147,7 +147,7 @@ pub async fn search(
     // The scan is CPU work over the whole store; keep it off the runtime.
     let store_grinder = Arc::clone(grinder);
     let query = params.q.clone();
-    let (total, hits) = tokio::task::spawn_blocking(move || {
+    let found = tokio::task::spawn_blocking(move || {
         store_grinder.store().search_page(&query, offset, limit)
     })
     .await
@@ -157,9 +157,9 @@ pub async fn search(
         code: None,
     })??;
     Ok(Json(SearchResponse {
-        hits,
-        total,
-        reachable: total.min(tsuburu_dialogue::REACHABLE),
+        hits: found.hits,
+        total: found.total,
+        reachable: found.reachable,
         counts: grinder.store().counts()?,
     }))
 }

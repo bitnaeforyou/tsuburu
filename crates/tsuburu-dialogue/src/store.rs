@@ -195,19 +195,38 @@ pub struct Hit {
 /// answer is a couple of dozen short rows.
 const REMEMBERED: usize = 64;
 
-/// How much of an answer is held for paging through.
+/// How much memory the held answers may take between them.
 ///
-/// Measured at 122 bytes a hit, most of it the snippet, so five hundred of
-/// them is 60 KB and sixty-four such answers is under four megabytes - next
-/// to nothing beside the store they came out of. The limit is not really
-/// memory: a common phrase matches tens of thousands of works (`괜찮아` is
-/// forty-six thousand), and nobody reads to the end of that. Twenty pages is
-/// further than anyone goes before narrowing what they asked, and past it the
-/// count still says how many there were.
-pub const KEPT: usize = 500;
+/// Counting answers rather than their size was the wrong shape: a hit is
+/// about two hundred bytes, so five hundred of them is a tenth of a
+/// megabyte, and stopping there had nothing to do with what it cost. A
+/// budget lets a common phrase be paged to its end - `괜찮아` matches
+/// forty-six thousand works and fits in nine megabytes - while a run of
+/// heavy questions still cannot grow without bound.
+const BUDGET: usize = 48 * 1024 * 1024;
+
+/// What a phrase matched: how many works said it, how many of those this
+/// machine can hand back, and the page asked for.
+///
+/// `reachable` is usually `total`; it is less only where one answer would
+/// take more memory than the budget allows, and then the phrase wants
+/// narrowing rather than another page.
+#[derive(Debug, Default)]
+pub struct Found {
+    pub total: usize,
+    pub reachable: usize,
+    pub hits: Vec<Hit>,
+}
+
+/// What one hit costs to hold: its own fields, and the lines it quotes.
+fn weight(hit: &Hit) -> usize {
+    size_of::<Hit>()
+        + hit.snippet.iter().map(|line| line.len() + size_of::<String>()).sum::<usize>()
+        + hit.also.len() * size_of::<i32>()
+}
 
 /// One remembered answer: the generation it was taken at, what was asked, how
-/// many matched in all, and the first `KEPT` of them.
+/// many matched in all, and as many of them as the budget had room for.
 type Answer = (u64, String, usize, Vec<Hit>);
 
 pub struct DialogueStore {
@@ -336,6 +355,19 @@ impl DialogueStore {
         answers.retain(|(at, q, _, _)| *at == now && q != query);
         answers.insert(0, (now, query.to_string(), total, hits.to_vec()));
         answers.truncate(REMEMBERED);
+
+        // Oldest first, until what is left fits. The newest answer is the one
+        // being paged through, so it is the last thing to go.
+        let mut held = 0usize;
+        let mut keep = answers.len();
+        for (at, answer) in answers.iter().enumerate() {
+            held += answer.3.iter().map(weight).sum::<usize>();
+            if held > BUDGET {
+                keep = (at + 1).max(1);
+                break;
+            }
+        }
+        answers.truncate(keep);
     }
 
     // --- shards already taken in ---
@@ -976,7 +1008,7 @@ impl DialogueStore {
     /// Scans every stored gallery across all cores. Returns the best page
     /// per gallery, best galleries first, at most `limit`.
     pub fn search(&self, asked: &str, limit: usize) -> Result<Vec<Hit>, DialogueError> {
-        Ok(self.search_page(asked, 0, limit)?.1)
+        Ok(self.search_page(asked, 0, limit)?.hits)
     }
 
     /// One page of what a phrase matches, and how many it matches in all.
@@ -993,13 +1025,15 @@ impl DialogueStore {
         asked: &str,
         offset: usize,
         limit: usize,
-    ) -> Result<(usize, Vec<Hit>), DialogueError> {
-        let page = |total: usize, kept: Vec<Hit>| {
-            (total, kept.into_iter().skip(offset).take(limit).collect::<Vec<_>>())
+    ) -> Result<Found, DialogueError> {
+        let page = |total: usize, kept: Vec<Hit>| Found {
+            total,
+            reachable: kept.len(),
+            hits: kept.into_iter().skip(offset).take(limit).collect(),
         };
         let query = Query::new(asked);
         if query.is_empty() || limit == 0 {
-            return Ok((0, Vec::new()));
+            return Ok(Found::default());
         }
         if let Some((total, kept)) = self.remembered(asked) {
             return Ok(page(total, kept));
@@ -1009,7 +1043,7 @@ impl DialogueStore {
         // id span; otherwise most threads finish early and one does the work.
         let keys = self.search_keys()?;
         if keys.is_empty() {
-            return Ok((0, Vec::new()));
+            return Ok(Found::default());
         }
         let threads =
             std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 16);
@@ -1052,7 +1086,17 @@ impl DialogueStore {
         });
         let mut hits = collapse_duplicates(hits);
         let total = hits.len();
-        hits.truncate(KEPT);
+        // One answer never takes more than the whole budget, however many
+        // works said it.
+        let mut room = BUDGET;
+        let fits = hits
+            .iter()
+            .take_while(|hit| {
+                room = room.saturating_sub(weight(hit));
+                room > 0
+            })
+            .count();
+        hits.truncate(fits.max(1).min(total));
         self.remember(asked, total, &hits);
         Ok(page(total, hits))
     }
@@ -1626,20 +1670,20 @@ mod tests {
         for id in 1..=7 {
             store.complete(id, &[page(0, &format!("안녕하세요 {id}번 손님"))]).unwrap();
         }
-        let (total, first) = store.search_page("안녕하세요", 0, 3).unwrap();
-        assert_eq!(total, 7, "seven works said it");
-        assert_eq!(first.len(), 3);
+        let first = store.search_page("안녕하세요", 0, 3).unwrap();
+        assert_eq!(first.total, 7, "seven works said it");
+        assert_eq!(first.reachable, 7, "and all seven can be paged to");
+        assert_eq!(first.hits.len(), 3);
 
-        let (again, second) = store.search_page("안녕하세요", 3, 3).unwrap();
-        assert_eq!(again, 7);
-        assert_eq!(second.len(), 3);
+        let second = store.search_page("안녕하세요", 3, 3).unwrap();
+        assert_eq!(second.total, 7);
+        assert_eq!(second.hits.len(), 3);
         let seen: std::collections::HashSet<i32> =
-            first.iter().chain(second.iter()).map(|h| h.gallery_id).collect();
+            first.hits.iter().chain(second.hits.iter()).map(|h| h.gallery_id).collect();
         assert_eq!(seen.len(), 6, "the second page is not the first one again");
 
-        let (_, last) = store.search_page("안녕하세요", 6, 3).unwrap();
-        assert_eq!(last.len(), 1);
-        assert!(store.search_page("안녕하세요", 99, 3).unwrap().1.is_empty());
+        assert_eq!(store.search_page("안녕하세요", 6, 3).unwrap().hits.len(), 1);
+        assert!(store.search_page("안녕하세요", 99, 3).unwrap().hits.is_empty());
     }
 
     /// Storing anything makes what was kept stale, answers and keys alike.
