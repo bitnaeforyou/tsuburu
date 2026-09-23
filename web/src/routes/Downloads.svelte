@@ -5,10 +5,11 @@
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
+  import { keepScroll } from '../lib/keepScroll.svelte'
   import ViewToggle from '../lib/ViewToggle.svelte'
   import Shelves from '../lib/Shelves.svelte'
   import ShelfPicker from '../lib/ShelfPicker.svelte'
-  import { onShelf, shelvesOf, type Picked } from '../lib/folders'
+  import { onShelf, type Picked } from '../lib/folders'
 
   let items = $state<api.DownloadItem[]>([])
   let bytes = $state(0)
@@ -19,7 +20,8 @@
   let order = $state<Order>('added')
   let shelf = $state<Picked>('all')
 
-  const shelfNames = $derived(shelvesOf(items).map(([name]) => name))
+  let shelves = $state<api.Folder[]>([])
+  const shelfNames = $derived(shelves.map((shelf) => shelf.name))
 
   async function move(id: number, to: string | null) {
     const was = items.find((each) => each.id === id)?.folder ?? null
@@ -27,6 +29,8 @@
     items = items.map((each) => (each.id === id ? { ...each, folder: to } : each))
     try {
       await api.setFolder(id, to)
+      // Filing on a shelf nobody made makes the shelf; the counts move too.
+      shelves = await api.folders().catch(() => shelves)
     } catch (cause) {
       items = items.map((each) => (each.id === id ? { ...each, folder: was } : each))
       error = cause
@@ -49,6 +53,9 @@
     return sorted
   })
 
+  // Coming back out of a work should land where the list was left.
+  $effect(() => keepScroll('downloads', () => ordered.length > 0))
+
   $effect(() => {
     void load()
     // A running job changes what is on disk; keep the bars honest.
@@ -63,6 +70,7 @@
       const list = await api.downloads()
       items = list.items
       bytes = list.bytes
+      shelves = await api.folders().catch(() => [])
       error = null
     } catch (cause) {
       error = cause
@@ -108,7 +116,7 @@
   {:else if items.length === 0}
     <p class="muted">{t('downloads.empty')}</p>
   {:else}
-    <Shelves works={items} bind:picked={shelf} />
+    <Shelves works={items} {shelves} bind:picked={shelf} onchange={(next) => (shelves = next)} />
     <div class="tidy">
       <p class="muted">
         {items.length === 1 ? t('downloads.work') : t('downloads.works', { n: items.length })}

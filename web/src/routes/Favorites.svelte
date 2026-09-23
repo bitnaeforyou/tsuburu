@@ -6,11 +6,12 @@
   import Grid from '../lib/Grid.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
+  import { keepScroll } from '../lib/keepScroll.svelte'
   import ViewToggle from '../lib/ViewToggle.svelte'
   import { toArtist } from '../lib/router'
   import Shelves from '../lib/Shelves.svelte'
   import ShelfPicker from '../lib/ShelfPicker.svelte'
-  import { onShelf, shelvesOf, type Picked } from '../lib/folders'
+  import { onShelf, type Picked } from '../lib/folders'
 
   let items = $state<api.Favorite[]>([])
   let artists = $state<api.FollowedArtist[]>([])
@@ -27,6 +28,9 @@
     { value: 'pages', key: 'sort.pages' },
   ]
 
+  // Coming back out of a work should land where the list was left.
+  $effect(() => keepScroll('favorites', () => visible.length > 0))
+
   $effect(() => {
     void load()
   })
@@ -37,6 +41,9 @@
     try {
       const [{ items: favorites }] = await Promise.all([api.favorites(), library.load()])
       items = favorites
+      // The shelves are the library's, not this list's: one with nothing on
+      // it is still a shelf.
+      shelves = await api.folders().catch(() => [])
       // Following is disabled without a snapshot; an empty list is fine.
       artists = await api.followedArtists().catch(() => [])
     } catch (cause) {
@@ -49,7 +56,8 @@
   // 별을 끄면 목록에서 바로 사라져야 한다. 서버를 다시 묻지 않고 화면에서 뺀다.
   const starred = $derived(items.filter((item) => library.has(item.id)))
 
-  const shelfNames = $derived(shelvesOf(starred).map(([name]) => name))
+  let shelves = $state<api.Folder[]>([])
+  const shelfNames = $derived(shelves.map((shelf) => shelf.name))
 
   const visible = $derived.by(() => {
     const sorted = [...onShelf(starred, shelf)]
@@ -68,6 +76,8 @@
     items = items.map((each) => (each.id === id ? { ...each, folder: to } : each))
     try {
       await api.setFolder(id, to)
+      // Filing on a shelf nobody made makes the shelf; the counts move too.
+      shelves = await api.folders().catch(() => shelves)
     } catch (cause) {
       items = items.map((each) => (each.id === id ? { ...each, folder: was } : each))
       error = cause
@@ -101,7 +111,7 @@
     <p class="count">{t('favorites.empty')}</p>
   {:else}
     <div class="tidy">
-      <Shelves works={starred} bind:picked={shelf} />
+      <Shelves works={starred} {shelves} bind:picked={shelf} onchange={(next) => (shelves = next)} />
       <div class="how">
         <ViewToggle />
         <label class="order">

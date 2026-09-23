@@ -224,6 +224,10 @@ impl Store {
     /// behind empty.
     pub fn set_folder(&self, id: i32, folder: Option<&str>) -> Result<Option<String>, StoreError> {
         let folder = folder.map(str::trim).filter(|f| !f.is_empty());
+        // Filing something on a shelf nobody made makes the shelf.
+        if let Some(name) = folder {
+            self.add_folder(name)?;
+        }
         let tx = self.db.begin_write().map_err(db_err)?;
         {
             let mut t = tx.open_table(FOLDERS).map_err(db_err)?;
@@ -258,13 +262,86 @@ impl Store {
         Ok(out)
     }
 
-    /// The shelves in use and how much is on each, by name.
+    /// The shelves there are, and how much is on each.
+    ///
+    /// A shelf exists because the reader made one, not because something is
+    /// on it: emptying it leaves it there to put the next thing on.
     pub fn folders(&self) -> Result<Vec<(String, usize)>, StoreError> {
         let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
+        for name in self.declared_folders()? {
+            counts.entry(name).or_default();
+        }
         for name in self.folder_map()?.into_values() {
             *counts.entry(name).or_default() += 1;
         }
         Ok(counts.into_iter().collect())
+    }
+
+    fn declared_folders(&self) -> Result<Vec<String>, StoreError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let Ok(t) = tx.open_table(META) else { return Ok(Vec::new()) };
+        match t.get("folders").map_err(db_err)? {
+            Some(v) => Ok(serde_json::from_str(v.value())?),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    fn declare_folders(&self, names: &[String]) -> Result<(), StoreError> {
+        let json = serde_json::to_string(names)?;
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut t = tx.open_table(META).map_err(db_err)?;
+            t.insert("folders", json.as_str()).map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(())
+    }
+
+    /// Makes an empty shelf, so a reader can set up where things go before
+    /// deciding what goes there.
+    pub fn add_folder(&self, name: &str) -> Result<bool, StoreError> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Ok(false);
+        }
+        let mut names = self.declared_folders()?;
+        if names.iter().any(|held| held == name) {
+            return Ok(false);
+        }
+        names.push(name.to_string());
+        self.declare_folders(&names)?;
+        Ok(true)
+    }
+
+    /// Takes a shelf away, and everything off it. The works stay.
+    pub fn remove_folder(&self, name: &str) -> Result<(), StoreError> {
+        let mut names = self.declared_folders()?;
+        names.retain(|held| held != name);
+        self.declare_folders(&names)?;
+        for (id, on) in self.folder_map()? {
+            if on == name {
+                self.set_folder(id, None)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Calls a shelf something else, taking everything on it along.
+    pub fn rename_folder(&self, from: &str, to: &str) -> Result<bool, StoreError> {
+        let to = to.trim();
+        if to.is_empty() || from == to {
+            return Ok(false);
+        }
+        let mut names = self.declared_folders()?;
+        names.retain(|held| held != from && held != to);
+        names.push(to.to_string());
+        self.declare_folders(&names)?;
+        for (id, on) in self.folder_map()? {
+            if on == from {
+                self.set_folder(id, Some(to))?;
+            }
+        }
+        Ok(true)
     }
 
     // --- 작가 팔로우 ---
@@ -671,6 +748,46 @@ mod tests {
     }
 
     #[test]
+    fn a_shelf_outlives_the_last_thing_on_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.redb");
+        {
+            let store = Store::open(&path).unwrap();
+            assert!(store.add_folder("나중에").unwrap());
+            assert!(!store.add_folder("  나중에  ").unwrap(), "the same shelf once");
+            assert!(!store.add_folder("   ").unwrap(), "a shelf needs a name");
+            assert_eq!(store.folders().unwrap(), vec![("나중에".to_string(), 0)]);
+
+            store.set_folder(5, Some("나중에")).unwrap();
+            assert_eq!(store.folders().unwrap(), vec![("나중에".to_string(), 1)]);
+
+            // Taking the last thing off does not take the shelf with it.
+            store.set_folder(5, None).unwrap();
+            assert_eq!(store.folders().unwrap(), vec![("나중에".to_string(), 0)]);
+        }
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.folders().unwrap(), vec![("나중에".to_string(), 0)]);
+    }
+
+    #[test]
+    fn a_shelf_can_be_renamed_and_taken_away() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().join("test.redb")).unwrap();
+        store.set_folder(1, Some("읽는 중")).unwrap();
+        store.set_folder(2, Some("읽는 중")).unwrap();
+
+        assert!(store.rename_folder("읽는 중", "읽음").unwrap());
+        assert_eq!(store.folders().unwrap(), vec![("읽음".to_string(), 2)]);
+        assert_eq!(store.folder(1).unwrap().as_deref(), Some("읽음"));
+        assert!(!store.rename_folder("읽음", "  ").unwrap(), "a shelf needs a name");
+
+        store.remove_folder("읽음").unwrap();
+        assert!(store.folders().unwrap().is_empty());
+        assert_eq!(store.folder(1).unwrap(), None, "the work stays, off every shelf");
+        assert!(store.favorites().unwrap().is_empty());
+    }
+
+    #[test]
     fn folders_are_counted_from_the_works_that_name_them() {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(dir.path().join("test.redb")).unwrap();
@@ -678,10 +795,10 @@ mod tests {
         store.set_folder(2, Some("나중에")).unwrap();
         assert_eq!(store.folders().unwrap(), vec![("나중에".to_string(), 2)]);
 
-        // Emptying the last one leaves no folder behind.
+        // Emptying it leaves the shelf, with nothing on it.
         store.set_folder(1, Some("")).unwrap();
         store.set_folder(2, None).unwrap();
-        assert!(store.folders().unwrap().is_empty());
+        assert_eq!(store.folders().unwrap(), vec![("나중에".to_string(), 0)]);
     }
 
     #[test]

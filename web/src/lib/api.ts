@@ -143,6 +143,20 @@ export function folders(): Promise<Folder[]> {
   return request('/api/folders')
 }
 
+/// A shelf exists because the reader made one, not because something is on
+/// it: emptying one leaves it there for the next thing.
+export function addFolder(name: string): Promise<Folder[]> {
+  return send('POST', '/api/folders', { name })
+}
+
+export function renameFolder(name: string, to: string): Promise<Folder[]> {
+  return send('POST', '/api/folders', { name, to })
+}
+
+export function removeFolder(name: string): Promise<Folder[]> {
+  return send('DELETE', `/api/folders/name/${encodeURIComponent(name)}`)
+}
+
 /// Addressed by the work: the downloads screen files the same works, and a
 /// work can be filed without being starred at all.
 export function setFolder(id: number, folder: string | null): Promise<Filed> {

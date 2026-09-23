@@ -19,7 +19,7 @@ pub mod state;
 pub mod update;
 
 use axum::Router;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
@@ -35,7 +35,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/gallery/{id}", get(api::gallery))
         .route("/api/favorites", get(library::list_favorites))
         .route("/api/favorites/{id}", put(library::add_favorite).delete(library::remove_favorite))
-        .route("/api/folders", get(library::list_folders))
+        .route("/api/folders", get(library::list_folders).post(library::add_folder))
+        .route("/api/folders/name/{name}", delete(library::remove_folder))
         .route("/api/folders/{id}", put(library::set_folder))
         .route("/api/history", get(library::list_history).delete(library::clear_history))
         .route("/api/kept", get(library::kept_cards).delete(library::forget_kept_cards))

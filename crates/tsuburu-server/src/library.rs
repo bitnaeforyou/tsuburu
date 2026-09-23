@@ -174,9 +174,7 @@ pub struct Folder {
 pub async fn list_folders(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<Folder>>, ApiError> {
-    Ok(Json(
-        store(&state)?.folders()?.into_iter().map(|(name, works)| Folder { name, works }).collect(),
-    ))
+    folders_of(store(&state)?)
 }
 
 #[derive(Debug, Deserialize)]
@@ -204,4 +202,40 @@ pub async fn set_folder(
 ) -> Result<Json<Filed>, ApiError> {
     let folder = store(&state)?.set_folder(id, body.folder.as_deref())?;
     Ok(Json(Filed { id, folder }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FolderName {
+    pub name: String,
+    /// Given when the shelf is being called something else.
+    #[serde(default)]
+    pub to: Option<String>,
+}
+
+/// Makes an empty shelf, so a reader can set up where things go before
+/// deciding what goes there.
+pub async fn add_folder(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<FolderName>,
+) -> Result<Json<Vec<Folder>>, ApiError> {
+    let store = store(&state)?;
+    match body.to {
+        Some(to) => store.rename_folder(&body.name, &to)?,
+        None => store.add_folder(&body.name)?,
+    };
+    folders_of(store)
+}
+
+/// Takes a shelf away, and everything off it. The works stay.
+pub async fn remove_folder(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<Json<Vec<Folder>>, ApiError> {
+    let store = store(&state)?;
+    store.remove_folder(&name)?;
+    folders_of(store)
+}
+
+fn folders_of(store: &Store) -> Result<Json<Vec<Folder>>, ApiError> {
+    Ok(Json(store.folders()?.into_iter().map(|(name, works)| Folder { name, works }).collect()))
 }
