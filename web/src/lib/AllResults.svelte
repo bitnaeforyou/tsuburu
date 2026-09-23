@@ -56,7 +56,7 @@
   async function loadDialogue(signal: AbortSignal) {
     try {
       // One more than shown, purely to know whether to say "at least".
-      const found = await api.dialogueSearch(params.query, DIALOGUE_PREVIEW + 1, signal)
+      const found = await api.dialogueSearch(params.query, 0, DIALOGUE_PREVIEW + 1, signal)
       dialogue = {
         state: 'done',
         total: Math.min(found.hits.length, DIALOGUE_PREVIEW),

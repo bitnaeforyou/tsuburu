@@ -266,12 +266,23 @@ export function updateGrinder(settings: GrinderSettings): Promise<GrinderSetting
   return send('PUT', '/api/dialogue/settings', settings)
 }
 
+export type DialoguePage = {
+  hits: DialogueHit[]
+  /// How many works said it.
+  total: number
+  /// How far into that a reader can page. Past it the phrase wants
+  /// narrowing rather than another page.
+  reachable: number
+  counts: Counts
+}
+
 export function dialogueSearch(
   q: string,
+  offset = 0,
   limit = 25,
   signal?: AbortSignal,
-): Promise<{ hits: DialogueHit[]; counts: Counts }> {
-  const params = new URLSearchParams({ q, limit: String(limit) })
+): Promise<DialoguePage> {
+  const params = new URLSearchParams({ q, offset: String(offset), limit: String(limit) })
   return request(`/api/dialogue/search?${params}`, { signal })
 }
 

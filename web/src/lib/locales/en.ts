@@ -84,6 +84,7 @@ export const en = {
   'search.scopeHitomi': 'hitomi tags',
   'search.scopeDialogue': 'Dialogue',
   'search.scopeLocal': 'local titles & artists',
+  'search.beyondPaging': 'Showing the first {n} of {total}. Narrow the phrase to reach the rest.',
   'search.filters': 'Filters',
   'search.sort': 'Sort',
   'search.sortDate': 'Newest',

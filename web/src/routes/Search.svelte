@@ -27,6 +27,8 @@
   let offset = $state(0)
 
   let hits = $state<api.DialogueHit[]>([])
+  /// How far into the dialogue's total a reader can actually page.
+  let reachable = $state(0)
   let controller: AbortController | null = null
   let localAvailable = $state(false)
   let dialogueAvailable = $state(false)
@@ -73,6 +75,7 @@
     terms = []
     hits = []
     total = 0
+    reachable = 0
     offset = 0
     error = null
     if (sectioned) return
@@ -132,9 +135,11 @@
         total = hits.length
         return
       } else if (params.scope === 'dialogue') {
-        const found = await api.dialogueSearch(params.query, 50, controller.signal)
-        hits = found.hits
-        total = found.hits.length
+        const found = await api.dialogueSearch(params.query, from, PAGE, controller.signal)
+        hits = from === 0 ? found.hits : [...hits, ...found.hits]
+        total = found.total
+        reachable = found.reachable
+        offset = from + found.hits.length
         return
       }
       if (params.scope === 'local') {
@@ -190,7 +195,14 @@
     location.hash = to
   }
 
-  const hasMore = $derived(params.scope !== 'dialogue' && ids.length < total)
+  const hasMore = $derived(
+    params.scope === 'dialogue' ? hits.length < reachable : ids.length < total,
+  )
+  /// Said when there are more than paging can reach: the phrase is the thing
+  /// to change, not the page.
+  const beyondPaging = $derived(
+    params.scope === 'dialogue' && hits.length >= reachable && total > reachable,
+  )
   const filtering = $derived(
     params.language !== defaultSearch.language || params.kind !== defaultSearch.kind,
   )
@@ -243,6 +255,9 @@
          that the corpus is not in yet. -->
     <CorpusOffer />
     <DialogueHitList {hits} />
+    {#if beyondPaging}
+      <p class="count">{t('search.beyondPaging', { n: number(reachable), total: number(total) })}</p>
+    {/if}
   {:else}
     <Grid>
       {#each ids as id (id)}

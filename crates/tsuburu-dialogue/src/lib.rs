@@ -13,6 +13,7 @@ pub mod store;
 
 pub use matcher::{Match, Query};
 pub use shard::{RANGE as SHARD_RANGE, Shard, ShardEntry, ShardError};
+pub use store::KEPT as REACHABLE;
 pub use store::{
     Counts, DialogueError, DialogueStore, Hit, ImportSummary, JobRecord, PageText, Priority,
     Status, Stored, decode_pages, encode_pages,

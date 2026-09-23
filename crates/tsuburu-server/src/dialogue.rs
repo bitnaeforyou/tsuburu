@@ -113,6 +113,8 @@ pub async fn update_settings(
 pub struct SearchParams {
     #[serde(default)]
     pub q: String,
+    #[serde(default)]
+    pub offset: usize,
     #[serde(default = "default_limit")]
     pub limit: usize,
 }
@@ -124,6 +126,11 @@ fn default_limit() -> usize {
 #[derive(Debug, Serialize)]
 pub struct SearchResponse {
     pub hits: Vec<Hit>,
+    /// How many works said it, which is usually more than one page of them.
+    pub total: usize,
+    /// How far into that total a reader can actually go. Past it the phrase
+    /// wants narrowing rather than paging.
+    pub reachable: usize,
     pub counts: Counts,
 }
 
@@ -136,17 +143,25 @@ pub async fn search(
         return Err(ApiError::bad_request("give a phrase to look for"));
     }
     let limit = params.limit.clamp(1, MAX_RESULTS);
+    let offset = params.offset;
     // The scan is CPU work over the whole store; keep it off the runtime.
     let store_grinder = Arc::clone(grinder);
     let query = params.q.clone();
-    let hits = tokio::task::spawn_blocking(move || store_grinder.store().search(&query, limit))
-        .await
-        .map_err(|e| ApiError {
-            error: ErrorKind::Storage,
-            message: e.to_string(),
-            code: None,
-        })??;
-    Ok(Json(SearchResponse { hits, counts: grinder.store().counts()? }))
+    let (total, hits) = tokio::task::spawn_blocking(move || {
+        store_grinder.store().search_page(&query, offset, limit)
+    })
+    .await
+    .map_err(|e| ApiError {
+        error: ErrorKind::Storage,
+        message: e.to_string(),
+        code: None,
+    })??;
+    Ok(Json(SearchResponse {
+        hits,
+        total,
+        reachable: total.min(tsuburu_dialogue::REACHABLE),
+        counts: grinder.store().counts()?,
+    }))
 }
 
 #[derive(Debug, Deserialize)]

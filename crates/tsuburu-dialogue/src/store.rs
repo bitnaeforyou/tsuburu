@@ -195,8 +195,16 @@ pub struct Hit {
 /// answer is a couple of dozen short rows.
 const REMEMBERED: usize = 64;
 
+/// How much of an answer is held for paging through.
+///
+/// A common phrase matches tens of thousands of works, and holding every one
+/// of them for sixty-four queries would be gigabytes. Twenty pages is further
+/// than anyone reads before narrowing what they asked; past that the count
+/// still says how many there are.
+pub const KEPT: usize = 500;
+
 /// One remembered answer: the generation it was taken at, what was asked, how
-/// many were wanted, and what came back.
+/// many matched in all, and the first `KEPT` of them.
 type Answer = (u64, String, usize, Vec<Hit>);
 
 pub struct DialogueStore {
@@ -307,24 +315,47 @@ impl DialogueStore {
         Ok(keys)
     }
 
-    fn remembered(&self, query: &str, limit: usize) -> Option<Vec<Hit>> {
+    /// The total, and the page of it that is held.
+    fn remembered(&self, query: &str) -> Option<(usize, Vec<Hit>)> {
         let now = self.generation();
         let mut answers = self.answers.lock().ok()?;
-        let at =
-            answers.iter().position(|(at, q, n, _)| *at == now && q == query && *n == limit)?;
+        let at = answers.iter().position(|(at, q, _, _)| *at == now && q == query)?;
         // Asked again, so it is the most recent thing anyone wanted.
         let found = answers.remove(at);
-        let hits = found.3.clone();
+        let answer = (found.2, found.3.clone());
         answers.insert(0, found);
-        Some(hits)
+        Some(answer)
     }
 
-    fn remember(&self, query: &str, limit: usize, hits: &[Hit]) {
+    fn remember(&self, query: &str, total: usize, hits: &[Hit]) {
         let now = self.generation();
         let Ok(mut answers) = self.answers.lock() else { return };
-        answers.retain(|(at, q, n, _)| *at == now && !(q == query && *n == limit));
-        answers.insert(0, (now, query.to_string(), limit, hits.to_vec()));
+        answers.retain(|(at, q, _, _)| *at == now && q != query);
+        answers.insert(0, (now, query.to_string(), total, hits.to_vec()));
         answers.truncate(REMEMBERED);
+    }
+
+    // --- shards already taken in ---
+
+    /// The published shards this machine has already merged, by file name.
+    ///
+    /// A shard's name carries the hash of its bytes, so a name that is
+    /// already here names a file whose contents are already here. Coming
+    /// back for a corpus that has grown then costs only the part that is
+    /// new, rather than the four hundred megabytes already on the disk.
+    pub fn taken_shards(&self) -> Result<std::collections::HashSet<String>, DialogueError> {
+        let Some(raw) = self.setting("taken_shards")? else { return Ok(Default::default()) };
+        Ok(serde_json::from_str(&raw).unwrap_or_default())
+    }
+
+    pub fn note_shard(&self, name: &str) -> Result<(), DialogueError> {
+        let mut taken = self.taken_shards()?;
+        if !taken.insert(name.to_string()) {
+            return Ok(());
+        }
+        let json =
+            serde_json::to_string(&taken).map_err(|e| DialogueError::Corrupt(e.to_string()))?;
+        self.set_setting("taken_shards", &json)
     }
 
     // --- settings ---
@@ -942,19 +973,40 @@ impl DialogueStore {
     /// Scans every stored gallery across all cores. Returns the best page
     /// per gallery, best galleries first, at most `limit`.
     pub fn search(&self, asked: &str, limit: usize) -> Result<Vec<Hit>, DialogueError> {
+        Ok(self.search_page(asked, 0, limit)?.1)
+    }
+
+    /// One page of what a phrase matches, and how many it matches in all.
+    ///
+    /// The scan reads the whole store whatever page is asked for, so paging
+    /// is only worth having because the answer is held: the first page pays
+    /// for the search and the rest are free until something is indexed.
+    ///
+    /// Beyond `KEPT` there is nothing left to page through, but the total
+    /// still says how many there were - a reader who wants those narrows the
+    /// phrase rather than pressing on.
+    pub fn search_page(
+        &self,
+        asked: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<(usize, Vec<Hit>), DialogueError> {
+        let page = |total: usize, kept: Vec<Hit>| {
+            (total, kept.into_iter().skip(offset).take(limit).collect::<Vec<_>>())
+        };
         let query = Query::new(asked);
         if query.is_empty() || limit == 0 {
-            return Ok(Vec::new());
+            return Ok((0, Vec::new()));
         }
-        if let Some(hits) = self.remembered(asked, limit) {
-            return Ok(hits);
+        if let Some((total, kept)) = self.remembered(asked) {
+            return Ok(page(total, kept));
         }
 
         // Galleries cluster in recent ids, so ranges are cut by count, not by
         // id span; otherwise most threads finish early and one does the work.
         let keys = self.search_keys()?;
         if keys.is_empty() {
-            return Ok(Vec::new());
+            return Ok((0, Vec::new()));
         }
         let threads =
             std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 16);
@@ -983,7 +1035,7 @@ impl DialogueStore {
         // Exact hits are cheap to find; only pay for the fuzzy sweep when
         // they cannot fill the page.
         let mut hits = scan(false);
-        if hits.len() < limit {
+        if hits.len() < offset + limit {
             let exact_ids: std::collections::HashSet<i32> =
                 hits.iter().map(|h| h.gallery_id).collect();
             hits.extend(scan(true).into_iter().filter(|h| !exact_ids.contains(&h.gallery_id)));
@@ -996,9 +1048,10 @@ impl DialogueStore {
                 .then(b.gallery_id.cmp(&a.gallery_id))
         });
         let mut hits = collapse_duplicates(hits);
-        hits.truncate(limit);
-        self.remember(asked, limit, &hits);
-        Ok(hits)
+        let total = hits.len();
+        hits.truncate(KEPT);
+        self.remember(asked, total, &hits);
+        Ok(page(total, hits))
     }
 
     fn scan_range(
@@ -1536,10 +1589,54 @@ mod tests {
         assert_eq!(again.len(), first.len());
         assert_eq!(again[0].gallery_id, first[0].gallery_id);
         assert_eq!(again[0].snippet, first[0].snippet);
-        assert!(store.remembered("구급차", 5).is_some());
-        // 물어본 적 없는 것은 없다.
-        assert!(store.remembered("구급차", 4).is_none());
-        assert!(store.remembered("소방차", 5).is_none());
+        // Kept by the phrase, not by the page size: a second page of the same
+        // question is answered without touching the disk again.
+        assert!(store.remembered("구급차").is_some());
+        assert!(store.remembered("소방차").is_none());
+    }
+
+    /// A shard taken in once is not fetched again.
+    #[test]
+    fn what_has_been_taken_in_is_remembered() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("d.redb");
+        {
+            let store = DialogueStore::open(&path).unwrap();
+            assert!(store.taken_shards().unwrap().is_empty());
+            store.note_shard("dialogue-0-99999-0dfcae8415594e82.tsd").unwrap();
+            store.note_shard("dialogue-0-99999-0dfcae8415594e82.tsd").unwrap();
+            store.note_shard("dialogue-100000-199999-c8d05fd500443748.tsd").unwrap();
+        }
+        let store = DialogueStore::open(&path).unwrap();
+        let taken = store.taken_shards().unwrap();
+        assert_eq!(taken.len(), 2, "the same shard twice is one shard");
+        assert!(taken.contains("dialogue-0-99999-0dfcae8415594e82.tsd"));
+    }
+
+    /// The count is of everything that matched, not of the page handed back.
+    #[test]
+    fn a_page_says_how_many_there_were_in_all() {
+        let (store, _d) = store();
+        // Distinct around the phrase, or they would fold together as copies
+        // of one another - which is what a wall of re-uploads deserves, and
+        // not what is being counted here.
+        for id in 1..=7 {
+            store.complete(id, &[page(0, &format!("안녕하세요 {id}번 손님"))]).unwrap();
+        }
+        let (total, first) = store.search_page("안녕하세요", 0, 3).unwrap();
+        assert_eq!(total, 7, "seven works said it");
+        assert_eq!(first.len(), 3);
+
+        let (again, second) = store.search_page("안녕하세요", 3, 3).unwrap();
+        assert_eq!(again, 7);
+        assert_eq!(second.len(), 3);
+        let seen: std::collections::HashSet<i32> =
+            first.iter().chain(second.iter()).map(|h| h.gallery_id).collect();
+        assert_eq!(seen.len(), 6, "the second page is not the first one again");
+
+        let (_, last) = store.search_page("안녕하세요", 6, 3).unwrap();
+        assert_eq!(last.len(), 1);
+        assert!(store.search_page("안녕하세요", 99, 3).unwrap().1.is_empty());
     }
 
     /// Storing anything makes what was kept stale, answers and keys alike.
@@ -1549,12 +1646,12 @@ mod tests {
         let store = DialogueStore::open(dir.path().join("d.redb")).unwrap();
         store.complete(1, &[page(0, "구급차라도 부르는 게 좋겠어요")]).unwrap();
         assert_eq!(store.search("구급차", 5).unwrap().len(), 1);
-        assert!(store.remembered("구급차", 5).is_some());
+        assert!(store.remembered("구급차").is_some());
         let keys = store.search_keys().unwrap();
         assert_eq!(keys.len(), 1);
 
         store.complete(2, &[page(0, "구급차를 불렀다")]).unwrap();
-        assert!(store.remembered("구급차", 5).is_none(), "the old answer is stale");
+        assert!(store.remembered("구급차").is_none(), "the old answer is stale");
         assert_eq!(store.search_keys().unwrap().len(), 2, "the new work is searchable");
         assert_eq!(store.search("구급차", 5).unwrap().len(), 2);
     }
