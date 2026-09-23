@@ -80,16 +80,24 @@
     error = null
     if (sectioned) return
 
-    // Coming back from a work: the same question has the same answer, and it
-    // was left somewhere particular on the page.
+    // Coming back from a work - or from the phone taking the window away and
+    // building it again - the same question has the same answer, and it was
+    // left somewhere particular on the page.
     const before = recall(asked)
-    if (before) {
+    if (before && (before.ids.length > 0 || before.hits.length > 0)) {
       ids = before.ids
       terms = before.terms
       hits = before.hits
       total = before.total
       offset = before.offset
       restoreScroll(before.scrollY)
+      return
+    }
+    // What was written down carries the ids but not the passages a dialogue
+    // search found: those are asked for again, and the store answers from its
+    // own cache.
+    if (before && params.scope === 'dialogue' && before.offset > 0) {
+      void reload(before.offset, before.scrollY)
       return
     }
 
@@ -102,14 +110,32 @@
   /// Puts the page back where it was.
   ///
   /// Once is not enough: the cards below the fold have no height until they
-  /// are drawn, so the first attempt can run out of page before it gets
-  /// there. The second one lands.
+  /// are drawn, and their covers arrive later still, so an early attempt runs
+  /// out of page before it gets there. It keeps asking for a second while the
+  /// page settles, and stops as soon as the reader takes over.
   function restoreScroll(want: number) {
     if (want <= 0) return
-    requestAnimationFrame(() => scrollTo(0, want))
+    let settled = false
+    const give = () => (settled = true)
+    // Anything the reader does with the page is them saying where they want
+    // to be, which is not this any more.
+    addEventListener('wheel', give, { passive: true, once: true })
+    addEventListener('touchstart', give, { passive: true, once: true })
+    addEventListener('keydown', give, { once: true })
+
+    const at = [0, 50, 150, 300, 500, 800, 1200]
+    const timers = at.map((after) =>
+      setTimeout(() => {
+        if (settled || Math.abs(window.scrollY - want) <= 8) return
+        scrollTo(0, want)
+      }, after),
+    )
     setTimeout(() => {
-      if (Math.abs(window.scrollY - want) > 8) scrollTo(0, want)
-    }, 200)
+      removeEventListener('wheel', give)
+      removeEventListener('touchstart', give)
+      removeEventListener('keydown', give)
+      timers.forEach(clearTimeout)
+    }, 1400)
   }
 
   // Kept as it changes, and the place on the page kept as it is left.
@@ -120,7 +146,32 @@
     return () => markScroll(asked, window.scrollY)
   })
 
-  async function load(from: number) {
+  // Written down as it moves, not only on the way out: a window the phone
+  // takes away is never on its way out.
+  $effect(() => {
+    const asked = key
+    if (sectioned) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const onScroll = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => markScroll(asked, window.scrollY), 300)
+    }
+    addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      clearTimeout(timer)
+      removeEventListener('scroll', onScroll)
+    }
+  })
+
+  /// Asks again for everything that had been loaded, in one go, and puts the
+  /// page back where it was. For coming back to a list that was written down
+  /// without the passages in it.
+  async function reload(upTo: number, scrollY: number) {
+    await load(0, Math.max(PAGE, upTo))
+    restoreScroll(scrollY)
+  }
+
+  async function load(from: number, want = PAGE) {
     controller?.abort()
     controller = new AbortController()
     loading = true
@@ -135,7 +186,7 @@
         total = hits.length
         return
       } else if (params.scope === 'dialogue') {
-        const found = await api.dialogueSearch(params.query, from, PAGE, controller.signal)
+        const found = await api.dialogueSearch(params.query, from, want, controller.signal)
         hits = from === 0 ? found.hits : [...hits, ...found.hits]
         total = found.total
         reachable = found.reachable
