@@ -198,6 +198,11 @@ pub struct DownloadStatus {
     pub progress: Progress,
     pub complete: bool,
     pub job: JobStatus,
+    /// The shelf the work is on, which is the library's to say: a shelf
+    /// belongs to the work, not to the copy of it that happens to be on
+    /// disk. Absent where there is no library to ask.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
 }
 
 pub async fn status(
@@ -209,8 +214,9 @@ pub async fn status(
         .ok_or_else(|| ApiError::bad_request("that gallery has not been downloaded"))?;
     Ok(Json(DownloadStatus {
         complete: progress.complete(),
-        progress,
         job: state.download_jobs.status(id).unwrap_or_default(),
+        folder: state.store.as_ref().and_then(|s| s.folder(id).ok()).flatten(),
+        progress,
     }))
 }
 
@@ -221,12 +227,14 @@ pub struct ListResponse {
 }
 
 pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<ListResponse>, ApiError> {
+    let shelves = state.store.as_ref().and_then(|s| s.folder_map().ok()).unwrap_or_default();
     let items: Vec<DownloadStatus> = store(&state)?
         .list()?
         .into_iter()
         .map(|progress| DownloadStatus {
             complete: progress.complete(),
             job: state.download_jobs.status(progress.id).unwrap_or_default(),
+            folder: shelves.get(&progress.id).cloned(),
             progress,
         })
         .collect();

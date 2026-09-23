@@ -5,6 +5,10 @@
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
+  import ViewToggle from '../lib/ViewToggle.svelte'
+  import Shelves from '../lib/Shelves.svelte'
+  import ShelfPicker from '../lib/ShelfPicker.svelte'
+  import { onShelf, shelvesOf, type Picked } from '../lib/folders'
 
   let items = $state<api.DownloadItem[]>([])
   let bytes = $state(0)
@@ -13,6 +17,21 @@
 
   type Order = 'added' | 'title' | 'pages' | 'bytes'
   let order = $state<Order>('added')
+  let shelf = $state<Picked>('all')
+
+  const shelfNames = $derived(shelvesOf(items).map(([name]) => name))
+
+  async function move(id: number, to: string | null) {
+    const was = items.find((each) => each.id === id)?.folder ?? null
+    // Shown before the server answers, and put back if it refuses.
+    items = items.map((each) => (each.id === id ? { ...each, folder: to } : each))
+    try {
+      await api.setFolder(id, to)
+    } catch (cause) {
+      items = items.map((each) => (each.id === id ? { ...each, folder: was } : each))
+      error = cause
+    }
+  }
 
   const ORDERS: { value: Order; key: Key }[] = [
     { value: 'added', key: 'sort.added' },
@@ -22,7 +41,7 @@
   ]
 
   const ordered = $derived.by(() => {
-    const sorted = [...items]
+    const sorted = [...onShelf(items, shelf)]
     if (order === 'title') sorted.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
     else if (order === 'pages') sorted.sort((a, b) => b.pages - a.pages)
     else if (order === 'bytes') sorted.sort((a, b) => b.bytes - a.bytes)
@@ -89,21 +108,25 @@
   {:else if items.length === 0}
     <p class="muted">{t('downloads.empty')}</p>
   {:else}
+    <Shelves works={items} bind:picked={shelf} />
     <div class="tidy">
       <p class="muted">
         {items.length === 1 ? t('downloads.work') : t('downloads.works', { n: items.length })}
         &middot; {t('downloads.onDisk', { size: size(bytes) })}
       </p>
-      {#if items.length > 1}
-        <label class="order">
-          <span>{t('sort.by')}</span>
-          <select bind:value={order}>
-            {#each ORDERS as option (option.value)}
-              <option value={option.value}>{t(option.key)}</option>
-            {/each}
-          </select>
-        </label>
-      {/if}
+      <div class="how">
+        <ViewToggle />
+        {#if items.length > 1}
+          <label class="order">
+            <span>{t('sort.by')}</span>
+            <select bind:value={order}>
+              {#each ORDERS as option (option.value)}
+                <option value={option.value}>{t(option.key)}</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
+      </div>
     </div>
     <Grid>
       {#each ordered as item (item.id)}
@@ -126,6 +149,13 @@
               {#if item.job.failed}&middot; {t('downloads.failed', { n: item.job.failed })}{/if}
             </span>
           </div>
+          <ShelfPicker
+            id={item.id}
+            folder={item.folder}
+            title={item.title ?? `#${item.id}`}
+            shelves={shelfNames}
+            onmove={(id, to) => void move(id, to)}
+          />
           <div class="actions">
             {#if !item.complete && !item.job.running}
               <button onclick={() => resume(item.id)}>{t('gallery.getRest')}</button>
@@ -140,11 +170,17 @@
 
 <style>
   .tidy {
+    margin-top: 0.6rem;
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     justify-content: space-between;
     gap: 0.4rem 1rem;
+  }
+  .how {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
   }
   .order {
     display: flex;

@@ -19,6 +19,12 @@ const ARTISTS: TableDefinition<&str, u64> = TableDefinition::new("artists");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 /// Gallery id -> the card the server built for it, and when.
 const CARDS: TableDefinition<i32, &str> = TableDefinition::new("cards");
+/// Gallery id -> the shelf the reader put it on.
+///
+/// A property of the work, not of the row that stars it: the same shelf has
+/// to show on the downloads screen, and a work can be filed without being
+/// starred at all.
+const FOLDERS: TableDefinition<i32, &str> = TableDefinition::new("folders");
 
 const SCHEMA_VERSION: &str = "1";
 
@@ -111,7 +117,40 @@ impl Store {
         let db = Database::create(&path).map_err(|e| StoreError::Open(e.to_string()))?;
         let store = Self { db, path };
         store.init_schema()?;
+        store.move_folders_off_the_favorites()?;
         Ok(store)
+    }
+
+    /// Carries shelves written by the version that kept them on the starred
+    /// row over to the table that holds them now.
+    ///
+    /// A shelf is a property of the work: the downloads screen shows the same
+    /// ones, and un-starring something should not empty the shelf it was on.
+    /// Runs once and leaves a note saying so.
+    fn move_folders_off_the_favorites(&self) -> Result<(), StoreError> {
+        {
+            let tx = self.db.begin_read().map_err(db_err)?;
+            let meta = tx.open_table(META).map_err(db_err)?;
+            if meta.get("folders_moved").map_err(db_err)?.is_some() {
+                return Ok(());
+            }
+        }
+        let stale: Vec<Favorite> = self.list(FAVORITES)?;
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut folders = tx.open_table(FOLDERS).map_err(db_err)?;
+            for favorite in &stale {
+                if let Some(name) = favorite.folder.as_deref()
+                    && folders.get(favorite.summary.id).map_err(db_err)?.is_none()
+                {
+                    folders.insert(favorite.summary.id, name).map_err(db_err)?;
+                }
+            }
+            let mut meta = tx.open_table(META).map_err(db_err)?;
+            meta.insert("folders_moved", "1").map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(())
     }
 
     pub fn path(&self) -> &Path {
@@ -170,6 +209,10 @@ impl Store {
     /// 최근에 추가한 것부터.
     pub fn favorites(&self) -> Result<Vec<Favorite>, StoreError> {
         let mut all: Vec<Favorite> = self.list(FAVORITES)?;
+        let shelves = self.folder_map()?;
+        for favorite in &mut all {
+            favorite.folder = shelves.get(&favorite.summary.id).cloned();
+        }
         all.sort_unstable_by_key(|f| std::cmp::Reverse(f.added_at));
         Ok(all)
     }
@@ -179,24 +222,47 @@ impl Store {
     /// Renaming or emptying a folder is this, done to each work in it: there
     /// is no folder apart from the works that name one, so none is left
     /// behind empty.
-    pub fn set_favorite_folder(
-        &self,
-        id: i32,
-        folder: Option<&str>,
-    ) -> Result<Option<Favorite>, StoreError> {
-        let Some(mut favorite) = self.favorite(id)? else { return Ok(None) };
-        favorite.folder = folder.map(str::trim).filter(|f| !f.is_empty()).map(str::to_string);
-        self.put(FAVORITES, id, &favorite)?;
-        Ok(Some(favorite))
+    pub fn set_folder(&self, id: i32, folder: Option<&str>) -> Result<Option<String>, StoreError> {
+        let folder = folder.map(str::trim).filter(|f| !f.is_empty());
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut t = tx.open_table(FOLDERS).map_err(db_err)?;
+            match folder {
+                Some(name) => {
+                    t.insert(id, name).map_err(db_err)?;
+                }
+                None => {
+                    t.remove(id).map_err(db_err)?;
+                }
+            }
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(folder.map(str::to_string))
+    }
+
+    pub fn folder(&self, id: i32) -> Result<Option<String>, StoreError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let Ok(t) = tx.open_table(FOLDERS) else { return Ok(None) };
+        Ok(t.get(id).map_err(db_err)?.map(|v| v.value().to_string()))
+    }
+
+    /// Every filed work, for a screen that is about to draw a list of them.
+    pub fn folder_map(&self) -> Result<std::collections::HashMap<i32, String>, StoreError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let Ok(t) = tx.open_table(FOLDERS) else { return Ok(Default::default()) };
+        let mut out = std::collections::HashMap::new();
+        for row in t.iter().map_err(db_err)? {
+            let (id, name) = row.map_err(db_err)?;
+            out.insert(id.value(), name.value().to_string());
+        }
+        Ok(out)
     }
 
     /// The shelves in use and how much is on each, by name.
     pub fn folders(&self) -> Result<Vec<(String, usize)>, StoreError> {
         let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
-        for favorite in self.favorites()? {
-            if let Some(folder) = favorite.folder {
-                *counts.entry(folder).or_default() += 1;
-            }
+        for name in self.folder_map()?.into_values() {
+            *counts.entry(name).or_default() += 1;
         }
         Ok(counts.into_iter().collect())
     }
@@ -584,38 +650,63 @@ mod tests {
     }
 
     #[test]
-    fn a_favorite_keeps_its_shelf_when_it_is_starred_again() {
+    fn a_shelf_belongs_to_the_work_not_to_the_star() {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(dir.path().join("test.redb")).unwrap();
+        store.set_folder(7, Some("  읽는 중  ")).unwrap();
+        assert_eq!(store.folder(7).unwrap().as_deref(), Some("읽는 중"));
+
+        // Filed without being starred, and still filed once it is.
         store.add_favorite(summary(7)).unwrap();
-        store.set_favorite_folder(7, Some("  읽는 중  ")).unwrap();
-        assert_eq!(store.favorite(7).unwrap().unwrap().folder.as_deref(), Some("읽는 중"));
+        assert_eq!(store.favorites().unwrap()[0].folder.as_deref(), Some("읽는 중"));
 
         // Un-starring and starring again is how a reader fixes a misclick;
         // it should not empty the shelf they put it on.
+        store.remove_favorite(7).unwrap();
         store.add_favorite(summary(7)).unwrap();
-        assert_eq!(store.favorite(7).unwrap().unwrap().folder.as_deref(), Some("읽는 중"));
+        assert_eq!(store.favorites().unwrap()[0].folder.as_deref(), Some("읽는 중"));
 
-        store.set_favorite_folder(7, None).unwrap();
-        assert_eq!(store.favorite(7).unwrap().unwrap().folder, None);
-        assert_eq!(store.set_favorite_folder(999, Some("x")).unwrap(), None);
+        store.set_folder(7, None).unwrap();
+        assert_eq!(store.folder(7).unwrap(), None);
     }
 
     #[test]
     fn folders_are_counted_from_the_works_that_name_them() {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(dir.path().join("test.redb")).unwrap();
-        for id in [1, 2, 3] {
-            store.add_favorite(summary(id)).unwrap();
-        }
-        store.set_favorite_folder(1, Some("나중에")).unwrap();
-        store.set_favorite_folder(2, Some("나중에")).unwrap();
+        store.set_folder(1, Some("나중에")).unwrap();
+        store.set_folder(2, Some("나중에")).unwrap();
         assert_eq!(store.folders().unwrap(), vec![("나중에".to_string(), 2)]);
 
         // Emptying the last one leaves no folder behind.
-        store.set_favorite_folder(1, Some("")).unwrap();
-        store.set_favorite_folder(2, None).unwrap();
+        store.set_folder(1, Some("")).unwrap();
+        store.set_folder(2, None).unwrap();
         assert!(store.folders().unwrap().is_empty());
+    }
+
+    #[test]
+    fn shelves_written_by_the_older_version_are_carried_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.redb");
+        {
+            // What v0.3.9 wrote: the shelf on the starred row itself.
+            let store = Store::open(&path).unwrap();
+            store.add_favorite(summary(4)).unwrap();
+            let mut favorite = store.favorite(4).unwrap().unwrap();
+            favorite.folder = Some("옛날 폴더".into());
+            store.put(FAVORITES, 4, &favorite).unwrap();
+            // That version left no note saying the shelves had been moved,
+            // because there was nowhere to move them to.
+            let tx = store.db.begin_write().unwrap();
+            {
+                let mut meta = tx.open_table(META).unwrap();
+                meta.remove("folders_moved").unwrap();
+            }
+            tx.commit().unwrap();
+        }
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.folder(4).unwrap().as_deref(), Some("옛날 폴더"));
+        assert_eq!(store.folders().unwrap(), vec![("옛날 폴더".to_string(), 1)]);
     }
 
     #[test]

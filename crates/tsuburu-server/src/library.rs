@@ -186,13 +186,22 @@ pub struct FolderBody {
     pub folder: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct Filed {
+    pub id: i32,
+    pub folder: Option<String>,
+}
+
+/// Puts one work on a shelf, or takes it off every shelf.
+///
+/// Addressed by the work rather than by its starred row: the downloads
+/// screen files the same works, and a work can be filed without being
+/// starred at all.
 pub async fn set_folder(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
     Json(body): Json<FolderBody>,
-) -> Result<Json<Favorite>, ApiError> {
-    store(&state)?
-        .set_favorite_folder(id, body.folder.as_deref())?
-        .map(Json)
-        .ok_or_else(|| ApiError::bad_request("that work is not in the favorites"))
+) -> Result<Json<Filed>, ApiError> {
+    let folder = store(&state)?.set_folder(id, body.folder.as_deref())?;
+    Ok(Json(Filed { id, folder }))
 }

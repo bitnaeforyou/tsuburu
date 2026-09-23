@@ -143,9 +143,13 @@ export function folders(): Promise<Folder[]> {
   return request('/api/folders')
 }
 
-export function setFolder(id: number, folder: string | null): Promise<Favorite> {
-  return send('PUT', `/api/favorites/${id}/folder`, { folder })
+/// Addressed by the work: the downloads screen files the same works, and a
+/// work can be filed without being starred at all.
+export function setFolder(id: number, folder: string | null): Promise<Filed> {
+  return send('PUT', `/api/folders/${id}`, { folder })
 }
+
+export type Filed = { id: number; folder: string | null }
 
 export type HiddenTags = { tags: string[] }
 
@@ -363,6 +367,8 @@ export type DownloadItem = {
   bytes: number
   added_at: number
   complete: boolean
+  /// The shelf the work is on. The library's to say, not the copy on disk's.
+  folder?: string | null
   job: { running: boolean; wanted: number; fetched: number; failed: number; error: string | null }
 }
 
