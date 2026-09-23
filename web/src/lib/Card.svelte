@@ -3,6 +3,7 @@
   import * as cards from './cards.svelte'
   import { library, read } from './library.svelte'
   import { split as splitTag } from './tags'
+  import { view } from './view.svelte'
   import { toGallery } from './router'
   import { t } from './i18n.svelte'
 
@@ -34,8 +35,13 @@
   const favorited = $derived(library.has(id))
   /// What the work is, in the three words a card has room for. Namespaced
   /// tags say female:/male:; the part after the colon is the word.
+  // A row has the width for what a work is; a cover has room for three words
+  // under it.
   const topTags = $derived(
-    (card?.tags ?? []).map(splitTag).filter((tag) => tag.word.length > 0).slice(0, 3),
+    (card?.tags ?? [])
+      .map(splitTag)
+      .filter((tag) => tag.word.length > 0)
+      .slice(0, view.rows ? 8 : 3),
   )
 
   /// Given outright by a screen that already has it, looked up otherwise.
@@ -89,7 +95,7 @@
   }
 </script>
 
-<article bind:this={element}>
+<article bind:this={element} class:rows={view.rows}>
   <a href={toGallery(id)} class="link">
     <div class="thumb">
       {#if thumbnail}
@@ -103,6 +109,9 @@
         </div>
       {/if}
     </div>
+    <!-- What the work is, as one block: a row puts it beside the cover, and
+         a cover puts it underneath. -->
+    <div class="said">
     <svelte:element this={`h${level}`} class="title" title={title}>{title}</svelte:element>
     <p class="meta">
       <span class="id">#{id}</span>
@@ -118,6 +127,7 @@
         {/each}
       </p>
     {/if}
+    </div>
   </a>
 
   {#if !library.unavailable}
@@ -138,6 +148,41 @@
   article {
     position: relative;
     color: var(--text);
+  }
+
+  /* One work per line: the cover small at the leading edge, and beside it the
+     room to say what the work actually is. */
+  article.rows .link {
+    display: grid;
+    grid-template-columns: 4.5rem 1fr;
+    gap: 0.7rem;
+    align-items: start;
+    padding: 0.4rem;
+    border-radius: var(--radius);
+  }
+  article.rows .link:hover {
+    background: var(--surface);
+  }
+  article.rows .title {
+    margin: 0 0 0.2rem;
+    min-height: 0;
+    font-size: var(--text-base);
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    /* The star sits at the trailing edge of the row, not over the cover. */
+    padding-inline-end: 2rem;
+  }
+  article.rows .tags {
+    white-space: normal;
+    line-height: 1.5;
+  }
+  article.rows .star {
+    top: 0.5rem;
+    inset-inline-end: 0.5rem;
+    background: transparent;
+  }
+  article.rows .progress {
+    font-size: 0.6875rem;
   }
 
   .link {

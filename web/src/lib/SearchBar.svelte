@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Mode, Scope, Sort, SearchState } from './router'
   import { t, type Key } from './i18n.svelte'
+  import ViewToggle from './ViewToggle.svelte'
 
   // 검색 실행과 필터는 같은 성격의 도구이므로 한 줄에 모은다. 제출은 텍스트가
   // 아니라 아이콘이다. 위 줄의 Search 탭과 글자가 같으면 무엇이 이동이고
@@ -91,6 +92,8 @@
       </svg>
     </button>
   </form>
+
+  <ViewToggle />
 
   <details class="fold" open={wide || opened} ontoggle={(e) => (opened = e.currentTarget.open)}>
     <summary>
