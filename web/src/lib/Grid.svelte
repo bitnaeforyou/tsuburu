@@ -22,7 +22,7 @@
       gap: 0.75rem;
     }
     .grid.rows {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
       gap: 0.5rem;
     }
   }
@@ -30,7 +30,7 @@
   /* One work per line, its cover small beside what it is. The cards lay
      themselves out from this; see Card. */
   .grid.rows {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.5rem;
   }
 

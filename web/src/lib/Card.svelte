@@ -154,11 +154,24 @@
      room to say what the work actually is. */
   article.rows .link {
     display: grid;
-    grid-template-columns: 4.5rem 1fr;
+    /* `minmax(0, 1fr)` rather than `1fr`: a column sized `auto` at its
+       minimum is as wide as its longest unbreakable word, and one tag like
+       `actiondimensiongw2026` then pushes the whole page sideways and cuts
+       every row off at the right edge. */
+    grid-template-columns: 4.5rem minmax(0, 1fr);
     gap: 0.7rem;
     align-items: start;
     padding: 0.4rem;
     border-radius: var(--radius);
+  }
+  /* Same reason: the block beside the cover must be allowed to be narrower
+     than the words in it. */
+  article.rows .said {
+    min-width: 0;
+  }
+  article.rows .meta,
+  article.rows .tags {
+    overflow-wrap: anywhere;
   }
   article.rows .link:hover {
     background: var(--surface);
