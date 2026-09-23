@@ -126,6 +126,8 @@ export const ko: Messages = {
   'gallery.saved': '저장됨',
   'gallery.preview': '{n}쪽 전부 미리 보기',
   'gallery.info': '작품 정보',
+  'gallery.cover': '표지 크게 보기',
+  'gallery.coverClose': '표지 닫기',
   'gallery.read': '읽기',
   'gallery.resumeAt': '{n}쪽부터 이어 보기',
   'gallery.startOver': '처음부터',

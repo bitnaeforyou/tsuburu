@@ -37,6 +37,10 @@
   let downloadError = $state<string | null>(null)
   let bare = $state(false)
   let picking = $state(false)
+  /// The cover, at the size it was drawn. Tapping it used to start reading,
+  /// which is what the button beside it is for - and left no way to simply
+  /// look at the picture.
+  let showingCover = $state(false)
 
 
 
@@ -297,7 +301,12 @@
          have been here before. -->
     <section class="work">
       {#if gallery.pages[0]}
-        <button class="cover" onclick={() => read(lastPage ?? 0)} aria-label={t('gallery.read')}>
+        <button
+          class="cover"
+          onclick={() => (showingCover = true)}
+          aria-label={t('gallery.cover')}
+          title={t('gallery.cover')}
+        >
           <img src={thumbnailOf(gallery.pages[0].src)} alt="" decoding="async" />
         </button>
       {/if}
@@ -407,6 +416,22 @@
     {/if}
   {/if}
 
+  {#if gallery?.pages[0] && showingCover}
+    <!-- The whole picture, not the three-by-four the card crops it to. -->
+    <div
+      class="lightbox"
+      role="button"
+      tabindex="0"
+      aria-label={t('gallery.coverClose')}
+      onclick={() => (showingCover = false)}
+      onkeydown={(e) => {
+        if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') showingCover = false
+      }}
+    >
+      <img src={gallery.pages[0].src} alt={gallery.title ?? `#${id}`} />
+    </div>
+  {/if}
+
   {#if gallery && picking}
     <PageGrid
       pages={gallery.pages}
@@ -510,6 +535,25 @@
     margin-bottom: 1.25rem;
   }
 
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 6;
+    display: grid;
+    place-items: center;
+    padding: calc(1rem + var(--safe-top)) 1rem 1rem;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    cursor: zoom-out;
+    overscroll-behavior: contain;
+  }
+  .lightbox img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: var(--radius);
+    border: 1px solid var(--image-edge);
+  }
+
   .cover {
     flex: none;
     width: 210px;
@@ -526,6 +570,9 @@
     background: var(--surface);
     border: 1px solid var(--image-edge);
     border-radius: var(--radius);
+  }
+  .cover {
+    cursor: zoom-in;
   }
   .cover:hover img {
     border-color: var(--accent);

@@ -126,6 +126,8 @@ export const ja: Messages = {
   'gallery.saved': '保存済み',
   'gallery.preview': '{n}ページすべて',
   'gallery.info': '作品情報',
+  'gallery.cover': '表紙を大きく見る',
+  'gallery.coverClose': '表紙を閉じる',
   'gallery.read': '読む',
   'gallery.resumeAt': '{n}ページから続き',
   'gallery.startOver': '最初から',

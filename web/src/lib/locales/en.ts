@@ -127,6 +127,8 @@ export const en = {
   'gallery.saved': 'Saved',
   'gallery.preview': 'All {n} pages',
   'gallery.info': 'About',
+  'gallery.cover': 'See the cover',
+  'gallery.coverClose': 'Close the cover',
   'gallery.read': 'Read',
   'gallery.resumeAt': 'Continue from page {n}',
   'gallery.startOver': 'Start over',
