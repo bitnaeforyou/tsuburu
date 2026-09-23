@@ -6,11 +6,15 @@
   import Grid from '../lib/Grid.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
+  import { keepScroll } from '../lib/keepScroll.svelte'
 
   let items = $state<api.HistoryEntry[]>([])
   let error = $state<unknown>(null)
   let loading = $state(true)
   let confirming = $state(false)
+
+  // Coming back out of a work should land where the list was left.
+  $effect(() => keepScroll('history', () => items.length > 0))
 
   $effect(() => {
     void load()
