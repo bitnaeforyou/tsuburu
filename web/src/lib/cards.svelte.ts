@@ -22,6 +22,12 @@ const waiting = new Map<number, Pending[]>()
 const resolved = new Map<number, api.Card>()
 let timer: ReturnType<typeof setTimeout> | null = null
 
+/// Thrown away when the language changes: what a card holds includes its
+/// tags, and those are said in the language they were asked for.
+export function forget() {
+  resolved.clear()
+}
+
 export function card(id: number): Promise<api.Card | null> {
   const cached = resolved.get(id)
   if (cached) return Promise.resolve(cached)

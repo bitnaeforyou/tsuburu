@@ -1,6 +1,8 @@
 /// Interface language. Content stays in whatever language hitomi holds it in;
 /// this is only the wording around it.
 
+import { forget as forgetCards } from './cards.svelte'
+import { forget as forgetResults } from './results.svelte'
 import { en } from './locales/en'
 import { ko } from './locales/ko'
 import { ja } from './locales/ja'
@@ -51,8 +53,13 @@ class I18n {
   }
 
   set(locale: Locale) {
+    if (locale === this.locale) return
     this.locale = locale
     document.documentElement.lang = locale
+    // A card carries its tags, and those come back in the language they were
+    // asked for; what is held was asked for in the old one.
+    forgetCards()
+    forgetResults()
     try {
       localStorage.setItem(STORED, locale)
     } catch {

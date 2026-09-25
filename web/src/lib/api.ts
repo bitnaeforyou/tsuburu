@@ -1,3 +1,5 @@
+import { i18n } from './i18n.svelte'
+
 export type ApiErrorKind = 'format_changed' | 'network' | 'bad_request' | 'storage' | 'unsupported'
 
 export class ApiError extends Error {
@@ -115,12 +117,23 @@ export function search(params: SearchParams, signal?: AbortSignal): Promise<Sear
   return request(`/api/search?${search}`, { signal })
 }
 
+/// What to say the tags in.
+///
+/// hitomi's vocabulary is English - `mosaic censorship`, `sole female` - and
+/// the dictionary that lets a Korean reader search in Korean can say them
+/// back the same way. It follows the interface language rather than being a
+/// setting of its own: someone reading the program in Korean is the someone
+/// this is for. A tag the dictionary does not know stays as hitomi wrote it.
+function said(): string {
+  return `lang=${encodeURIComponent(i18n.locale)}`
+}
+
 export function cards(ids: number[], signal?: AbortSignal): Promise<Card[]> {
-  return request(`/api/cards?ids=${ids.join(',')}`, { signal })
+  return request(`/api/cards?ids=${ids.join(',')}&${said()}`, { signal })
 }
 
 export function gallery(id: number, signal?: AbortSignal): Promise<Gallery> {
-  return request(`/api/gallery/${id}`, { signal })
+  return request(`/api/gallery/${id}?${said()}`, { signal })
 }
 
 // --- 라이브러리 ---

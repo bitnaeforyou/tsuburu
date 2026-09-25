@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as api from '../lib/api'
   import { untrack } from 'svelte'
-  import { t, number } from '../lib/i18n.svelte'
+  import { i18n, t, number } from '../lib/i18n.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import { library, read as readSoFar } from '../lib/library.svelte'
   import { toArtist, toGallery, toKeyword, toSearch, toSeries } from '../lib/router'
@@ -97,7 +97,9 @@
     // of this one - starts again instead of leaving the last one on screen.
     void id
     void startPage
-    void load()
+    // The tags come back said in the interface language, so the work on
+    // screen is the right work but the wrong words once it changes.
+    void load(i18n.locale)
   })
 
   // The bar has to keep moving while pages arrive, and stop when they stop.
@@ -154,14 +156,19 @@
       .catch(() => {})
   })
 
-  async function load() {
+  /// The language the work on screen was fetched in, so a change of it is
+  /// not mistaken for "already have this one".
+  let said = $state<string | null>(null)
+
+  async function load(lang: string) {
     const mine = ++asked
     // Read without being watched: an effect that depends on what it is about
     // to replace runs again in the middle of its own work.
     const have = untrack(() => loaded)
+    const spoken = untrack(() => said)
     // Only the page changed: the work on screen is already the right one, and
     // refetching it would arrive at the same place a second later.
-    if (have?.id === id) {
+    if (have?.id === id && spoken === lang) {
       if (startPage !== null) current = clamp(startPage)
       return
     }
@@ -173,6 +180,7 @@
     let found: api.Gallery
     try {
       found = await api.gallery(id)
+      said = lang
     } catch (cause) {
       if (mine === asked) error = cause
       return
@@ -269,7 +277,7 @@
 
 <main class:bare class:reading>
   {#if error}
-    <ErrorNote {error} onretry={load} />
+    <ErrorNote {error} onretry={() => load(i18n.locale)} />
   {:else if !gallery}
     <p class="status">{t('common.loading')}</p>
   {:else if reading}

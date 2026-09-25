@@ -27,6 +27,12 @@ const EMBEDDED: &str = include_str!("../data/korean.tsv");
 pub struct Dictionary {
     /// 한국어 구 -> 영어 후보. 후보 순서는 생성 시점에 고정된다.
     entries: HashMap<String, Vec<String>>,
+    /// The same the other way, for saying an English tag in Korean.
+    ///
+    /// hitomi's vocabulary is English, so a Korean reader is handed
+    /// `mosaic censorship` and `sole female` on every work. The dictionary
+    /// that lets them search in Korean already knows what those are called.
+    korean: HashMap<String, String>,
 }
 
 impl Dictionary {
@@ -41,7 +47,25 @@ impl Dictionary {
             }
             entries.insert(korean.to_lowercase(), english);
         }
-        Self { entries }
+
+        // One English tag can be reached from several Korean phrases - they
+        // are spellings or synonyms of each other. The one to show back is
+        // the phrase that means the fewest things: a Korean phrase standing
+        // for one English tag is a tighter fit than one standing for six.
+        // Ties go to the shorter, and then to the alphabet, so a rebuild
+        // gives the same answer as the last one.
+        let mut korean: HashMap<String, String> = HashMap::new();
+        let mut rows: Vec<(&String, &Vec<String>)> = entries.iter().collect();
+        rows.sort_unstable_by(|a, b| {
+            a.1.len().cmp(&b.1.len()).then(a.0.len().cmp(&b.0.len())).then(a.0.cmp(b.0))
+        });
+        for (phrase, english) in rows {
+            for tag in english {
+                korean.entry(tag.to_lowercase()).or_insert_with(|| phrase.clone());
+            }
+        }
+
+        Self { entries, korean }
     }
 
     /// 바이너리에 임베드된 사전. 처음 쓰일 때 한 번만 파싱한다.
@@ -60,6 +84,22 @@ impl Dictionary {
 
     pub fn lookup(&self, phrase: &str) -> Option<&[String]> {
         self.entries.get(&phrase.to_lowercase()).map(Vec::as_slice)
+    }
+
+    /// What an English tag is called in Korean, where the dictionary knows.
+    ///
+    /// Namespaced tags keep their namespace: `female:big breasts` comes back
+    /// as `female:거유`, because who a tag is about is drawn from that half.
+    pub fn korean_for(&self, tag: &str) -> Option<String> {
+        let (prefix, word) = match tag.split_once(':') {
+            Some((ns, rest)) if matches!(ns, "female" | "male") => (Some(ns), rest),
+            _ => (None, tag),
+        };
+        let said = self.korean.get(&word.trim().to_lowercase())?;
+        Some(match prefix {
+            Some(ns) => format!("{ns}:{said}"),
+            None => said.clone(),
+        })
     }
 }
 
@@ -250,5 +290,23 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The dictionary read backwards, for showing a tag rather than finding
+    /// one.
+    #[test]
+    fn an_english_tag_can_be_said_in_korean() {
+        let d = Dictionary::embedded();
+        assert_eq!(d.korean_for("big breasts").as_deref(), Some("거유"));
+        assert_eq!(d.korean_for("ahegao").as_deref(), Some("아헤가오"));
+        assert_eq!(d.korean_for("nakadashi").as_deref(), Some("질내 사정"));
+        // Asked however it is spelled.
+        assert_eq!(d.korean_for("Big Breasts").as_deref(), Some("거유"));
+        // Who it is about is kept, because the colour is drawn from it.
+        assert_eq!(d.korean_for("female:big breasts").as_deref(), Some("female:거유"));
+        assert_eq!(d.korean_for("male:sole male").as_deref(), Some("male:단독남성"));
+        // A namespace the dictionary does not know is part of the word.
+        assert_eq!(d.korean_for("artist:someone"), None);
+        assert_eq!(d.korean_for("a tag nobody wrote down"), None);
     }
 }

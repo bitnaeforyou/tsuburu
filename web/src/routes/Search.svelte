@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
-  import { t, number } from '../lib/i18n.svelte'
+  import { i18n, t, number } from '../lib/i18n.svelte'
   import { defaultSearch, galleryNamed, toGallery, toSearch, type SearchState } from '../lib/router'
   import { remember as rememberSearch } from '../lib/preferences'
   import { library } from '../lib/library.svelte'
@@ -65,7 +65,17 @@
 
   /// What this particular search is, for remembering what it found.
   const key = $derived(
-    [params.query, params.sort, params.language, params.kind, params.scope, params.mode].join(' '),
+    [
+      params.query,
+      params.sort,
+      params.language,
+      params.kind,
+      params.scope,
+      params.mode,
+      // The tags come back said in the interface language, so results found
+      // in one are not the results of the other.
+      i18n.locale,
+    ].join(' '),
   )
 
   // 검색어나 정렬, 필터가 바뀌면 처음부터 다시 그린다.

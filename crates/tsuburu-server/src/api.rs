@@ -128,6 +128,25 @@ pub struct Card {
 pub struct CardsParams {
     /// 쉼표로 구분된 갤러리 ID 목록.
     pub ids: String,
+    /// What to say the tags in. hitomi's vocabulary is English, and the
+    /// dictionary that lets a Korean reader search in Korean can say them
+    /// back the same way. Anything else, or a tag it does not know, is left
+    /// as hitomi wrote it.
+    #[serde(default)]
+    pub lang: Option<String>,
+}
+
+/// Says the tags in the reader's language where the dictionary knows them.
+fn said_in(lang: Option<&str>, tags: &mut Vec<String>) {
+    if lang != Some("ko") {
+        return;
+    }
+    let dictionary = tsuburu_korean::Dictionary::embedded();
+    for tag in tags {
+        if let Some(korean) = dictionary.korean_for(tag) {
+            *tag = korean;
+        }
+    }
 }
 
 pub async fn cards(
@@ -224,6 +243,10 @@ pub async fn cards(
     // Said once the list has been read, and not guessed at before then.
     for card in &mut out {
         card.listed = state.listing.listed(card.id);
+        // After the cache, never before it: what is kept is hitomi's own
+        // vocabulary, so the same card can be handed to a reader of any
+        // language.
+        said_in(params.lang.as_deref(), &mut card.tags);
     }
 
     Ok(Json(out))
@@ -442,9 +465,17 @@ pub struct Page {
     pub height: u32,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct GalleryParams {
+    /// What to say the tags in; see [`CardsParams::lang`].
+    #[serde(default)]
+    pub lang: Option<String>,
+}
+
 pub async fn gallery(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    Query(params): Query<GalleryParams>,
 ) -> Result<Json<GalleryResponse>, ApiError> {
     let gallery = match tsuburu_hitomi::fetch_gallery(state.fetcher.as_ref(), &state.cfg, id).await
     {
@@ -453,7 +484,11 @@ pub async fn gallery(
         // is on disk, which is all the reader needs.
         Err(err) => {
             return match crate::downloads::stored_gallery(&state, id) {
-                Some(stored) => Ok(Json(from_download(stored))),
+                Some(stored) => {
+                    let mut response = from_download(stored);
+                    said_in(params.lang.as_deref(), &mut response.tags);
+                    Ok(Json(response))
+                }
                 None => Err(err.into()),
             };
         }
@@ -471,6 +506,9 @@ pub async fn gallery(
         })
         .collect();
 
+    let mut tags = gallery.tags;
+    said_in(params.lang.as_deref(), &mut tags);
+
     Ok(Json(GalleryResponse {
         id,
         title: gallery.title,
@@ -478,7 +516,7 @@ pub async fn gallery(
         kind: gallery.kind,
         language: gallery.language,
         date: gallery.date,
-        tags: gallery.tags,
+        tags,
         artists: gallery.artists,
         series: gallery.series,
         pages,
