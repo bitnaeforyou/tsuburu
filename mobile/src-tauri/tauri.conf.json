@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "tsuburu",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "identifier": "la.tsuburu.tsuburu",
   "build": {
     "frontendDist": "../placeholder",
