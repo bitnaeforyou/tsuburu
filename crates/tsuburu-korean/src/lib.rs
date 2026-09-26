@@ -86,6 +86,38 @@ impl Dictionary {
         self.entries.get(&phrase.to_lowercase()).map(Vec::as_slice)
     }
 
+    /// Words that begin with or contain what has been typed so far.
+    ///
+    /// Both languages are searched, because a reader may type either, and
+    /// what comes back is the pair: the English hitomi indexes by, and what
+    /// to show it as. The ones that start with what was typed come first, and
+    /// the shorter before the longer - `big ass` before `bike shorts` for
+    /// `bi` - so the likeliest is at the front.
+    pub fn suggest(&self, typed: &str, limit: usize) -> Vec<Suggestion> {
+        let typed = typed.trim().to_lowercase();
+        if typed.is_empty() || limit == 0 {
+            return Vec::new();
+        }
+        let mut found: Vec<(u8, usize, &str, &str)> = Vec::new();
+        for (english, korean) in &self.korean {
+            let rank = match (english.find(&typed), korean.find(&typed)) {
+                (Some(0), _) | (_, Some(0)) => 0u8,
+                (Some(_), _) | (_, Some(_)) => 1,
+                _ => continue,
+            };
+            found.push((rank, english.len(), english, korean));
+        }
+        found.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(b.2)));
+        found
+            .into_iter()
+            .take(limit)
+            .map(|(_, _, english, korean)| Suggestion {
+                used: english.to_string(),
+                korean: korean.to_string(),
+            })
+            .collect()
+    }
+
     /// Whether this is a tag hitomi uses, said in English.
     ///
     /// Worth asking because hitomi's tags are several words long - `big
@@ -111,6 +143,16 @@ impl Dictionary {
             None => said.clone(),
         })
     }
+}
+
+/// A word the reader might have meant: what hitomi calls it, and what to
+/// show it as.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Suggestion {
+    /// hitomi's own word, which is what a search is made of.
+    pub used: String,
+    /// The same thing in Korean, where the dictionary knows it.
+    pub korean: String,
 }
 
 /// 입력의 한 조각과 그것이 무엇으로 바뀌었는지.
@@ -348,18 +390,41 @@ mod tests {
         assert_eq!(terms.len(), 1, "one tag, not two words: {terms:?}");
         assert_eq!(terms[0].used, "big breasts");
 
+        // Beside another word it is still one of them.
         let terms = translate(d, "big breasts glasses");
         assert_eq!(
             terms.iter().map(|t| t.used.as_str()).collect::<Vec<_>>(),
             vec!["big breasts", "glasses"]
         );
 
+        // And excluded the same way.
         let terms = translate(d, "-sole female");
         assert_eq!(terms.len(), 1);
         assert!(terms[0].excluded);
         assert_eq!(terms[0].used, "sole female");
 
+        // Words nobody has written down are still one word each.
         let terms = translate(d, "zzz qqq");
         assert_eq!(terms.len(), 2);
+    }
+
+    /// What is offered while a word is being typed.
+    #[test]
+    fn suggestions_lead_with_what_was_typed() {
+        let d = Dictionary::embedded();
+        let found = d.suggest("big b", 10);
+        assert!(!found.is_empty());
+        assert!(
+            found[0].used.starts_with("big b"),
+            "a word that starts with it comes first: {found:?}"
+        );
+        assert!(found.iter().all(|s| s.used.contains("big b") || s.korean.contains("big b")));
+
+        // Typed in Korean, answered with hitomi's word for it.
+        let found = d.suggest("거유", 5);
+        assert!(found.iter().any(|s| s.used == "big breasts"), "{found:?}");
+
+        assert!(d.suggest("", 10).is_empty());
+        assert!(d.suggest("big", 0).is_empty());
     }
 }

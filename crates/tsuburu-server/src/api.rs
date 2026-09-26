@@ -136,6 +136,50 @@ pub struct CardsParams {
     pub lang: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct WordsParams {
+    /// What has been typed so far.
+    #[serde(default)]
+    pub q: String,
+    /// What to show them as; see [`CardsParams::lang`].
+    #[serde(default)]
+    pub lang: Option<String>,
+    #[serde(default = "default_words")]
+    pub limit: usize,
+}
+
+fn default_words() -> usize {
+    12
+}
+
+#[derive(Debug, Serialize)]
+pub struct Word {
+    /// hitomi's own word, which is what the search is made of.
+    pub used: String,
+    /// What to put on the screen.
+    pub shown: String,
+}
+
+/// Words the reader might have meant, while they are still typing one.
+///
+/// Read out of the same dictionary that lets them search in Korean, so this
+/// needs nothing imported and works on a phone. Both languages are matched,
+/// because either might be typed.
+pub async fn words(Query(params): Query<WordsParams>) -> Json<Vec<Word>> {
+    let dictionary = tsuburu_korean::Dictionary::embedded();
+    let korean = params.lang.as_deref() == Some("ko");
+    Json(
+        dictionary
+            .suggest(&params.q, params.limit.clamp(1, 50))
+            .into_iter()
+            .map(|found| Word {
+                shown: if korean { found.korean.clone() } else { found.used.clone() },
+                used: found.used,
+            })
+            .collect(),
+    )
+}
+
 /// Says the tags in the reader's language where the dictionary knows them.
 fn said_in(lang: Option<&str>, tags: &mut Vec<String>) {
     if lang != Some("ko") {

@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { Mode, Scope, Sort, SearchState } from './router'
+  import * as api from './api'
   import { t, type Key } from './i18n.svelte'
   import ViewToggle from './ViewToggle.svelte'
+  import { forget, recent, remember as rememberSearch } from './recent'
 
   // 검색 실행과 필터는 같은 성격의 도구이므로 한 줄에 모은다. 제출은 텍스트가
   // 아니라 아이콘이다. 위 줄의 Search 탭과 글자가 같으면 무엇이 이동이고
@@ -61,9 +63,76 @@
     ].filter(Boolean),
   )
 
+  // --- what else the reader might have meant ---
+  //
+  // hitomi's vocabulary is not guessable: `sole female`, `mosaic censorship`,
+  // `nakadashi`. Typing a few letters and being shown the words that exist is
+  // the difference between searching and guessing. The same list carries what
+  // was looked for lately, for when the box is empty.
+
+  let words = $state<api.Word[]>([])
+  let asking: AbortController | null = null
+  let open = $state(false)
+  /// Which row the arrow keys are on, -1 for none.
+  let at = $state(-1)
+
+  /// Read when the list opens rather than watched: it only changes because
+  /// of something done here.
+  let looked = $state<string[]>([])
+  const rows = $derived(
+    input.trim() ? words.map((w) => ({ used: w.used, shown: w.shown, was: false }))
+                 : looked.map((q) => ({ used: q, shown: q, was: true })),
+  )
+
+  $effect(() => {
+    const typed = input.trim()
+    at = -1
+    if (!typed) {
+      words = []
+      return
+    }
+    // A word is typed a letter at a time; the ones on the way are not
+    // questions worth asking.
+    const timer = setTimeout(() => {
+      asking?.abort()
+      asking = new AbortController()
+      void api
+        .words(typed, asking.signal)
+        .then((found) => (words = found))
+        .catch(() => {})
+    }, 120)
+    return () => clearTimeout(timer)
+  })
+
+  function take(used: string) {
+    input = used
+    open = false
+    onchange({ query: used })
+  }
+
+  function onKey(event: KeyboardEvent) {
+    if (!open || rows.length === 0) return
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      at = (at + 1) % rows.length
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      at = at <= 0 ? rows.length - 1 : at - 1
+    } else if (event.key === 'Enter' && at >= 0) {
+      event.preventDefault()
+      take(rows[at].used)
+    } else if (event.key === 'Escape') {
+      open = false
+    }
+  }
+
   function submit(event: SubmitEvent) {
     event.preventDefault()
-    onchange({ query: input.trim() })
+    open = false
+    const asked = input.trim()
+    rememberSearch(asked)
+    looked = recent()
+    onchange({ query: asked })
   }
 
   function clear() {
@@ -81,6 +150,16 @@
         : t('search.placeholder')}
       aria-label={t('nav.search')}
       autocomplete="off"
+      role="combobox"
+      aria-expanded={open && rows.length > 0}
+      aria-controls="search-words"
+      aria-autocomplete="list"
+      onfocus={() => {
+        looked = recent()
+        open = true
+      }}
+      onkeydown={onKey}
+      onblur={() => setTimeout(() => (open = false), 150)}
     />
     {#if input}
       <button type="button" class="clear" onclick={clear} aria-label={t('search.clear')}>&times;</button>
@@ -91,6 +170,51 @@
         <line x1="13" y1="13" x2="17.5" y2="17.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
       </svg>
     </button>
+
+    {#if open && rows.length > 0}
+      <ul class="words" id="search-words" role="listbox">
+        <li class="what">
+          {input.trim() ? t('search.words') : t('search.recent')}
+          {#if !input.trim()}
+            <button
+              type="button"
+              class="wipe"
+              onclick={() => {
+                forget()
+                looked = []
+              }}
+            >{t('search.forgetAll')}</button>
+          {/if}
+        </li>
+        {#each rows as row, i (row.used)}
+          <li>
+            <button
+              type="button"
+              class="word"
+              class:on={i === at}
+              role="option"
+              aria-selected={i === at}
+              onclick={() => take(row.used)}
+            >
+              <span class="said">{row.shown}</span>
+              <!-- What hitomi calls it, when that is not what is shown. -->
+              {#if row.shown !== row.used}<span class="orig">{row.used}</span>{/if}
+            </button>
+            {#if row.was}
+              <button
+                type="button"
+                class="drop"
+                aria-label={t('search.forgetOne', { query: row.used })}
+                onclick={() => {
+                  forget(row.used)
+                  looked = recent()
+                }}
+              >&times;</button>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    {/if}
   </form>
 
   <ViewToggle />
@@ -217,6 +341,72 @@
   }
   .fold > summary {
     display: none;
+  }
+
+  /* Over the results rather than pushing them down: the box is at the top of
+     a list that is already there, and moving it while someone types is worse
+     than covering it. */
+  .words {
+    position: absolute;
+    inset-inline: 0;
+    top: calc(100% + 0.3rem);
+    z-index: 4;
+    list-style: none;
+    margin: 0;
+    padding: 0.3rem;
+    max-height: 60vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 0 6px 16px -8px #00000040, 0 2px 6px -4px #00000030;
+  }
+  .words li {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+  }
+  .what {
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: var(--text-xs);
+    padding: 0.2rem 0.5rem 0.35rem;
+  }
+  .wipe {
+    padding: 0.1rem 0.4rem;
+    font-size: var(--text-xs);
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+  }
+  .word {
+    flex: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    text-align: start;
+    padding: 0.45rem 0.5rem;
+    background: transparent;
+    border-color: transparent;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-base);
+  }
+  .word:hover,
+  .word.on {
+    background: var(--surface);
+    border-color: transparent;
+  }
+  .orig {
+    color: var(--muted);
+    font-size: var(--text-sm);
+  }
+  .drop {
+    padding: 0.2rem 0.5rem;
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+    line-height: 1;
   }
 
   .filters {

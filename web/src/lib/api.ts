@@ -128,6 +128,14 @@ function said(): string {
   return `lang=${encodeURIComponent(i18n.locale)}`
 }
 
+export type Word = { used: string; shown: string }
+
+/// Words the reader might have meant, while they are still typing one. Read
+/// out of the dictionary, so it needs nothing imported.
+export function words(q: string, signal?: AbortSignal): Promise<Word[]> {
+  return request(`/api/words?q=${encodeURIComponent(q)}&${said()}`, { signal })
+}
+
 export function cards(ids: number[], signal?: AbortSignal): Promise<Card[]> {
   return request(`/api/cards?ids=${ids.join(',')}&${said()}`, { signal })
 }
