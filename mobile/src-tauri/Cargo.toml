@@ -1,6 +1,6 @@
 [package]
 name = "tsuburu-mobile"
-version = "0.3.14"
+version = "0.3.15"
 description = "tsuburu on a phone"
 edition = "2021"
 rust-version = "1.82"
