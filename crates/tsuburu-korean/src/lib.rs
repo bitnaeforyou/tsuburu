@@ -86,6 +86,16 @@ impl Dictionary {
         self.entries.get(&phrase.to_lowercase()).map(Vec::as_slice)
     }
 
+    /// Whether this is a tag hitomi uses, said in English.
+    ///
+    /// Worth asking because hitomi's tags are several words long - `big
+    /// breasts`, `sole female` - and a query is otherwise cut at every space.
+    /// Someone typing the tag they can see on a work was getting `big` and
+    /// `breasts` looked up separately.
+    pub fn knows_english(&self, phrase: &str) -> bool {
+        self.korean.contains_key(&phrase.trim().to_lowercase())
+    }
+
     /// What an English tag is called in Korean, where the dictionary knows.
     ///
     /// Namespaced tags keep their namespace: `female:big breasts` comes back
@@ -129,6 +139,7 @@ pub fn translate(dictionary: &Dictionary, query: &str) -> Vec<Term> {
 
     while at < words.len() {
         let mut matched = None;
+        let mut english = None;
         let longest = MAX_PHRASE_WORDS.min(words.len() - at);
         for take in (1..=longest).rev() {
             let phrase = words[at..at + take].join(" ");
@@ -138,6 +149,12 @@ pub fn translate(dictionary: &Dictionary, query: &str) -> Vec<Term> {
             }
             if let Some(candidates) = dictionary.lookup(body) {
                 matched = Some((take, phrase.clone(), body.to_string(), excluded, candidates));
+                break;
+            }
+            // Already hitomi's own word for it. Kept whole rather than cut at
+            // its spaces, which is what made `big breasts` two searches.
+            if take > 1 && dictionary.knows_english(body) {
+                english = Some((take, phrase.clone(), body.to_string(), excluded));
                 break;
             }
         }
@@ -153,18 +170,30 @@ pub fn translate(dictionary: &Dictionary, query: &str) -> Vec<Term> {
                 });
                 at += take;
             }
-            None => {
-                let word = words[at];
-                let (body, excluded) = split_exclusion(word);
-                out.push(Term {
-                    input: word.to_string(),
-                    used: body.to_string(),
-                    alternatives: Vec::new(),
-                    translated: false,
-                    excluded,
-                });
-                at += 1;
-            }
+            None => match english {
+                Some((take, input, body, excluded)) => {
+                    out.push(Term {
+                        input,
+                        used: body,
+                        alternatives: Vec::new(),
+                        translated: false,
+                        excluded,
+                    });
+                    at += take;
+                }
+                None => {
+                    let word = words[at];
+                    let (body, excluded) = split_exclusion(word);
+                    out.push(Term {
+                        input: word.to_string(),
+                        used: body.to_string(),
+                        alternatives: Vec::new(),
+                        translated: false,
+                        excluded,
+                    });
+                    at += 1;
+                }
+            },
         }
     }
 
@@ -308,5 +337,29 @@ mod tests {
         // A namespace the dictionary does not know is part of the word.
         assert_eq!(d.korean_for("artist:someone"), None);
         assert_eq!(d.korean_for("a tag nobody wrote down"), None);
+    }
+
+    /// hitomi's tags are several words long, so a query cut at every space
+    /// looks for the wrong things.
+    #[test]
+    fn an_english_tag_is_not_cut_at_its_spaces() {
+        let d = Dictionary::embedded();
+        let terms = translate(d, "big breasts");
+        assert_eq!(terms.len(), 1, "one tag, not two words: {terms:?}");
+        assert_eq!(terms[0].used, "big breasts");
+
+        let terms = translate(d, "big breasts glasses");
+        assert_eq!(
+            terms.iter().map(|t| t.used.as_str()).collect::<Vec<_>>(),
+            vec!["big breasts", "glasses"]
+        );
+
+        let terms = translate(d, "-sole female");
+        assert_eq!(terms.len(), 1);
+        assert!(terms[0].excluded);
+        assert_eq!(terms[0].used, "sole female");
+
+        let terms = translate(d, "zzz qqq");
+        assert_eq!(terms.len(), 2);
     }
 }
