@@ -1,7 +1,8 @@
 # Building tsuburu from this checkout and running it.
 #
-# The release carries a compose file that pulls a built image instead, so
-# nothing has to be compiled; this one is for running what is in front of you.
+# This one compiles. Unless that is what you want, take the compose file
+# attached to a release instead: it pulls an image that is already built, and
+# following each new release is `docker compose pull && docker compose up -d`.
 #
 #   docker compose up -d      then open http://127.0.0.1:8420/
 #

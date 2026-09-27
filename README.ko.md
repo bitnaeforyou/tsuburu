@@ -40,7 +40,7 @@ press ctrl+c to stop
 | Mac, M1 이상 | `…aarch64-apple-darwin.zip` | **Start tsuburu.command** 더블클릭 |
 | Mac, 인텔 | `…x86_64-apple-darwin.zip` | **Start tsuburu.command** 더블클릭 |
 | Linux | `…linux-gnu.tar.gz` | **start.sh** 실행 |
-| Docker | `compose.yaml` | `docker compose up -d` |
+| Docker | `compose.yaml` | `docker compose pull && docker compose up -d` |
 
 서명이 없는 빌드라 각 운영체제가 **처음 한 번만** 경고합니다.
 
@@ -59,7 +59,8 @@ press ctrl+c to stop
 ### 컨테이너
 
 릴리스의 `compose.yaml`은 빌드된 이미지를 받아옵니다. 빈 디렉터리에 두고
-`docker compose up -d`를 실행한 뒤 `http://127.0.0.1:8420/`를 직접 여세요.
+`docker compose pull && docker compose up -d`를 실행한 뒤
+`http://127.0.0.1:8420/`를 직접 여세요.
 브라우저는 열어주지 않습니다. 이미지에 tesseract와 ffmpeg가 들어 있는데,
 리눅스에서 대사 인식에 필요한 것들이고 데스크톱이라면 직접 깔라고 했을
 것들입니다.
@@ -71,9 +72,9 @@ press ctrl+c to stop
 같이 지우려면 `down -v`입니다. 받아오는 대신 이 저장소에서 직접 빌드하려면
 저장소의 `compose.yaml`이 그렇게 합니다.
 
-새 버전이 나와도 빌드할 것은 없습니다. 이미지 태그를 `latest`로 바꿔 두면
-`docker compose pull && docker compose up -d`로 나올 때마다 따라가고,
-버전을 적어 두면 그 자리에 머뭅니다.
+업데이트도 같은 두 줄입니다. 이미지는 최신 릴리스를 따라가고, 가서 받아오는
+것이 `pull`입니다 — `up -d`만 하면 이미 받아둔 것을 그대로 씁니다. 따라가지
+않고 한 버전에 머물려면 `latest` 자리에 그 버전을 적으세요.
 
 <a id="included"></a>
 

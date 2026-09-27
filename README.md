@@ -39,7 +39,7 @@ and a `START-HERE.txt` that says the same thing in two languages.
 | Mac, M1 and later | `…aarch64-apple-darwin.zip` | double-click **Start tsuburu.command** |
 | Mac, Intel | `…x86_64-apple-darwin.zip` | double-click **Start tsuburu.command** |
 | Linux | `…linux-gnu.tar.gz` | run **start.sh** |
-| Docker | `compose.yaml` | `docker compose up -d` |
+| Docker | `compose.yaml` | `docker compose pull && docker compose up -d` |
 
 These builds are not signed, so each system warns once, the first time only:
 
@@ -59,7 +59,7 @@ the search screen appears.
 ### Container
 
 `compose.yaml` from the release pulls a built image; put it in an empty
-directory and run `docker compose up -d`, then open
+directory and run `docker compose pull && docker compose up -d`, then open
 `http://127.0.0.1:8420/` yourself — nothing opens a browser for you. The
 image carries tesseract and ffmpeg, which is what dialogue recognition needs
 on Linux and what a desktop would otherwise ask you to install.
@@ -72,9 +72,10 @@ Everything it keeps lives in the `data` volume and survives `docker compose
 down`; `down -v` throws that away too. To build from a checkout instead of
 pulling, the `compose.yaml` in this repository does that.
 
-Nothing is compiled for a new release either. Change the image tag to
-`latest` and `docker compose pull && docker compose up -d` takes each one as
-it comes out; leave the version in place and it stays where it is.
+The same two commands update it. The image follows the newest release and
+`pull` is what goes and gets it — `up -d` alone reuses what you already have.
+To stay on one release rather than following, put its version in place of
+`latest`.
 
 <a id="included"></a>
 

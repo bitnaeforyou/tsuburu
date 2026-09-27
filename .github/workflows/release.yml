@@ -299,23 +299,25 @@ jobs:
           image="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           version="${GITHUB_REF_NAME#v}"
           cat > dist/compose.yaml <<COMPOSE
-          # tsuburu, ${GITHUB_REF_NAME}. Put this in an empty directory and run:
+          # tsuburu. Put this in an empty directory and run:
           #
-          #   docker compose up -d
+          #   docker compose pull && docker compose up -d
           #
           # then open http://127.0.0.1:8420/ . Nothing is compiled and nothing
           # is installed outside the container.
+          #
+          # Those same two commands are also how you update: the image below
+          # follows the newest release, and \`pull\` is what goes and gets it.
+          # Written at ${GITHUB_REF_NAME}; to stay on that one rather than
+          # following, change the tag to \`${version}\`.
           #
           # Everything it keeps - the databases, anything imported, the model
           # if you switch it on - lives in the \`data\` volume and survives
           # \`docker compose down\`. Use \`down -v\` to throw it away too.
 
-          # To take each new release as it comes out, change the tag below to
-          # \`latest\` and run \`docker compose pull && docker compose up -d\`.
-          # Nothing is built either way; the image is already published.
           services:
             tsuburu:
-              image: ${image}:${version}
+              image: ${image}:latest
               restart: unless-stopped
               # Loopback only. Change the left-hand side to 8420:8420 to let
               # the rest of the network in, and know that it is the whole of
@@ -355,7 +357,7 @@ jobs:
           | **Mac** (M1 and later) | `…aarch64-apple-darwin.zip` | double-click `Start tsuburu.command` |
           | **Mac** (Intel) | `…x86_64-apple-darwin.zip` | double-click `Start tsuburu.command` |
           | **Linux** | `…linux-gnu.tar.gz` | run `start.sh` |
-          | **Docker** | `compose.yaml` | `docker compose up -d` |
+          | **Docker** | `compose.yaml` | `docker compose pull && docker compose up -d` |
           | **Android** | `tsuburu-….apk` | open it on the phone and allow the install |
           | **iPhone** | `…unsigned.ipa` | sign it yourself, below |
 
