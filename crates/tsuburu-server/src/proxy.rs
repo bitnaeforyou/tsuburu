@@ -18,6 +18,14 @@ use crate::state::AppState;
 /// 프록시한 이미지는 내용이 바뀌지 않는다. 브라우저가 다시 묻지 않게 한다.
 const CACHE_CONTROL: &str = "public, max-age=604800, immutable";
 
+/// The most one page may be, when it is held whole rather than streamed.
+///
+/// hitomi's pages run from a hundred kilobytes to a megabyte or so, and an
+/// animated one a few times that. Holding it whole is what lets recognition
+/// have the bytes the reader is already fetching; holding whatever arrives is
+/// how a phone runs out of memory, which `panic = "abort"` turns into a kill.
+const MOST_A_PAGE_IS: usize = 32 * 1024 * 1024;
+
 pub async fn image(
     State(state): State<Arc<AppState>>,
     Path(file): Path<String>,
@@ -117,7 +125,7 @@ async fn read_and_recognise(
     waiting: crate::state::UnreadPage,
 ) -> Result<Response, ApiError> {
     let response = stream(state, url, ext).await?;
-    let bytes = match axum::body::to_bytes(response.into_body(), usize::MAX).await {
+    let bytes = match axum::body::to_bytes(response.into_body(), MOST_A_PAGE_IS).await {
         Ok(bytes) => bytes.to_vec(),
         Err(err) => {
             return Err(ApiError {

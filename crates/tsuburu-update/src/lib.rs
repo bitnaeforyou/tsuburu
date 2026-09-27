@@ -65,6 +65,10 @@ pub enum UpdateError {
     Replace(String),
     #[error("could not open the installer: {0}")]
     Install(String),
+    #[error("{0} is not what the release says it is")]
+    NotAsPublished(String),
+    #[error("the release points at {0}, which is not where it is published")]
+    NotFromGitHub(String),
 }
 
 #[derive(Deserialize)]
@@ -80,6 +84,42 @@ struct Release {
 struct Asset {
     name: String,
     browser_download_url: String,
+}
+
+/// The file every release carries, naming what each of the others should
+/// come to.
+const SUMS: &str = "SHA256SUMS";
+
+/// Hosts a release may be fetched from.
+///
+/// Each file's address comes out of the release listing rather than being
+/// built here, so it is a value from the network saying where the next
+/// version of this program should be downloaded from.
+const PUBLISHERS: &[&str] =
+    &["github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"];
+
+fn is_published_at(url: &str) -> bool {
+    let host = url
+        .strip_prefix("https://")
+        .and_then(|rest| rest.split('/').next())
+        .map(|host| host.split(':').next().unwrap_or(host))
+        .unwrap_or_default();
+    PUBLISHERS.contains(&host)
+}
+
+/// The digest for one file. `sha256sum` writes two spaces between the digest
+/// and the name, and the name may contain one.
+fn published_digest(sums: &str, name: &str) -> Option<String> {
+    sums.lines().find_map(|line| {
+        let (digest, said) = line.split_once("  ")?;
+        (said.trim() == name).then(|| digest.trim().to_ascii_lowercase())
+    })
+}
+
+fn digest_of(path: &Path) -> Result<String, UpdateError> {
+    use sha2::{Digest, Sha256};
+    let bytes = std::fs::read(path).map_err(|e| UpdateError::Replace(e.to_string()))?;
+    Ok(Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// Whether `there` is a later version than `here`.
@@ -244,7 +284,7 @@ impl Updater {
         let _ = std::fs::remove_dir_all(&work);
         std::fs::create_dir_all(&work).map_err(|e| UpdateError::Replace(e.to_string()))?;
         let apk = work.join(&asset.name);
-        self.fetch(&asset.browser_download_url, &apk).await?;
+        self.fetch_as_published(&release, &asset, &apk).await?;
 
         android::install(&apk).map_err(UpdateError::Install)?;
         Ok(release.tag_name.trim_start_matches('v').to_string())
@@ -271,9 +311,9 @@ impl Updater {
         std::fs::create_dir_all(&work).map_err(|e| UpdateError::Replace(e.to_string()))?;
 
         let archive = work.join(&asset.name);
-        self.fetch(&asset.browser_download_url, &archive).await?;
+        self.fetch_as_published(&release, &asset, &archive).await?;
 
-        let status = tokio::process::Command::new("tar")
+        let status = tokio::process::Command::new(system_tar())
             .arg("-xf")
             .arg(&archive)
             .current_dir(&work)
@@ -289,6 +329,53 @@ impl Updater {
         swap(&here, &fresh)?;
         let _ = std::fs::remove_dir_all(&work);
         Ok(release.tag_name.trim_start_matches('v').to_string())
+    }
+
+    /// Fetches one of a release's files, having checked it is the file the
+    /// release says it is.
+    ///
+    /// What this does not do: the digests travel in the same release as the
+    /// file, so it is no defence against whoever can publish one - only a key
+    /// kept away from the publisher would be. What it does do is make a
+    /// tampered transfer, a redirect onto another host and a truncated
+    /// download all refuse rather than become the running program, and a
+    /// release carrying no digests is refused rather than trusted.
+    async fn fetch_as_published(
+        self: &Arc<Self>,
+        release: &Release,
+        asset: &Asset,
+        to: &Path,
+    ) -> Result<(), UpdateError> {
+        let sums = release
+            .assets
+            .iter()
+            .find(|a| a.name == SUMS)
+            .ok_or_else(|| UpdateError::NotAsPublished(SUMS.to_string()))?;
+        for url in [&sums.browser_download_url, &asset.browser_download_url] {
+            if !is_published_at(url) {
+                return Err(UpdateError::NotFromGitHub(url.clone()));
+            }
+        }
+
+        let listing = self
+            .client
+            .get(&sums.browser_download_url)
+            .send()
+            .await
+            .and_then(reqwest::Response::error_for_status)
+            .map_err(|e| UpdateError::Unreachable(e.to_string()))?
+            .text()
+            .await
+            .map_err(|e| UpdateError::Unreachable(e.to_string()))?;
+        let want = published_digest(&listing, &asset.name)
+            .ok_or_else(|| UpdateError::NotAsPublished(asset.name.clone()))?;
+
+        self.fetch(&asset.browser_download_url, to).await?;
+        if digest_of(to)? != want {
+            let _ = std::fs::remove_file(to);
+            return Err(UpdateError::NotAsPublished(asset.name.clone()));
+        }
+        Ok(())
     }
 
     async fn fetch(self: &Arc<Self>, url: &str, to: &Path) -> Result<(), UpdateError> {
@@ -328,6 +415,16 @@ fn cache_dir() -> Result<PathBuf, UpdateError> {
     std::env::var_os("TSUBURU_CACHE_DIR")
         .map(PathBuf::from)
         .ok_or_else(|| UpdateError::Replace("nowhere to keep the package".into()))
+}
+
+/// Where the system's own `tar` is.
+///
+/// Named in full rather than looked up: on Windows the search for a bare
+/// command includes the directory the program is in, so an install directory
+/// somebody else can write to is a way to be handed a different `tar` - and
+/// this one is run on bytes that have just been downloaded.
+fn system_tar() -> &'static str {
+    if cfg!(windows) { r"C:\Windows\System32\tar.exe" } else { "/usr/bin/tar" }
 }
 
 /// The one file in the unpacked archive that is the program.
@@ -397,6 +494,28 @@ fn first_lines(body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_github_is_fetched_from() {
+        assert!(is_published_at("https://github.com/owner/repo/releases/download/v1/x.zip"));
+        assert!(is_published_at("https://objects.githubusercontent.com/whatever"));
+        assert!(!is_published_at("https://evil.example/x.zip"));
+        assert!(!is_published_at("http://github.com/x.zip"));
+        assert!(!is_published_at("https://github.com.evil.example/x.zip"));
+    }
+
+    #[test]
+    fn a_digest_is_read_by_the_name_beside_it() {
+        let sums = "\
+aaaa  tsuburu-x86_64-pc-windows-msvc.zip
+bbbb  tsuburu-aarch64-apple-darwin.zip
+";
+        assert_eq!(
+            published_digest(sums, "tsuburu-aarch64-apple-darwin.zip").as_deref(),
+            Some("bbbb")
+        );
+        assert_eq!(published_digest(sums, "tsuburu-0.4.0.apk"), None);
+    }
 
     #[test]
     fn later_numbers_are_newer() {

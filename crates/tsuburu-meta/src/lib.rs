@@ -496,29 +496,6 @@ impl MetaStore {
             all
         }))
     }
-
-    /// Keys starting with `prefix`, for autocompletion: `artist:ke` -> `artist:keso`.
-    pub fn suggest(&self, prefix: &str, limit: usize) -> Result<Vec<(String, usize)>, MetaError> {
-        let prefix = prefix.trim().to_lowercase();
-        if prefix.is_empty() || limit == 0 {
-            return Ok(Vec::new());
-        }
-        let tx = self.db.begin_read().map_err(db_err)?;
-        let terms = tx.open_multimap_table(TERMS).map_err(db_err)?;
-        let mut out = Vec::new();
-        for row in terms.range(prefix.as_str()..).map_err(db_err)? {
-            let (key, values) = row.map_err(db_err)?;
-            let key = key.value().to_string();
-            if !key.starts_with(&prefix) {
-                break;
-            }
-            out.push((key, values.count()));
-            if out.len() >= limit {
-                break;
-            }
-        }
-        Ok(out)
-    }
 }
 
 fn decode_work(bytes: &[u8]) -> Result<Work, MetaError> {
@@ -709,20 +686,6 @@ mod tests {
         let page = store.search(&q, 1, 1).unwrap();
         assert_eq!(page.total, 2);
         assert_eq!(page.ids, vec![1]);
-    }
-
-    #[test]
-    fn suggestions_are_prefix_scans() {
-        let (store, _d) = seeded();
-        let s = store.suggest("artist:ke", 5).unwrap();
-        assert_eq!(s, vec![("artist:keso".to_string(), 2)]);
-        assert!(
-            store
-                .suggest("tag:female:g", 5)
-                .unwrap()
-                .iter()
-                .any(|(k, _)| k == "tag:female:glasses")
-        );
     }
 
     #[test]

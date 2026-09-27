@@ -13,7 +13,7 @@ use tsuburu_meta::MetaQuery;
 use crate::error::{ApiError, ErrorKind};
 use crate::state::AppState;
 
-const MAX_LIMIT: usize = 100;
+use crate::MAX_LIMIT;
 
 fn meta(state: &AppState) -> Result<&Arc<tsuburu_meta::MetaStore>, ApiError> {
     state.meta.as_ref().ok_or_else(|| ApiError {
@@ -143,32 +143,6 @@ fn split_terms(s: &str) -> Vec<String> {
         }
     }
     out
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SuggestParams {
-    pub prefix: String,
-    #[serde(default = "default_suggest_limit")]
-    pub limit: usize,
-}
-
-fn default_suggest_limit() -> usize {
-    10
-}
-
-#[derive(Debug, Serialize)]
-pub struct Suggestion {
-    pub key: String,
-    pub count: usize,
-}
-
-pub async fn suggest(
-    State(state): State<Arc<AppState>>,
-    Query(params): Query<SuggestParams>,
-) -> Result<Json<Vec<Suggestion>>, ApiError> {
-    let meta = meta(&state)?;
-    let items = meta.suggest(&params.prefix, params.limit.clamp(1, 50)).map_err(storage)?;
-    Ok(Json(items.into_iter().map(|(key, count)| Suggestion { key, count }).collect()))
 }
 
 fn storage(err: impl std::fmt::Display) -> ApiError {

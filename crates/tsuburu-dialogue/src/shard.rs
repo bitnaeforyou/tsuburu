@@ -35,6 +35,8 @@ pub enum ShardError {
     Corrupt(String),
     #[error("shard hash does not match its name")]
     HashMismatch,
+    #[error("shard unpacks to more than this will take in")]
+    TooBig,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShardEntry {
@@ -48,6 +50,12 @@ pub struct Shard {
     pub last_id: i32,
     pub entries: Vec<ShardEntry>,
 }
+
+/// The most a shard may come to once unpacked.
+///
+/// The largest this program makes is a few tens of megabytes; this is room
+/// for one far larger than that and still far below what refusing protects.
+const UNPACKED_LIMIT: u64 = 512 * 1024 * 1024;
 
 impl Shard {
     pub fn encode(&self) -> Result<Vec<u8>, ShardError> {
@@ -71,10 +79,16 @@ impl Shard {
         if version > VERSION {
             return Err(ShardError::NewerVersion(version));
         }
+        // Shards are made to be passed between readers, so the bytes are
+        // somebody else's. A megabyte of deflated nothing expands to a
+        // gigabyte, and with `panic = "abort"` a failed allocation is the
+        // whole program rather than a refused import.
         let mut json = Vec::new();
-        DeflateDecoder::new(&bytes[6..])
-            .read_to_end(&mut json)
-            .map_err(|e| ShardError::Corrupt(e.to_string()))?;
+        let mut room = DeflateDecoder::new(&bytes[6..]).take(UNPACKED_LIMIT + 1);
+        room.read_to_end(&mut json).map_err(|e| ShardError::Corrupt(e.to_string()))?;
+        if json.len() as u64 > UNPACKED_LIMIT {
+            return Err(ShardError::TooBig);
+        }
         serde_json::from_slice(&json).map_err(|e| ShardError::Corrupt(e.to_string()))
     }
 
@@ -103,6 +117,24 @@ fn short_hash(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// Shards travel between readers, so a hostile one is a small file that
+    /// unpacks to more memory than the machine has.
+    #[test]
+    fn a_shard_that_unpacks_to_too_much_is_refused() {
+        use flate2::write::DeflateEncoder;
+        let mut out = Vec::new();
+        out.extend_from_slice(MAGIC);
+        out.extend_from_slice(&VERSION.to_be_bytes());
+        let mut packer = DeflateEncoder::new(Vec::new(), Compression::best());
+        let block = vec![b' '; 1 << 20];
+        for _ in 0..600 {
+            packer.write_all(&block).unwrap();
+        }
+        out.extend_from_slice(&packer.finish().unwrap());
+        assert!(out.len() < 1 << 20, "the packed shard is small: {}", out.len());
+        assert!(matches!(Shard::decode(&out), Err(ShardError::TooBig)));
+    }
     use super::*;
 
     fn sample() -> Shard {

@@ -62,7 +62,6 @@ export const en = {
   'error.unsupported': 'That is not available here.',
   'error.code.import_meta': 'Import a data.db snapshot to search titles and artists offline.',
   'error.code.import_keywords': 'Import a graph.csv to see what a work is about.',
-  'error.code.import_artifact': 'Import an llm-search-index to search by scene.',
   'error.code.no_library': 'The local library could not be opened, so favorites, history and following are off.',
   'error.code.no_recognition': 'This platform has no text recognition, so nothing new can be read.',
   'error.code.embedder_unreachable':
@@ -71,6 +70,7 @@ export const en = {
   'error.code.nothing_embedded':
     'Nothing has been read yet. Open a work and read it — its pages are recognised as you go, and this searches what they said.',
   'error.code.corpus_empty': 'Nothing has been recognised yet, so there is nothing to check against.',
+  'error.code.unpublished': 'This copy was built rather than downloaded, so there is nowhere to fetch the corpus from.',
   'error.changedHint': 'Retrying will not help until tsuburu is updated.',
 
   'terms.noTranslation': 'no translation',
@@ -144,10 +144,8 @@ export const en = {
   'gallery.download': 'Download',
   'gallery.downloaded': 'Downloaded',
   'gallery.getRest': 'Get the rest',
-  'gallery.downloadPage': 'Download this page',
   'gallery.previous': 'Previous',
   'gallery.next': 'Next',
-  'gallery.hint': 'Arrow keys turn pages · Esc goes back',
 
   'reader.surface': 'Pages',
   'reader.layout': 'Layout',
@@ -204,7 +202,6 @@ export const en = {
   'keyword.empty': 'No work is about that word.',
   'keyword.title': 'What it is about',
   'keyword.near': 'About the same things',
-  'keyword.nearNone': 'Nothing else is about the same things.',
 
   'artist.works': '{n} works',
   'artist.follow': 'Follow',
@@ -226,8 +223,6 @@ export const en = {
     'Fetch it',
   'corpus.fetching':
     'Fetching — {done} of {total} parts, {works} works so far',
-  'corpus.ready':
-    '{works} works are in. Dialogue search now reaches all of them.',
   'corpus.failed':
     'It could not be fetched: {error}',
   'corpus.again':
@@ -267,7 +262,6 @@ export const en = {
   'sort.added': 'Recently starred',
   'sort.title': 'By title',
   'sort.pages': 'Longest first',
-  'sort.read': 'Recently read',
   'hidden.title': 'Tags never to show',
   'hidden.note': 'Works tagged with any of these are left out of every search and every list, however they were asked for. hitomi has no such setting; this one is yours and stays on this computer.',
   'hidden.add': 'Tag to hide',
@@ -290,19 +284,9 @@ export const en = {
   'dialogue.forgetConfirm': 'Delete every line kept from reading?',
   'dialogue.reindexImported': 'Re-read imported galleries',
   'dialogue.downloadCap': 'Download cap',
-  'dialogue.searchLabel': 'Dialogue search',
-  'dialogue.searchWords': 'A line you remember, in Korean',
-  'dialogue.searchMeaning': 'Describe the scene; the words need not appear',
   'dialogue.mode': 'How to match',
   'dialogue.modeWords': 'the words as written',
   'dialogue.modeMeaning': 'in my own words',
-  'dialogue.find': 'Find',
-  'dialogue.meaningNote':
-    'Matching by meaning needs the model that built the index (Qwen3-Embedding-4B). tsuburu ships none; point it at a local embedding server below.',
-  'dialogue.searchingCount': 'Searching {n} indexed galleries…',
-  'dialogue.searching': 'Searching indexed galleries…',
-  'dialogue.noHits':
-    'Nothing indexed so far contains that. It may still be in a gallery that has not been indexed yet.',
   'dialogue.uploads': 'the same book, uploaded more than once',
   'dialogue.exact': 'exact',
   'dialogue.copy': '+{n} copy',

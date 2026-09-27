@@ -13,9 +13,7 @@ use std::time::Duration;
 use crate::error::ApiError;
 use crate::state::AppState;
 
-/// 한 번에 그릴 수 있는 결과 수. 상한을 두지 않으면 클라이언트가 수천 개를
-/// 한꺼번에 요청해 hitomi에 그대로 부하가 간다.
-const MAX_LIMIT: usize = 100;
+use crate::MAX_LIMIT;
 const MAX_CARDS: usize = 50;
 
 #[derive(Debug, Deserialize)]

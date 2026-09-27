@@ -359,10 +359,6 @@ export function exportShards(backgroundOnly: boolean): Promise<ShardListing> {
   return send('POST', '/api/dialogue/export', { background_only: backgroundOnly })
 }
 
-export function listShards(): Promise<ShardListing> {
-  return request('/api/dialogue/shards')
-}
-
 export function shardUrl(name: string): string {
   return `/api/dialogue/shards/${encodeURIComponent(name)}`
 }

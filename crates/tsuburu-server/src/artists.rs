@@ -14,7 +14,7 @@ use tsuburu_meta::MetaQuery;
 use crate::error::{ApiError, ErrorKind};
 use crate::state::AppState;
 
-const MAX_LIMIT: usize = 100;
+use crate::MAX_LIMIT;
 
 fn library(state: &AppState) -> Result<&tsuburu_store::Store, ApiError> {
     state.store.as_ref().ok_or_else(|| ApiError {

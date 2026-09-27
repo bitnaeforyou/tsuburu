@@ -61,7 +61,6 @@ export const ja: Messages = {
   'error.unsupported': 'ここでは使えない機能です。',
   'error.code.import_meta': 'タイトルや作家をオフラインで探すには data.db スナップショットを取り込んでください。',
   'error.code.import_keywords': '何についての作品かを見るには graph.csv を取り込んでください。',
-  'error.code.import_artifact': '場面で探すには llm-search-index を取り込んでください。',
   'error.code.no_library': 'ローカルのライブラリを開けないため、お気に入り・履歴・フォローが無効です。',
   'error.code.no_recognition': 'このプラットフォームには文字認識がないため、新しく読めません。',
   'error.code.embedder_unreachable':
@@ -70,6 +69,7 @@ export const ja: Messages = {
   'error.code.nothing_embedded':
     'まだ読んだものがありません。作品を開いて読むと、そのつどページが認識され、ここではその内容を探します。',
   'error.code.corpus_empty': 'まだ何も認識していないため、比べる相手がありません。',
+  'error.code.unpublished': 'ダウンロードしたものではなくビルドしたものなので、コーパスを取得する先がありません。',
   'error.changedHint': 'tsuburu が更新されるまで、やり直しても直りません。',
 
   'terms.noTranslation': '訳語なし',
@@ -143,10 +143,8 @@ export const ja: Messages = {
   'gallery.download': 'ダウンロード',
   'gallery.downloaded': '取得済み',
   'gallery.getRest': '残りを取得',
-  'gallery.downloadPage': 'このページを取得',
   'gallery.previous': '前へ',
   'gallery.next': '次へ',
-  'gallery.hint': '矢印キーでページ送り · Esc で戻る',
 
   'reader.surface': '本文',
   'reader.layout': '表示方式',
@@ -202,7 +200,6 @@ export const ja: Messages = {
   'keyword.empty': 'その語を扱う作品はありません。',
   'keyword.title': '何についての作品か',
   'keyword.near': '似た話',
-  'keyword.nearNone': '同じ話をしている作品はありません。',
 
   'artist.works': '{n}件',
   'artist.follow': 'フォロー',
@@ -224,8 +221,6 @@ export const ja: Messages = {
     '取ってくる',
   'corpus.fetching':
     '取得中 — {total}個中{done}個、これまで{works}作品',
-  'corpus.ready':
-    '{works}作品が入りました。セリフ検索がすべてに届きます。',
   'corpus.failed':
     '取得できませんでした: {error}',
   'corpus.again':
@@ -265,7 +260,6 @@ export const ja: Messages = {
   'sort.added': '最近追加した順',
   'sort.title': 'タイトル順',
   'sort.pages': 'ページ数の多い順',
-  'sort.read': '最近読んだ順',
   'hidden.title': '絶対に表示しないタグ',
   'hidden.note': 'ここに書いたタグが付いた作品は、どう検索してもすべての一覧から外れます。hitomi にはない設定で、このコンピュータにだけ残ります。',
   'hidden.add': '隠すタグ',
@@ -288,19 +282,9 @@ export const ja: Messages = {
   'dialogue.forgetConfirm': '読みながら集めたセリフをすべて消しますか？',
   'dialogue.reindexImported': '取り込んだ作品も読み直す',
   'dialogue.downloadCap': 'ダウンロード上限',
-  'dialogue.searchLabel': 'セリフ検索',
-  'dialogue.searchWords': '覚えているセリフ',
-  'dialogue.searchMeaning': '場面を説明してください。その語がなくても構いません',
   'dialogue.mode': '照合の仕方',
   'dialogue.modeWords': '書かれたまま',
   'dialogue.modeMeaning': '近い言葉で',
-  'dialogue.find': '検索',
-  'dialogue.meaningNote':
-    '意味で探すには索引を作ったモデル（Qwen3-Embedding-4B）が要ります。tsuburu はモデルを同梱していないので、下でローカルの埋め込みサーバーの住所を教えてください。',
-  'dialogue.searchingCount': '索引済みの{n}件を走査中…',
-  'dialogue.searching': '索引済みの作品を走査中…',
-  'dialogue.noHits':
-    'これまでに索引したものの中にはありません。まだ索引していない作品にあるかもしれません。',
   'dialogue.uploads': '同じ本が何度も上がっています',
   'dialogue.exact': '完全一致',
   'dialogue.copy': '複製 +{n}',

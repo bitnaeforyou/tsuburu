@@ -329,26 +329,6 @@ pub async fn export(
     Ok(Json(ExportResponse { directory: dir.display().to_string(), files }))
 }
 
-pub async fn list_shards(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<ExportResponse>, ApiError> {
-    let dir = shards_dir(&state)?.clone();
-    let mut files = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if !is_shard_name(&name) {
-                continue;
-            }
-            let bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
-            // Gallery count needs the file decoded; the name and size are enough here.
-            files.push(ShardFile { name, bytes, galleries: 0 });
-        }
-    }
-    files.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(Json(ExportResponse { directory: dir.display().to_string(), files }))
-}
-
 pub async fn download_shard(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
@@ -377,8 +357,20 @@ pub struct ImportParams {
 pub async fn import(
     State(state): State<Arc<AppState>>,
     Query(params): Query<ImportParams>,
+    headers: axum::http::HeaderMap,
     body: Bytes,
 ) -> Result<Json<ImportSummary>, ApiError> {
+    // A body with no declared type is a request a browser sends without
+    // asking permission first, which would let another site write pages of
+    // its own choosing into the corpus. Saying what it is makes it one this
+    // server is asked about before it arrives.
+    let kind = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    if !kind.starts_with("application/octet-stream") {
+        return Err(ApiError::bad_request("a shard is application/octet-stream"));
+    }
     let grinder = Arc::clone(grinder(&state)?);
     if !is_shard_name(&params.name) {
         return Err(ApiError::bad_request("not a shard file name"));

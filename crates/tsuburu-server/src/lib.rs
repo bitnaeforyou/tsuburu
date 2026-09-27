@@ -26,6 +26,10 @@ use tower_http::trace::TraceLayer;
 
 pub use state::AppState;
 
+/// 한 번에 그릴 수 있는 결과 수. 상한을 두지 않으면 클라이언트가 수천 개를
+/// 한꺼번에 요청해 hitomi에 그대로 부하가 간다.
+pub const MAX_LIMIT: usize = 100;
+
 /// A shard of a whole language is a few hundred megabytes at most.
 const SHARD_UPLOAD_LIMIT: usize = 1024 * 1024 * 1024;
 
@@ -54,7 +58,6 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/keywords/{id}/near", get(keywords::near))
         .route("/api/meta/status", get(meta::status))
         .route("/api/meta/search", get(meta::search))
-        .route("/api/meta/suggest", get(meta::suggest))
         .route("/api/dialogue/status", get(dialogue::status))
         .route("/api/dialogue/corpus", get(dialogue::corpus_state).post(dialogue::fetch_corpus))
         .route("/api/dialogue/settings", put(dialogue::update_settings))
@@ -74,7 +77,6 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/dialogue/hunt", post(dialogue::hunt))
         .route("/api/dialogue/import-artifact", post(dialogue::import_artifact))
         .route("/api/dialogue/export", post(dialogue::export))
-        .route("/api/dialogue/shards", get(dialogue::list_shards))
         .route("/api/dialogue/shards/{name}", get(dialogue::download_shard))
         .route(
             "/api/dialogue/import",

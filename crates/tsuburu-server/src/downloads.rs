@@ -5,7 +5,7 @@
 //! reader can open the work later with hitomi unreachable.
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -254,21 +254,10 @@ pub async fn remove(
     Ok(Json(Removed { removed: store(&state)?.remove(id)? }))
 }
 
-#[derive(Debug, Deserialize)]
-pub struct OfflineParams {
-    /// Answer from disk only, so the reader can be tested without a network.
-    #[serde(default)]
-    pub offline: bool,
-}
-
 /// The stored page list for a downloaded work.
 ///
 /// The gallery endpoint falls back to this when hitomi cannot be reached,
 /// which is what makes a downloaded work readable offline.
 pub fn stored_gallery(state: &AppState, id: i32) -> Option<Download> {
     state.downloads.as_ref()?.get(id).ok().flatten()
-}
-
-pub async fn offline_ok(Query(params): Query<OfflineParams>) -> Json<bool> {
-    Json(params.offline)
 }

@@ -22,6 +22,14 @@ pub struct FetchConfig {
     pub cache_entries: usize,
     pub user_agent: String,
     pub referer: String,
+    /// The hosts that are told where the request came from.
+    ///
+    /// hitomi refuses one that does not claim to come from its own pages, so
+    /// it and the servers it keeps its images on are named here. Everything
+    /// else is not: this fetcher also collects the published corpus from
+    /// GitHub, and GitHub has no business being told, from the reader's own
+    /// address, that they read hitomi.
+    pub referer_for: Vec<String>,
     pub timeout: Duration,
     /// Attempts per request, including the first.
     ///
@@ -38,6 +46,7 @@ impl Default for FetchConfig {
             cache_entries: 4096,
             user_agent: concat!("tsuburu/", env!("CARGO_PKG_VERSION")).into(),
             referer: "https://hitomi.la/".into(),
+            referer_for: vec!["hitomi.la".into(), "gold-usergeneratedcontent.net".into()],
             timeout: Duration::from_secs(20),
             attempts: 3,
         }
@@ -66,7 +75,27 @@ pub struct HttpFetcher {
     limiter: Semaphore,
     counters: Counters,
     referer: String,
+    referer_for: Vec<String>,
     attempts: usize,
+}
+
+/// Whether a referer belongs on a request to `url`.
+fn host_of(url: &str) -> String {
+    url.split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(url)
+        .split('/')
+        .next()
+        .unwrap_or_default()
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+}
+
+fn told_where_from(url: &str, hosts: &[String]) -> bool {
+    let asking = host_of(url);
+    hosts.iter().any(|host| asking == *host || asking.ends_with(&format!(".{host}")))
 }
 
 impl HttpFetcher {
@@ -85,6 +114,7 @@ impl HttpFetcher {
             limiter: Semaphore::new(cfg.max_concurrent),
             counters: Counters::default(),
             referer: cfg.referer,
+            referer_for: cfg.referer_for,
             attempts: cfg.attempts.max(1),
         })
     }
@@ -98,6 +128,17 @@ impl HttpFetcher {
     pub fn forget(&self) {
         self.cache.clear();
         self.lengths.clear();
+    }
+
+    /// A request for `url`, saying where it came from only where that is
+    /// something the host it is going to has any business knowing.
+    fn asking(&self, url: &str) -> reqwest::RequestBuilder {
+        let request = self.client.get(url);
+        if told_where_from(url, &self.referer_for) {
+            request.header(reqwest::header::REFERER, &self.referer)
+        } else {
+            request
+        }
     }
 
     pub fn stats(&self) -> Stats {
@@ -128,13 +169,8 @@ impl HttpFetcher {
 
     /// 이미지처럼 캐시하지 않고 그대로 흘려보낼 응답. 서버의 프록시가 쓴다.
     pub async fn stream(&self, url: &str) -> Result<reqwest::Response, FetchError> {
-        let response = self
-            .client
-            .get(url)
-            .header(reqwest::header::REFERER, &self.referer)
-            .send()
-            .await
-            .map_err(|e| FetchError::Network(e.to_string()))?;
+        let response =
+            self.asking(url).send().await.map_err(|e| FetchError::Network(e.to_string()))?;
         check_status(response.status().as_u16())?;
         self.counters.requests.fetch_add(1, Ordering::Relaxed);
         Ok(response)
@@ -162,7 +198,7 @@ impl HttpFetcher {
     }
 
     async fn attempt(&self, url: &str, range: Option<Range<u64>>) -> Result<Vec<u8>, FetchError> {
-        let mut request = self.client.get(url).header(reqwest::header::REFERER, &self.referer);
+        let mut request = self.asking(url);
         if let Some(r) = &range {
             // Range 헤더의 끝은 포함이다. 호출 쪽은 반열린 구간을 쓴다.
             request = request.header(
@@ -240,9 +276,7 @@ impl Fetcher for HttpFetcher {
             let _permit =
                 self.limiter.acquire().await.map_err(|e| FetchError::Network(e.to_string()))?;
             let response = self
-                .client
-                .get(url)
-                .header(reqwest::header::REFERER, &self.referer)
+                .asking(url)
                 .header(reqwest::header::RANGE, "bytes=0-0")
                 .send()
                 .await
@@ -266,6 +300,20 @@ impl Fetcher for HttpFetcher {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn where_we_came_from_is_said_only_to_hitomi() {
+        let hosts = FetchConfig::default().referer_for;
+        // hitomi refuses a request that does not claim to come from its
+        // pages, and its images are on another name under one registration.
+        assert!(told_where_from("https://hitomi.la/galleries/1.js", &hosts));
+        assert!(told_where_from("https://ltn.gold-usergeneratedcontent.net/x", &hosts));
+        assert!(told_where_from("https://a1.gold-usergeneratedcontent.net/x.avif", &hosts));
+        // The corpus comes from GitHub through this same fetcher.
+        assert!(!told_where_from("https://api.github.com/repos/x/y/releases", &hosts));
+        assert!(!told_where_from("https://objects.githubusercontent.com/x", &hosts));
+        assert!(!told_where_from("https://gold-usergeneratedcontent.net.evil.example/x", &hosts));
+    }
     use super::*;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};

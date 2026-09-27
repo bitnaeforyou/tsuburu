@@ -406,7 +406,8 @@ fn init_tracing(verbose: bool) {
     let filter: tracing_subscriber::filter::Targets = std::env::var("TSUBURU_LOG")
         .ok()
         .and_then(|asked| asked.parse().ok())
-        .unwrap_or_else(|| default.parse().expect("the built-in filter parses"));
+        .or_else(|| default.parse().ok())
+        .unwrap_or_default();
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .with(filter)

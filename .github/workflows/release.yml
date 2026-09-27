@@ -336,6 +336,16 @@ jobs:
             data:
           COMPOSE
 
+      # What each file should come to, so an update can refuse one that
+      # arrived as something else. The program will not apply a release that
+      # does not carry this.
+      - name: Say what the files are
+        working-directory: dist
+        run: |
+          rm -f SHA256SUMS
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Write the notes
         run: |
           # The whole message, not the body: git calls the first paragraph the
@@ -375,6 +385,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: |
+            dist/SHA256SUMS
             dist/*.zip
             dist/*.tar.gz
             dist/*.ipa

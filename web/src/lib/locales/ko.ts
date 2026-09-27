@@ -61,7 +61,6 @@ export const ko: Messages = {
   'error.unsupported': '여기서는 쓸 수 없는 기능입니다.',
   'error.code.import_meta': '제목·작가를 오프라인에서 찾으려면 data.db 스냅샷을 가져오세요.',
   'error.code.import_keywords': '무엇에 관한 작품인지 보려면 graph.csv를 가져오세요.',
-  'error.code.import_artifact': '장면으로 찾으려면 llm-search-index를 가져오세요.',
   'error.code.no_library': '로컬 라이브러리를 열지 못해 즐겨찾기·기록·팔로우가 꺼져 있습니다.',
   'error.code.no_recognition': '이 플랫폼에는 텍스트 인식이 없어 새로 읽을 수 없습니다.',
   'error.code.embedder_unreachable':
@@ -70,6 +69,7 @@ export const ko: Messages = {
   'error.code.nothing_embedded':
     '아직 읽은 것이 없습니다. 작품을 열어 읽으면 페이지가 그때그때 인식되고, 이 검색은 그렇게 읽힌 내용을 찾습니다.',
   'error.code.corpus_empty': '아직 인식된 것이 없어 견줄 대상이 없습니다.',
+  'error.code.unpublished': '내려받은 것이 아니라 직접 빌드한 것이라, 코퍼스를 받아올 곳이 없습니다.',
   'error.changedHint': 'tsuburu가 갱신되기 전에는 다시 시도해도 소용이 없습니다.',
 
   'terms.noTranslation': '번역 없음',
@@ -143,10 +143,8 @@ export const ko: Messages = {
   'gallery.download': '다운로드',
   'gallery.downloaded': '받아둠',
   'gallery.getRest': '나머지 받기',
-  'gallery.downloadPage': '이 쪽 받기',
   'gallery.previous': '이전',
   'gallery.next': '다음',
-  'gallery.hint': '방향키로 쪽 넘김 · Esc로 뒤로',
 
   'reader.surface': '본문',
   'reader.layout': '보기 방식',
@@ -202,7 +200,6 @@ export const ko: Messages = {
   'keyword.empty': '그 낱말을 다루는 작품이 없습니다.',
   'keyword.title': '무엇에 관한 작품인가',
   'keyword.near': '비슷한 이야기',
-  'keyword.nearNone': '같은 이야기를 하는 작품이 없습니다.',
 
   'artist.works': '{n}편',
   'artist.follow': '팔로우',
@@ -224,8 +221,6 @@ export const ko: Messages = {
     '받아오기',
   'corpus.fetching':
     '받는 중 — {total}개 중 {done}개, 지금까지 {works}편',
-  'corpus.ready':
-    '{works}편이 들어왔습니다. 이제 대사 검색이 전부에 닿습니다.',
   'corpus.failed':
     '받지 못했습니다: {error}',
   'corpus.again':
@@ -265,7 +260,6 @@ export const ko: Messages = {
   'sort.added': '최근 담은 순',
   'sort.title': '제목순',
   'sort.pages': '분량 많은 순',
-  'sort.read': '최근 읽은 순',
   'hidden.title': '절대 안 보여줄 태그',
   'hidden.note': '여기 적힌 태그가 붙은 작품은 어떻게 검색하든 모든 목록에서 빠집니다. hitomi에는 없는 설정이고, 이 컴퓨터에만 남습니다.',
   'hidden.add': '숨길 태그',
@@ -288,19 +282,9 @@ export const ko: Messages = {
   'dialogue.forgetConfirm': '읽으면서 모은 대사를 전부 지울까요?',
   'dialogue.reindexImported': '가져온 작품도 다시 읽기',
   'dialogue.downloadCap': '다운로드 상한',
-  'dialogue.searchLabel': '대사 검색',
-  'dialogue.searchWords': '기억나는 대사',
-  'dialogue.searchMeaning': '장면을 설명하세요. 그 낱말이 없어도 됩니다',
   'dialogue.mode': '찾는 방식',
   'dialogue.modeWords': '낱말 그대로',
   'dialogue.modeMeaning': '비슷한 말로',
-  'dialogue.find': '찾기',
-  'dialogue.meaningNote':
-    '의미로 찾으려면 색인을 만든 모델(Qwen3-Embedding-4B)이 필요합니다. tsuburu는 모델을 담고 있지 않으니, 아래에서 로컬 임베딩 서버 주소를 알려주세요.',
-  'dialogue.searchingCount': '색인된 {n}편을 훑는 중…',
-  'dialogue.searching': '색인된 작품을 훑는 중…',
-  'dialogue.noHits':
-    '지금까지 색인된 것 중에는 없습니다. 아직 색인하지 않은 작품에 있을 수 있습니다.',
   'dialogue.uploads': '같은 책이 여러 번 올라와 있습니다',
   'dialogue.exact': '정확',
   'dialogue.copy': '사본 +{n}',

@@ -56,6 +56,16 @@ pub enum Progress {
     },
 }
 
+/// Where the system's own `tar` is.
+///
+/// Named in full rather than looked up: on Windows the search for a bare
+/// command includes the directory the program is in, so an install directory
+/// somebody else can write to is a way to be handed a different `tar` - and
+/// this one is run on bytes that have just been downloaded.
+fn system_tar() -> &'static str {
+    if cfg!(windows) { r"C:\Windows\System32\tar.exe" } else { "/usr/bin/tar" }
+}
+
 impl Progress {
     pub fn is_busy(&self) -> bool {
         matches!(self, Progress::Fetching { .. } | Progress::Starting)
@@ -216,7 +226,7 @@ impl Runner {
         let into = self.runtime_dir();
         std::fs::create_dir_all(&into)
             .map_err(|e| RunError::Unpack(asset.clone(), e.to_string()))?;
-        let status = Command::new("tar")
+        let status = Command::new(system_tar())
             .arg("-xf")
             .arg(&archive)
             .arg("-C")
