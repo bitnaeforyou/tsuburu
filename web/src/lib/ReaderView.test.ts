@@ -544,3 +544,34 @@ describe('scrolling', () => {
     expect(scrolled).toHaveBeenCalledOnce()
   })
 })
+
+describe('a page that did not arrive', () => {
+  test('is asked for again, and stops after three tries', async () => {
+    vi.useFakeTimers()
+    try {
+      const screen = render(Harness, { pages })
+      await tick()
+      const image = screen.container.querySelector('img')!
+
+      for (const tried of [1, 2, 3]) {
+        image.dispatchEvent(new Event('error'))
+        await vi.advanceTimersByTimeAsync(2000)
+        await tick()
+        expect(screen.container.querySelector('img')).toHaveAttribute(
+          'src',
+          `/img/page-0.avif?again=${tried}`,
+        )
+      }
+
+      image.dispatchEvent(new Event('error'))
+      await vi.advanceTimersByTimeAsync(5000)
+      await tick()
+      expect(screen.container.querySelector('img')).toHaveAttribute(
+        'src',
+        '/img/page-0.avif?again=3',
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
