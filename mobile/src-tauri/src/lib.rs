@@ -72,9 +72,7 @@ async fn start() -> Result<std::net::SocketAddr, Box<dyn std::error::Error>> {
     let state = tsuburu_server::boot::assemble(cfg).await.map_err(|e| e.to_string())?;
     let router = tsuburu_server::router(Arc::clone(&state));
 
-    // Loopback only, and a port of the system's choosing. Nothing outside the
-    // phone can open either.
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
+    let listener = bind().await?;
     let address = listener.local_addr()?;
 
     tauri::async_runtime::spawn(async move {
@@ -86,4 +84,21 @@ async fn start() -> Result<std::net::SocketAddr, Box<dyn std::error::Error>> {
     // The top of the index is worth having before the first screen is drawn.
     tauri::async_runtime::spawn(async move { state.warm(2).await });
     Ok(address)
+}
+
+/// Loopback only, on the same port as last time if it can be had.
+///
+/// The interface keeps what the reader chose - the age they confirmed, how
+/// they read, what they looked for lately - in the webview's own storage,
+/// which belongs to an origin, and an origin is a port. A port of the
+/// system's choosing is a different one every launch, so every launch opened
+/// a phone that had never been used before. Nothing outside the phone can
+/// reach any of these.
+async fn bind() -> std::io::Result<tokio::net::TcpListener> {
+    for port in 8420..8430 {
+        if let Ok(listener) = tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
+            return Ok(listener);
+        }
+    }
+    tokio::net::TcpListener::bind(("127.0.0.1", 0)).await
 }
