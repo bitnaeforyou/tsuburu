@@ -125,7 +125,8 @@ fn ask_to_allow(env: &mut jni::JNIEnv, activity: &JObject) -> Result<(), String>
     env.call_method(&intent, "addFlags", "(I)Landroid/content/Intent;", &[JValue::Int(NEW_TASK)])
         .map_err(|e| e.to_string())?;
     start(env, activity, &intent)?;
-    Err("this phone has not allowed tsuburu to install applications".into())
+    Err("allow tsuburu to install applications on the screen that just opened, then ask again"
+        .into())
 }
 
 fn new_intent<'a>(env: &mut jni::JNIEnv<'a>, action: &str) -> Result<JObject<'a>, String> {
