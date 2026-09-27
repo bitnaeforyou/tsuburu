@@ -44,9 +44,9 @@ fn older_schema(found: &str) -> bool {
         _ => false,
     }
 }
-/// Page cache. Posting lists are small and revisited, so this is mostly
-/// enough to keep the hot words resident.
-const CACHE_BYTES: usize = 64 * 1024 * 1024;
+/// Page cache. Posting lists are small and revisited, so this is enough to
+/// keep the hot words resident without keeping the rest.
+const CACHE_BYTES: usize = 8 * 1024 * 1024;
 
 /// A word held by more works than this says nothing about any of them.
 pub const MAX_DOCUMENT_FREQUENCY: u32 = 20_000;

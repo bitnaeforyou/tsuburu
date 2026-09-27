@@ -55,11 +55,19 @@ fn older_schema(found: &str) -> bool {
 }
 /// Page cache.
 ///
-/// A search reads the whole codes table, so this is sized to hold it: with
-/// less, every query pays for the same pages again. redb otherwise sizes the
-/// cache from the machine's memory, which left a gigabyte and a half
-/// resident on a large one.
-const CACHE_BYTES: usize = 256 * 1024 * 1024;
+/// Small on purpose. A search reads the codes table start to finish, and on
+/// a corpus of a hundred thousand works that table is most of a gigabyte -
+/// so a cache that was going to hold it never could, and holding a quarter
+/// of it only means evicting the quarter that was read first. The pages are
+/// already in the operating system's own cache, where they cost nothing to
+/// keep and nothing to copy.
+///
+/// Measured against the real corpus, two alternating passes each: the same
+/// five searches ran the same speed at 256 MB and at this, and the process
+/// held 332-391 MB against 98-101 MB. redb otherwise sizes this from the
+/// machine's memory, which left a gigabyte and a half resident on a large
+/// one.
+const CACHE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DialogueError {

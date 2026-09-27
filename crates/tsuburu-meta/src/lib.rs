@@ -42,8 +42,9 @@ fn older_schema(found: &str) -> bool {
         _ => false,
     }
 }
-/// Page cache; the title scan streams rather than revisiting.
-const CACHE_BYTES: usize = 128 * 1024 * 1024;
+/// Page cache; the title scan streams rather than revisiting, so the
+/// operating system's own cache is the one that matters.
+const CACHE_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MetaError {
