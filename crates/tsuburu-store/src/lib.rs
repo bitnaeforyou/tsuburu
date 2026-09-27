@@ -738,8 +738,12 @@ fn ancestry(name: &str) -> Vec<String> {
 /// slashes, or one typed as `읽을 것 / 단편`, has to settle on one spelling or
 /// the same shelf ends up written two ways and shows up twice.
 fn tidy_shelf(name: &str) -> Option<String> {
-    let tidied =
-        name.split('/').map(str::trim).filter(|part| !part.is_empty()).collect::<Vec<_>>().join("/");
+    let tidied = name
+        .split('/')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("/");
     (!tidied.is_empty()).then_some(tidied)
 }
 
