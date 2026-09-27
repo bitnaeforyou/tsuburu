@@ -116,8 +116,11 @@ pub async fn page(
     if limit == 0 {
         return Ok(Vec::new());
     }
-    let start = offset as u64 * 4;
-    let end = start + limit as u64 * 4;
+    // An offset arrives from a query string, so it is whatever somebody
+    // typed. Saturating rather than wrapping: past the end of the list the
+    // right answer is nothing, and wrapping makes it page one.
+    let start = (offset as u64).saturating_mul(4);
+    let end = start.saturating_add((limit as u64).saturating_mul(4));
     Ok(decode_ids(&fetcher.get_range(url, start..end).await?))
 }
 
@@ -185,7 +188,7 @@ async fn walk(
         return Ok(Vec::new());
     }
     let total_bytes = fetcher.length(url).await?;
-    let wanted = offset + limit;
+    let wanted = offset.saturating_add(limit);
 
     let mut matched = Vec::with_capacity(wanted.min(1024));
     let mut at = 0u64;

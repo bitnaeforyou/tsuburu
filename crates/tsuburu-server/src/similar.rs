@@ -12,6 +12,12 @@ use std::sync::{Arc, OnceLock};
 use tsuburu_dialogue::artifact::ChunkLocator;
 use tsuburu_embed::EmbeddingIndex;
 
+/// The most neighbours worth pulling out of the index for one answer.
+///
+/// Asking wide is how the duplicates below get something to drop; past this
+/// the scan costs more than the answer improves.
+const WIDEST: usize = 400;
+
 pub struct Similarity {
     index: EmbeddingIndex,
     locator: ChunkLocator,
@@ -50,7 +56,10 @@ impl Similarity {
             .ok_or_else(|| format!("gallery {gallery} is not in the embedding index"))?;
 
         // Ask for more than needed: neighbours cluster inside one work.
-        let wanted = (limit * 8).clamp(limit, 400);
+        // `clamp` insists its floor is below its ceiling, and a caller is
+        // free to ask for more than the ceiling: 400 with a floor of 402 is
+        // a panic, and `panic = "abort"` makes that the whole program.
+        let wanted = limit.saturating_mul(8).min(WIDEST).max(limit);
         let neighbours = self
             .index
             .nearest_to_chunk(chunk, wanted, &|c| {
@@ -96,7 +105,10 @@ impl Similarity {
         limit: usize,
         duplicate: &dyn Fn(i32, u16) -> Option<Vec<u8>>,
     ) -> Vec<Match> {
-        let wanted = (limit * 8).clamp(limit, 400);
+        // `clamp` insists its floor is below its ceiling, and a caller is
+        // free to ask for more than the ceiling: 400 with a floor of 402 is
+        // a panic, and `panic = "abort"` makes that the whole program.
+        let wanted = limit.saturating_mul(8).min(WIDEST).max(limit);
         let neighbours = self.index.nearest(query, wanted, &|_| false);
         let mut out = Vec::new();
         let mut seen_work = std::collections::HashSet::new();

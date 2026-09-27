@@ -1072,7 +1072,7 @@ impl DialogueStore {
         // Exact hits are cheap to find; only pay for the fuzzy sweep when
         // they cannot fill the page.
         let mut hits = scan(false);
-        if hits.len() < offset + limit {
+        if hits.len() < offset.saturating_add(limit) {
             let exact_ids: std::collections::HashSet<i32> =
                 hits.iter().map(|h| h.gallery_id).collect();
             hits.extend(scan(true).into_iter().filter(|h| !exact_ids.contains(&h.gallery_id)));

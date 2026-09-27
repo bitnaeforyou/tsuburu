@@ -208,7 +208,9 @@ pub async fn search_page(
             return Ok(SearchPage { total: 0, ids: Vec::new() });
         };
         let data_url = cfg.galleries_data_url(version);
-        let block = fetch_gallery_id_block(fetcher, &data_url, entry, Some(offset + limit)).await?;
+        let block =
+            fetch_gallery_id_block(fetcher, &data_url, entry, Some(offset.saturating_add(limit)))
+                .await?;
         let ids = block.ids.into_iter().skip(offset).take(limit).collect();
         return Ok(SearchPage { total: block.total, ids });
     }
