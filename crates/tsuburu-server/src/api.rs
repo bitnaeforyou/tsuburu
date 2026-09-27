@@ -62,16 +62,26 @@ pub async fn refresh(State(state): State<Arc<AppState>>) -> StatusCode {
     StatusCode::NO_CONTENT
 }
 
+/// What hitomi is asked, and what each of the reader's words became.
+///
+/// Both the searching and the hunt that fills the dialogue index start here,
+/// and they were the same six lines twice - which is how they came to cap
+/// their limits differently without anyone noticing.
+pub(crate) fn asked_for(written: &str) -> (Vec<tsuburu_korean::Term>, tsuburu_hitomi::Query) {
+    let terms = tsuburu_korean::translate(tsuburu_korean::Dictionary::embedded(), written);
+    let query = tsuburu_hitomi::Query {
+        include: terms.iter().filter(|t| !t.excluded).map(|t| t.used.to_lowercase()).collect(),
+        exclude: terms.iter().filter(|t| t.excluded).map(|t| t.used.to_lowercase()).collect(),
+    };
+    (terms, query)
+}
+
 pub async fn search(
     State(state): State<Arc<AppState>>,
     Query(params): Query<SearchParams>,
 ) -> Result<Json<SearchResponse>, ApiError> {
     // 한국어를 hitomi가 아는 영어로 보정한다. 사전에 없으면 입력 그대로 쓴다.
-    let terms = tsuburu_korean::translate(tsuburu_korean::Dictionary::embedded(), &params.q);
-    let query = tsuburu_hitomi::Query {
-        include: terms.iter().filter(|t| !t.excluded).map(|t| t.used.to_lowercase()).collect(),
-        exclude: terms.iter().filter(|t| t.excluded).map(|t| t.used.to_lowercase()).collect(),
-    };
+    let (terms, query) = asked_for(&params.q);
 
     let sort = match params.sort.as_deref() {
         None | Some("") => tsuburu_hitomi::Sort::Date,
@@ -503,7 +513,7 @@ fn remember(state: &AppState, id: i32, gallery: &tsuburu_hitomi::Gallery) {
     let work = tsuburu_meta::Work {
         id,
         title: gallery.title.clone().unwrap_or_default(),
-        kind: gallery.kind.clone().unwrap_or_default().to_lowercase().replace(' ', ""),
+        kind: tsuburu_meta::normalized_kind(&gallery.kind.clone().unwrap_or_default()),
         language: gallery.language.clone().unwrap_or_default().to_lowercase(),
         artists: gallery.artists.clone(),
         groups: gallery.groups.clone(),

@@ -1125,9 +1125,9 @@ impl DialogueStore {
     /// is only worth having because the answer is held: the first page pays
     /// for the search and the rest are free until something is indexed.
     ///
-    /// Beyond `KEPT` there is nothing left to page through, but the total
-    /// still says how many there were - a reader who wants those narrows the
-    /// phrase rather than pressing on.
+    /// Beyond what the budget held there is nothing left to page through,
+    /// but the total still says how many there were - a reader who wants
+    /// those narrows the phrase rather than pressing on.
     pub fn search_page(
         &self,
         asked: &str,

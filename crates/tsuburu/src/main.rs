@@ -474,7 +474,7 @@ mod artifact_meta {
         Some(Work {
             id,
             title: fields[1].trim().to_string(),
-            kind: normalize_kind(&fields[2]),
+            kind: tsuburu_meta::normalized_kind(&fields[2]),
             language: fields[3].trim().to_lowercase(),
             artists: split_list(&fields[4]),
             groups: split_list(&fields[5]),
@@ -495,10 +495,6 @@ mod artifact_meta {
 
     /// The source spells types inconsistently ("artist CG", "artist cg");
     /// hitomi's own list names are the canonical form.
-    fn normalize_kind(s: &str) -> String {
-        s.trim().to_lowercase().replace(' ', "")
-    }
-
     /// Either "YYYY-MM-DD HH:MM:SS" or .NET ticks (100 ns since year 1).
     fn parse_published(s: &str) -> Option<i64> {
         let s = s.trim();
@@ -576,8 +572,8 @@ mod artifact_meta {
 
         #[test]
         fn kinds_are_normalised() {
-            assert_eq!(normalize_kind("artist CG"), "artistcg");
-            assert_eq!(normalize_kind("image set"), "imageset");
+            assert_eq!(tsuburu_meta::normalized_kind("artist CG"), "artistcg");
+            assert_eq!(tsuburu_meta::normalized_kind("image set"), "imageset");
         }
     }
 }

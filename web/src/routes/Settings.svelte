@@ -2,6 +2,7 @@
   import * as api from '../lib/api'
   import { t, type Key, number } from '../lib/i18n.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
+  import CorpusOffer from '../lib/CorpusOffer.svelte'
   import Card from '../lib/Card.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import Backup from '../lib/Backup.svelte'
@@ -26,7 +27,6 @@
 
   let update = $state<api.UpdateState | null>(null)
   let model = $state<api.ModelState | null>(null)
-  let corpus = $state<api.CorpusState | null>(null)
   let modelError = $state<string | null>(null)
   let cache = $state<{
     items: api.Stored[]
@@ -64,34 +64,6 @@
       modelError = null
     } catch (cause) {
       modelError = cause instanceof Error ? cause.message : String(cause)
-    }
-  }
-
-  // Same reason as the model: four hundred megabytes takes long enough that
-  // the panel has to keep saying where it has got to.
-  $effect(() => {
-    void refreshCorpus()
-    const timer = setInterval(() => void refreshCorpus(), 1000)
-    return () => clearInterval(timer)
-  })
-
-  async function refreshCorpus() {
-    try {
-      corpus = await api.corpusState()
-    } catch {
-      // The panel simply does not appear; there is nothing to act on.
-    }
-  }
-
-  async function getCorpus() {
-    try {
-      corpus = await api.fetchCorpus()
-    } catch (cause) {
-      corpus = {
-        available: true,
-        state: 'failed',
-        error: cause instanceof Error ? cause.message : String(cause),
-      }
     }
   }
 
@@ -468,39 +440,9 @@
     </section>
 
     <!-- The text somebody else's machine already spent weeks recognising.
-         One button, because a reader should not have to go and find a
-         directory to be able to search. -->
-    {#if corpus?.available && corpus.state !== 'ready'}
-      <section class="panel switch">
-        <div class="row">
-          <div>
-            <h2>{t('corpus.title')}</h2>
-            <p class="muted small">{t('corpus.note')}</p>
-            {#if corpus.state === 'failed'}
-              <p class="muted small">{t('corpus.failed', { error: corpus.error ?? '' })}</p>
-            {/if}
-          </div>
-          {#if corpus.state === 'fetching'}
-            <button disabled>{t('common.loading')}</button>
-          {:else}
-            <button class="primary" onclick={getCorpus}>
-              {corpus.state === 'failed' ? t('corpus.again') : t('corpus.get')}
-            </button>
-          {/if}
-        </div>
-        {#if corpus.state === 'fetching'}
-          <div class="meter" style:--done={`${((corpus.done ?? 0) / Math.max(corpus.total ?? 1, 1)) * 100}%`}>
-            <span>
-              {t('corpus.fetching', {
-                done: corpus.done ?? 0,
-                total: corpus.total ?? 0,
-                works: number(corpus.works ?? 0),
-              })}
-            </span>
-          </div>
-        {/if}
-      </section>
-    {/if}
+         The same offer the search screen makes, said by the same component:
+         two of them drifted apart on what the buttons were. -->
+    <CorpusOffer />
 
     <section class="panel status">
       <div class="row">

@@ -94,7 +94,6 @@ pub struct StartBody {
 pub struct StartResponse {
     pub id: i32,
     pub wanted: usize,
-    pub already_here: usize,
 }
 
 /// Downloads a whole work, or the pages named.
@@ -158,10 +157,10 @@ async fn begin(
     if wanted.is_empty() {
         return Err(ApiError::bad_request("no such page in that gallery"));
     }
-    let (present, missing): (Vec<_>, Vec<_>) =
-        wanted.into_iter().partition(|p| downloads.has_image(&p.hash, &p.ext));
+    let missing: Vec<_> =
+        wanted.into_iter().filter(|p| !downloads.has_image(&p.hash, &p.ext)).collect();
 
-    let response = StartResponse { id, wanted: missing.len(), already_here: present.len() };
+    let response = StartResponse { id, wanted: missing.len() };
     if missing.is_empty() {
         state.download_jobs.set(id, JobStatus::default());
         return Ok(Json(response));

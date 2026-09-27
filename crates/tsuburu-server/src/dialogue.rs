@@ -22,6 +22,12 @@ use crate::grinder::{
 use crate::state::AppState;
 
 const MAX_RESULTS: usize = 100;
+/// The most works one hunt may queue for recognition.
+///
+/// Not the page limit the screens use: this one is a reader saying "index
+/// everything that matches", and the ceiling is only there so a typo cannot
+/// queue the whole of hitomi.
+const MOST_TO_HUNT: usize = 5_000;
 
 fn grinder(state: &AppState) -> Result<&Arc<Grinder>, ApiError> {
     state.grinder.as_ref().ok_or_else(|| ApiError {
@@ -225,11 +231,7 @@ pub async fn hunt(
     Json(body): Json<HuntBody>,
 ) -> Result<Json<EnqueueResponse>, ApiError> {
     let grinder = grinder(&state)?;
-    let terms = tsuburu_korean::translate(tsuburu_korean::Dictionary::embedded(), &body.q);
-    let query = tsuburu_hitomi::Query {
-        include: terms.iter().filter(|t| !t.excluded).map(|t| t.used.to_lowercase()).collect(),
-        exclude: terms.iter().filter(|t| t.excluded).map(|t| t.used.to_lowercase()).collect(),
-    };
+    let (_terms, query) = crate::api::asked_for(&body.q);
     let filters = tsuburu_hitomi::Filters {
         language: body.language.filter(|s| !s.is_empty() && s != "all"),
         kind: body.kind.filter(|s| !s.is_empty() && s != "all"),
@@ -237,7 +239,7 @@ pub async fn hunt(
     if query.include.is_empty() && filters.is_empty() {
         return Err(ApiError::bad_request("narrow the hunt with a term or a filter"));
     }
-    let limit = body.limit.clamp(1, 5_000);
+    let limit = body.limit.clamp(1, MOST_TO_HUNT);
     let version = state.version().await?;
     let page = tsuburu_hitomi::search_page(
         state.fetcher.as_ref(),

@@ -94,6 +94,15 @@ pub struct Work {
     pub exists: bool,
 }
 
+/// The one spelling of a work's kind.
+///
+/// hitomi writes "image set" in one place and "imageset" in another, and a
+/// work that arrived through an import and the same work fetched live have to
+/// end up saying the same thing or one of them stops matching a filter.
+pub fn normalized_kind(said: &str) -> String {
+    said.trim().to_lowercase().replace(' ', "")
+}
+
 impl Work {
     /// Every key this work is findable under.
     fn term_keys(&self) -> Vec<String> {
@@ -200,13 +209,6 @@ impl MetaStore {
         }
         tx.commit().map_err(db_err)?;
         Ok(())
-    }
-
-    /// Highest id in the snapshot; anything above it is not covered.
-    pub fn latest_id(&self) -> Result<Option<i32>, MetaError> {
-        let tx = self.db.begin_read().map_err(db_err)?;
-        let works = tx.open_table(WORKS).map_err(db_err)?;
-        Ok(works.last().map_err(db_err)?.map(|(k, _)| k.value()))
     }
 
     pub fn count(&self) -> Result<usize, MetaError> {
@@ -566,7 +568,6 @@ mod tests {
         let (store, _d) = seeded();
         let mut fresh = work(9, "새 작품", "newcomer", &["female:glasses"], "korean", "manga");
         store.upsert(&fresh).unwrap();
-        assert_eq!(store.latest_id().unwrap(), Some(9));
         let by_artist = |a: &str| {
             store
                 .search(&MetaQuery { terms: vec![a.into()], ..MetaQuery::default() }, 0, 10)
@@ -583,10 +584,9 @@ mod tests {
     }
 
     #[test]
-    fn works_round_trip_and_latest_id() {
+    fn works_round_trip() {
         let (store, _d) = seeded();
         assert_eq!(store.count().unwrap(), 3);
-        assert_eq!(store.latest_id().unwrap(), Some(3));
         let w = store.work(3).unwrap().unwrap();
         assert_eq!(w.artists, vec!["keso"]);
         assert_eq!(store.works(&[1, 99, 2]).unwrap().len(), 2);

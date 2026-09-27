@@ -100,7 +100,6 @@ pub struct GrinderStatus {
     pub pages_per_second: f32,
     pub last_error: Option<String>,
     pub galleries_this_session: u64,
-    pub pages_this_session: u64,
 }
 
 pub struct Grinder {
@@ -316,13 +315,12 @@ impl Grinder {
     async fn embed_read_page(&self, gallery: i32, page: u16, text: &str) {
         let Ok(Some(json)) = self.store.embedder() else { return };
         // The setting holds the address and the model; the width is the
-        // index's, which is what the default carries.
-        #[derive(serde::Deserialize)]
-        struct Saved {
-            url: String,
-            model: String,
-        }
-        let Ok(saved) = serde_json::from_str::<Saved>(&json) else { return };
+        // index's, which is what the default carries. Read as the type that
+        // writes it, so a third field cannot be added there and silently not
+        // arrive here.
+        let Ok(saved) = serde_json::from_str::<crate::dialogue::EmbedderSettings>(&json) else {
+            return;
+        };
         let config = tsuburu_embed::embedder::EmbedderConfig {
             url: self.embedder_url(saved.url),
             model: saved.model,
@@ -373,7 +371,6 @@ impl Grinder {
     pub async fn status(&self) -> GrinderStatus {
         let mut status = self.status.read().await.clone();
         status.galleries_this_session = self.galleries_done.load(Ordering::Relaxed);
-        status.pages_this_session = self.pages_done.load(Ordering::Relaxed);
         status
     }
 

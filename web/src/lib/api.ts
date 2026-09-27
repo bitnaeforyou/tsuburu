@@ -253,7 +253,6 @@ export type GrinderStatus = {
   pages_per_second: number
   last_error: string | null
   galleries_this_session: number
-  pages_this_session: number
 }
 
 export type Counts = { pending: number; done: number; failed: number }
@@ -373,7 +372,7 @@ export async function importShard(file: File): Promise<ImportSummary> {
 
 // --- metadata snapshot ---
 
-export type MetaStatus = { available: boolean; works?: number; latest_id?: number }
+export type MetaStatus = { available: boolean; works?: number }
 
 export function metaStatus(): Promise<MetaStatus> {
   return request('/api/meta/status')
@@ -436,7 +435,7 @@ export function downloadStatus(id: number): Promise<DownloadItem> {
 export function startDownload(
   id: number,
   pages: number[] = [],
-): Promise<{ id: number; wanted: number; already_here: number }> {
+): Promise<{ id: number; wanted: number }> {
   return send('POST', `/api/downloads/${id}`, { pages })
 }
 

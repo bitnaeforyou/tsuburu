@@ -8,7 +8,7 @@
 
 import * as api from './api'
 
-/** The server answers at most this many per request and drops the rest. */
+/** The server answers this many per request and quietly drops the rest. */
 const MAX_PER_REQUEST = 50
 /// How many cards to keep. A long session pages through thousands of them,
 /// and each holds a title, the artists and the tags - on the device most

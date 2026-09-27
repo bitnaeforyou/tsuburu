@@ -28,19 +28,13 @@ pub struct MetaStatus {
     pub available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub works: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub latest_id: Option<i32>,
 }
 
 pub async fn status(State(state): State<Arc<AppState>>) -> Result<Json<MetaStatus>, ApiError> {
     let Some(meta) = state.meta.as_ref() else {
-        return Ok(Json(MetaStatus { available: false, works: None, latest_id: None }));
+        return Ok(Json(MetaStatus { available: false, works: None }));
     };
-    Ok(Json(MetaStatus {
-        available: true,
-        works: Some(meta.count().map_err(storage)?),
-        latest_id: meta.latest_id().map_err(storage)?,
-    }))
+    Ok(Json(MetaStatus { available: true, works: Some(meta.count().map_err(storage)?) }))
 }
 
 #[derive(Debug, Deserialize)]

@@ -9,7 +9,7 @@
   import ViewToggle from '../lib/ViewToggle.svelte'
   import Shelves from '../lib/Shelves.svelte'
   import ShelfPicker from '../lib/ShelfPicker.svelte'
-  import { onShelf, type Picked } from '../lib/folders'
+  import { onShelf, type Picked, moveTo } from '../lib/folders'
 
   let items = $state<api.DownloadItem[]>([])
   let bytes = $state(0)
@@ -23,19 +23,15 @@
   let shelves = $state<api.Folder[]>([])
   const shelfNames = $derived(shelves.map((shelf) => shelf.name))
 
-  async function move(id: number, to: string | null) {
-    const was = items.find((each) => each.id === id)?.folder ?? null
-    // Shown before the server answers, and put back if it refuses.
-    items = items.map((each) => (each.id === id ? { ...each, folder: to } : each))
-    try {
-      await api.setFolder(id, to)
-      // Filing on a shelf nobody made makes the shelf; the counts move too.
-      shelves = await api.folders().catch(() => shelves)
-    } catch (cause) {
-      items = items.map((each) => (each.id === id ? { ...each, folder: was } : each))
-      error = cause
-    }
-  }
+  const move = (id: number, to: string | null) =>
+    moveTo(
+      items,
+      id,
+      to,
+      (shown) => (items = shown),
+      (found) => (shelves = found),
+      (cause) => (error = cause),
+    )
 
   const ORDERS: { value: Order; key: Key }[] = [
     { value: 'added', key: 'sort.added' },

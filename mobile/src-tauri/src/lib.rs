@@ -50,9 +50,6 @@ pub fn run() {
                 // SAFETY: as above - nothing else is running yet.
                 unsafe { std::env::set_var("TSUBURU_CACHE_DIR", &dir) };
             }
-            // Port 0: the operating system picks one that is free. A phone has
-            // no terminal to tell a clash to, and the address is handed
-            // straight to the webview anyway, so nothing needs to guess it.
             let address = tauri::async_runtime::block_on(start())?;
             let url = format!("http://{address}/");
             tracing::info!(%url, "serving");
