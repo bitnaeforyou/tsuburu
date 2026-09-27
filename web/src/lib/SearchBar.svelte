@@ -11,11 +11,18 @@
   let {
     params,
     onchange,
+    onreload,
+    reloading = false,
     localAvailable = false,
     dialogueAvailable = false,
   }: {
     params: SearchState
     onchange: (changes: Partial<SearchState>) => void
+    /// Ask hitomi the same question again, rather than answering from what
+    /// is already held. Sits with the filters because it is the same kind of
+    /// thing: not where you are, but what you are looking at.
+    onreload?: () => void
+    reloading?: boolean
     /** Whether a metadata snapshot is loaded; enables the local scope. */
     localAvailable?: boolean
     /** Whether anything has been recognised; enables the dialogue scope. */
@@ -219,6 +226,18 @@
 
   <ViewToggle />
 
+  {#if onreload}
+    <button
+      class="again"
+      onclick={onreload}
+      disabled={reloading}
+      title={t('search.reload')}
+      aria-label={t('search.reload')}
+    >
+      <span aria-hidden="true">↻</span>
+    </button>
+  {/if}
+
   <details class="fold" open={wide || opened} ontoggle={(e) => (opened = e.currentTarget.open)}>
     <summary>
       {narrowed.length ? narrowed.join(' · ') : t('search.filters')}
@@ -291,6 +310,44 @@
     padding: 0.7rem var(--gutter);
     background: var(--bg);
     border-bottom: 1px solid var(--line);
+  }
+
+  .again {
+    display: grid;
+    place-items: center;
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    padding: 0;
+    font-size: 1.1rem;
+    line-height: 1;
+    color: var(--muted);
+    background: none;
+    border: none;
+    border-radius: var(--radius);
+  }
+
+  .again:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--raised);
+  }
+
+  /* Turning while it works is the only sign anything is happening: the list
+     below does not change until the answer comes back. */
+  .again:disabled span {
+    animation: turn 0.9s linear infinite;
+  }
+
+  @keyframes turn {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .again:disabled span {
+      animation: none;
+      opacity: 0.5;
+    }
   }
 
   form {

@@ -297,14 +297,15 @@
   const slowSort = $derived(loading && params.sort !== 'date' && total > 0 && total < 500)
 </script>
 
-<AppHeader active="search">
-  {#snippet actions()}
-    <button class="again" onclick={again} disabled={loading} title={t('search.reload')} aria-label={t('search.reload')}>
-      <span aria-hidden="true">↻</span>
-    </button>
-  {/snippet}
-</AppHeader>
-<SearchBar {params} onchange={go} {localAvailable} {dialogueAvailable} />
+<AppHeader active="search" />
+<SearchBar
+  {params}
+  onchange={go}
+  onreload={again}
+  reloading={loading}
+  {localAvailable}
+  {dialogueAvailable}
+/>
 
 <main>
   <h1 class="sr-only">{t('nav.search')}</h1>
@@ -386,43 +387,5 @@
   .more {
     margin: 1.5rem auto 0;
     display: block;
-  }
-
-  .again {
-    display: grid;
-    place-items: center;
-    inline-size: 2.5rem;
-    block-size: 2.5rem;
-    padding: 0;
-    font-size: 1.1rem;
-    line-height: 1;
-    color: var(--muted);
-    background: none;
-    border: none;
-    border-radius: var(--radius);
-  }
-
-  .again:hover:not(:disabled) {
-    color: var(--text);
-    background: var(--raised);
-  }
-
-  /* Turning while it works is the only sign anything is happening: the list
-     below does not change until the answer comes back. */
-  .again:disabled span {
-    animation: turn 0.9s linear infinite;
-  }
-
-  @keyframes turn {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .again:disabled span {
-      animation: none;
-      opacity: 0.5;
-    }
   }
 </style>
