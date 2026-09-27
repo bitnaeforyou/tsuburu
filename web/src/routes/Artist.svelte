@@ -5,6 +5,7 @@
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
+  import { preferred, remember } from '../lib/preferences'
 
   // A series lists the same way an artist does and comes from the same kind
   // of list; the only thing an artist has that a series does not is somebody
@@ -16,7 +17,10 @@
 
   let info = $state<api.ArtistResponse | null>(null)
   let ids = $state<number[]>([])
-  let language = $state('all')
+  // What the reader has been narrowing to everywhere else. Saying "Korean"
+  // on the search screen and then getting every language back here was the
+  // filter forgetting itself halfway through one train of thought.
+  let language = $state(preferred.language)
   let loading = $state(false)
   let error = $state<unknown>(null)
 
@@ -52,6 +56,13 @@
     }
   }
 
+  /// Narrowing here says what to read from now on, the way it does on the
+  /// search screen - one filter, not one per screen.
+  function narrow(chosen: string) {
+    language = chosen
+    remember({ language: chosen })
+  }
+
   async function toggleFollow() {
     if (!info) return
     try {
@@ -63,6 +74,13 @@
       error = cause
     }
   }
+
+  /// An artist who has never been translated into what the reader reads, who
+  /// would otherwise be an empty page with a filter they did not set here.
+  $effect(() => {
+    if (!info || info.total > 0 || language === 'all') return
+    if (info.languages.length) language = 'all'
+  })
 
   const hasMore = $derived(info !== null && ids.length < info.total)
 </script>
@@ -91,7 +109,7 @@
 
   <label class="filter">
     {t('search.language')}
-    <select bind:value={language}>
+    <select value={language} onchange={(e) => narrow(e.currentTarget.value)}>
       <option value="all">{t('lang.all')}</option>
       {#each info?.languages ?? [] as [name, count] (name)}
         <option value={name}>{name} ({count})</option>

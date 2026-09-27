@@ -69,11 +69,10 @@ async fn from_hitomi(
     let url = state.cfg.name_list_url(namespace, name, language);
     let fetcher = state.fetcher.as_ref();
     let total = tsuburu_hitomi::nozomi::count(fetcher, &url).await.unwrap_or(0);
-    if total == 0 {
-        return Ok((0, Vec::new(), Vec::new()));
-    }
-    let ids = tsuburu_hitomi::nozomi::page(fetcher, &url, params.offset, limit).await?;
 
+    // Even when this language has nothing: a reader who reads Korean opening
+    // an artist who has never been translated into it needs the page to say
+    // which languages there are, not just to come up empty.
     let mut languages = Vec::new();
     if params.offset == 0 {
         for one in LANGUAGES {
@@ -86,6 +85,10 @@ async fn from_hitomi(
         }
         languages.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     }
+    if total == 0 {
+        return Ok((0, Vec::new(), languages));
+    }
+    let ids = tsuburu_hitomi::nozomi::page(fetcher, &url, params.offset, limit).await?;
     Ok((total, ids, languages))
 }
 

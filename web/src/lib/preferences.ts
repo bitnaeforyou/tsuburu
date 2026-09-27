@@ -5,21 +5,25 @@
 // who only reads Korean had to say so again every time. A link that names
 // them still wins; one that does not now means "what I usually read".
 
+import { keep, kept } from './kept'
+
 const STORED = 'tsuburu.search'
 
 type Stored = { language: string; kind: string }
 
+const EVERYTHING: Stored = { language: 'all', kind: 'all' }
+
 function read(): Stored {
+  const raw = kept(STORED)
+  if (!raw) return { ...EVERYTHING }
   try {
-    const raw = localStorage.getItem(STORED)
-    if (!raw) return { language: 'all', kind: 'all' }
     const parsed = JSON.parse(raw) as Partial<Stored>
     return {
-      language: typeof parsed.language === 'string' ? parsed.language : 'all',
-      kind: typeof parsed.kind === 'string' ? parsed.kind : 'all',
+      language: typeof parsed.language === 'string' ? parsed.language : EVERYTHING.language,
+      kind: typeof parsed.kind === 'string' ? parsed.kind : EVERYTHING.kind,
     }
   } catch {
-    return { language: 'all', kind: 'all' }
+    return { ...EVERYTHING }
   }
 }
 
@@ -28,9 +32,5 @@ export const preferred: Stored = read()
 export function remember(next: Partial<Stored>) {
   if (next.language !== undefined) preferred.language = next.language
   if (next.kind !== undefined) preferred.kind = next.kind
-  try {
-    localStorage.setItem(STORED, JSON.stringify(preferred))
-  } catch {
-    // A browser with storage switched off still gets to search.
-  }
+  keep(STORED, JSON.stringify(preferred))
 }
