@@ -134,7 +134,10 @@ fn open_grinder(cfg: &Config) -> Result<Option<Arc<crate::grinder::Grinder>>, Bo
     // warm-up, and must never slow down browsing.
     let fetcher = HttpFetcher::new(FetchConfig {
         max_concurrent: 8,
-        cache_entries: 256,
+        // This one reads pages, not index nodes, and never looks at the same
+        // one twice; it is here only so a burst does not queue behind the
+        // browsing client.
+        cache_bytes: 4 * 1024 * 1024,
         ..FetchConfig::default()
     })
     .map_err(|e| BootError::Fatal(format!("failed to build the indexing HTTP client: {e}")))?;

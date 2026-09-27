@@ -125,8 +125,10 @@ async fn read_and_recognise(
     waiting: crate::state::UnreadPage,
 ) -> Result<Response, ApiError> {
     let response = stream(state, url, ext).await?;
+    // Kept as `Bytes` all the way through: handing the same page to the
+    // browser and to recognition used to mean two more full copies of it.
     let bytes = match axum::body::to_bytes(response.into_body(), MOST_A_PAGE_IS).await {
-        Ok(bytes) => bytes.to_vec(),
+        Ok(bytes) => bytes,
         Err(err) => {
             return Err(ApiError {
                 error: ErrorKind::Network,
@@ -149,13 +151,13 @@ async fn read_and_recognise(
     Ok(local_image(bytes, ext))
 }
 
-fn local_image(bytes: Vec<u8>, ext: &str) -> Response {
+fn local_image(bytes: impl Into<axum::body::Bytes>, ext: &str) -> Response {
     let mut headers = HeaderMap::new();
     if let Ok(value) = HeaderValue::from_str(&format!("image/{ext}")) {
         headers.insert(header::CONTENT_TYPE, value);
     }
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL));
-    (StatusCode::OK, headers, bytes).into_response()
+    (StatusCode::OK, headers, bytes.into()).into_response()
 }
 
 async fn stream(state: &AppState, url: &str, ext: &str) -> Result<Response, ApiError> {

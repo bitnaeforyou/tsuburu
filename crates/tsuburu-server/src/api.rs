@@ -273,13 +273,16 @@ pub async fn cards(
         ));
     }
 
+    // What had to be fetched, kept together at the end: one commit instead
+    // of one per card.
+    let mut fetched: Vec<Card> = Vec::new();
     for task in tasks {
         match task {
             CardTask::Ready(card) => out.push(card),
             CardTask::Pending(handle, fallback) => match handle.await {
                 Ok(Ok(card)) => {
                     state.cards.insert(card.id, card.clone());
-                    keep_card(&state, &card);
+                    fetched.push(card.clone());
                     out.push(card);
                 }
                 // 한 장이 실패했다고 페이지 전체를 버리지 않는다.
@@ -293,6 +296,8 @@ pub async fn cards(
             },
         }
     }
+
+    keep_cards(&state, &fetched);
 
     // Said once the list has been read, and not guessed at before then.
     for card in &mut out {
@@ -335,12 +340,22 @@ fn recall_card(state: &AppState, id: i32) -> Option<Card> {
     (age < REMEMBERED_FOR.as_secs()).then_some(kept.card)
 }
 
-fn keep_card(state: &AppState, card: &Card) {
+/// Writes down the cards a page had to fetch, in one commit.
+fn keep_cards(state: &AppState, cards: &[Card]) {
     let Some(store) = state.store.as_ref() else { return };
-    let kept = Remembered { at: now(), card: card.clone() };
-    let Ok(json) = serde_json::to_string(&kept) else { return };
-    if let Err(err) = store.remember_card(card.id, &json) {
-        tracing::debug!(%err, "could not remember a card");
+    let at = now();
+    let written: Vec<(i32, String)> = cards
+        .iter()
+        .filter_map(|card| {
+            let kept = Remembered { at, card: card.clone() };
+            Some((card.id, serde_json::to_string(&kept).ok()?))
+        })
+        .collect();
+    if written.is_empty() {
+        return;
+    }
+    if let Err(err) = store.remember_cards(written.iter().map(|(id, json)| (*id, json.as_str()))) {
+        tracing::debug!(%err, "could not remember the cards");
     }
 }
 

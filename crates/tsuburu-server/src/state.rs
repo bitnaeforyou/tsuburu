@@ -71,7 +71,7 @@ pub struct AppState {
     /// its pages, and is the kind worth keeping a copy of.
     pub listing: Arc<crate::listed::Listing>,
     version: RwLock<Option<Cached<String>>>,
-    gg: RwLock<Option<Cached<GgMap>>>,
+    gg: RwLock<Option<Cached<Arc<GgMap>>>>,
     /// 갤러리 메타 JSON은 최대 200 KB를 넘기도 한다. 카드 한 장으로 줄여
     /// 캐시해두면 같은 결과를 다시 그릴 때 네트워크를 타지 않는다.
     pub cards: Cache<i32, Card>,
@@ -255,11 +255,14 @@ impl AppState {
         }
     }
 
-    pub async fn gg(&self) -> Result<GgMap, tsuburu_hitomi::GalleryFetchError> {
+    /// Shared rather than copied: the map holds a couple of thousand case
+    /// labels in a set, and every image, every thumbnail and every card asked
+    /// for its own copy - fifty of them for one page of results.
+    pub async fn gg(&self) -> Result<Arc<GgMap>, tsuburu_hitomi::GalleryFetchError> {
         if let Some(cached) = self.gg.read().await.as_ref()
             && cached.is_fresh()
         {
-            return Ok(cached.value.clone());
+            return Ok(Arc::clone(&cached.value));
         }
         self.refresh_gg().await
     }
@@ -270,9 +273,10 @@ impl AppState {
     /// 404가 나므로, 이미지 프록시가 404를 만나면 이것을 호출해 한 번 다시
     /// 시도한다. TTL만 믿으면 회전과 만료 사이의 구간에서 이미지가 전부
     /// 깨진 것처럼 보인다.
-    pub async fn refresh_gg(&self) -> Result<GgMap, tsuburu_hitomi::GalleryFetchError> {
-        let fresh = tsuburu_hitomi::fetch_gg(self.fetcher.as_ref(), &self.cfg).await?;
-        *self.gg.write().await = Some(Cached { value: fresh.clone(), fetched_at: Instant::now() });
+    pub async fn refresh_gg(&self) -> Result<Arc<GgMap>, tsuburu_hitomi::GalleryFetchError> {
+        let fresh = Arc::new(tsuburu_hitomi::fetch_gg(self.fetcher.as_ref(), &self.cfg).await?);
+        *self.gg.write().await =
+            Some(Cached { value: Arc::clone(&fresh), fetched_at: Instant::now() });
         Ok(fresh)
     }
 }

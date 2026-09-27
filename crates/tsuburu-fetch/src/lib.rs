@@ -5,6 +5,7 @@
 //! 바이트에 불과했다. 상위 노드는 모든 검색에서 동일하므로 캐시 적중률이
 //! 높고, 캐싱만으로 왕복이 크게 준다.
 
+use quick_cache::Weighter;
 use quick_cache::sync::Cache;
 use std::ops::Range;
 use std::sync::Arc;
@@ -18,8 +19,13 @@ use tsuburu_hitomi::{FetchError, Fetcher};
 pub struct FetchConfig {
     /// hitomi에 동시에 열어두는 요청 수. 상대 서버를 배려하는 상한이다.
     pub max_concurrent: usize,
-    /// 캐시에 둘 range 응답 개수. 노드 하나가 464바이트이므로 4096개는 2 MB 남짓이다.
-    pub cache_entries: usize,
+    /// 캐시에 둘 range 응답의 총 바이트.
+    ///
+    /// Counted in bytes rather than in entries: a node is 464 bytes, but the
+    /// same call fetches whole `.nozomi` lists, and `index-all` alone is
+    /// 4.8 MB. A few hundred of those under a count-based ceiling is
+    /// gigabytes nobody asked to keep.
+    pub cache_bytes: u64,
     pub user_agent: String,
     pub referer: String,
     /// The hosts that are told where the request came from.
@@ -43,7 +49,7 @@ impl Default for FetchConfig {
     fn default() -> Self {
         Self {
             max_concurrent: 8,
-            cache_entries: 4096,
+            cache_bytes: 64 * 1024 * 1024,
             user_agent: concat!("tsuburu/", env!("CARGO_PKG_VERSION")).into(),
             referer: "https://hitomi.la/".into(),
             referer_for: vec!["hitomi.la".into(), "gold-usergeneratedcontent.net".into()],
@@ -67,9 +73,19 @@ struct Counters {
     bytes: AtomicU64,
 }
 
+/// What a cached body costs: its own bytes.
+#[derive(Clone)]
+struct ByLength;
+
+impl Weighter<(String, u64, u64), Arc<Vec<u8>>> for ByLength {
+    fn weight(&self, _key: &(String, u64, u64), body: &Arc<Vec<u8>>) -> u64 {
+        body.len() as u64
+    }
+}
+
 pub struct HttpFetcher {
     client: reqwest::Client,
-    cache: Cache<(String, u64, u64), Arc<Vec<u8>>>,
+    cache: Cache<(String, u64, u64), Arc<Vec<u8>>, ByLength>,
     /// `.nozomi` 목록의 길이. 목록마다 한 번만 물으면 된다.
     lengths: Cache<String, u64>,
     limiter: Semaphore,
@@ -109,7 +125,13 @@ impl HttpFetcher {
 
         Ok(Self {
             client,
-            cache: Cache::new(cfg.cache_entries),
+            cache: Cache::with_weighter(
+                // The estimate quick_cache sizes its tables from. A B-tree
+                // node is the common case; the whole lists are the rare one.
+                (cfg.cache_bytes / 464).max(16) as usize,
+                cfg.cache_bytes,
+                ByLength,
+            ),
             lengths: Cache::new(256),
             limiter: Semaphore::new(cfg.max_concurrent),
             counters: Counters::default(),
@@ -208,13 +230,24 @@ impl HttpFetcher {
         }
 
         let response = request.send().await.map_err(|e| FetchError::Network(e.to_string()))?;
+        let whole_file = response.status().as_u16() != 206;
         check_status(response.status().as_u16())?;
 
         let bytes = response.bytes().await.map_err(|e| FetchError::Network(e.to_string()))?;
 
         self.counters.requests.fetch_add(1, Ordering::Relaxed);
         self.counters.bytes.fetch_add(bytes.len() as u64, Ordering::Relaxed);
-        Ok(bytes.to_vec())
+
+        // A range that was answered with the whole file has to be cut here.
+        // Not doing so was not an error either: the caller asked for a window
+        // into a B-tree and got bytes from offset zero, which descends into
+        // the wrong node, answers wrongly, and caches that.
+        let Some(asked) = range.filter(|_| whole_file) else {
+            return Ok(bytes.to_vec());
+        };
+        let start = (asked.start as usize).min(bytes.len());
+        let end = (asked.end as usize).clamp(start, bytes.len());
+        Ok(bytes[start..end].to_vec())
     }
 }
 
@@ -300,6 +333,24 @@ impl Fetcher for HttpFetcher {
 
 #[cfg(test)]
 mod tests {
+
+    /// A CDN edge that ignores Range answers 200 with the whole file. The
+    /// caller asked for a window into a B-tree, so handing it offset zero
+    /// does not fail - it descends into the wrong node and caches that.
+    #[tokio::test]
+    async fn a_whole_file_answered_to_a_range_is_cut_to_the_range() {
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_bytes(b"0123456789".to_vec()),
+            )
+            .mount(&server)
+            .await;
+
+        let fetcher = HttpFetcher::new(FetchConfig::default()).unwrap();
+        let got = fetcher.get_range(&format!("{}/x", server.uri()), 3..7).await.unwrap();
+        assert_eq!(got, b"3456");
+    }
 
     #[test]
     fn where_we_came_from_is_said_only_to_hitomi() {

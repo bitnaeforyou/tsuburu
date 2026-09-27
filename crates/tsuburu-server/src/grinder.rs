@@ -253,7 +253,7 @@ impl Grinder {
         self: &Arc<Self>,
         gallery: i32,
         page: u16,
-        bytes: Vec<u8>,
+        bytes: axum::body::Bytes,
         language: &str,
     ) {
         let Ok(permit) = Arc::clone(&self.read_permits).acquire_owned().await else { return };

@@ -413,7 +413,7 @@ async fn a_page_that_was_read_is_recognised_in_the_works_own_language() {
     let dir = tempfile::tempdir().unwrap();
     let (grinder, store) = reading_grinder(&dir);
 
-    grinder.recognise_read_page(42, 3, vec![1, 2, 3], "japanese").await;
+    grinder.recognise_read_page(42, 3, vec![1, 2, 3].into(), "japanese").await;
 
     assert_eq!(ASKED.lock().unwrap().last().map(String::as_str), Some("ja-JP"));
     let text = store.text(42).unwrap().unwrap();
@@ -439,7 +439,7 @@ async fn a_page_that_cannot_be_read_says_so() {
     ));
 
     assert!(grinder.status().await.last_error.is_none());
-    grinder.recognise_read_page(44, 0, vec![1, 2, 3], "korean").await;
+    grinder.recognise_read_page(44, 0, vec![1, 2, 3].into(), "korean").await;
 
     let said = grinder.status().await.last_error.expect("the failure is recorded");
     assert!(said.contains("page 1 of 44"), "names the page: {said}");
@@ -452,9 +452,9 @@ async fn reading_the_same_page_again_does_not_double_it() {
     let dir = tempfile::tempdir().unwrap();
     let (grinder, store) = reading_grinder(&dir);
 
-    grinder.recognise_read_page(43, 0, vec![1], "korean").await;
-    grinder.recognise_read_page(43, 0, vec![1], "korean").await;
-    grinder.recognise_read_page(43, 1, vec![1], "korean").await;
+    grinder.recognise_read_page(43, 0, vec![1].into(), "korean").await;
+    grinder.recognise_read_page(43, 0, vec![1].into(), "korean").await;
+    grinder.recognise_read_page(43, 1, vec![1].into(), "korean").await;
 
     let text = store.text(43).unwrap().unwrap();
     assert_eq!(text.iter().map(|p| p.page).collect::<Vec<_>>(), [0, 1]);
