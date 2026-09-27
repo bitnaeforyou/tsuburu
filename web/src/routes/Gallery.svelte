@@ -205,13 +205,14 @@
   }
 
   function summary(): Omit<api.Summary, 'id'> {
-    const hash = gallery?.pages[0]?.src.replace(/^\/img\/|\.(avif|webp)$/g, '') ?? null
+    const cover = gallery?.pages[0]
     return {
       title: gallery?.title ?? null,
       language: gallery?.language ?? null,
       kind: gallery?.kind ?? null,
       pages: gallery?.pages.length ?? 0,
-      thumbnail_hash: hash,
+      thumbnail_hash: cover?.src.replace(/^\/img\/|\.(avif|webp)$/g, '') ?? null,
+      wide: cover ? cover.width > cover.height : false,
     }
   }
 

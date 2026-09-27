@@ -27,7 +27,9 @@
 
   const thumbnail = $derived(
     card?.thumbnail ??
-      (preset?.thumbnail_hash ? `/tn/${preset.thumbnail_hash}.avif` : null),
+      (preset?.thumbnail_hash
+        ? `/tn/${preset.wide ? 'wide/' : ''}${preset.thumbnail_hash}.avif`
+        : null),
   )
   const title = $derived(card?.title ?? preset?.title ?? `#${id}`)
   const pages = $derived(card?.pages ?? preset?.pages ?? 0)
@@ -83,7 +85,10 @@
       language,
       kind: card?.kind ?? preset?.kind ?? null,
       pages,
-      thumbnail_hash: thumbnail?.replace(/^\/tn\/|\.avif$/g, '') ?? null,
+      // The hash, not the path it is currently reached by: a record written
+      // today has to survive the rule for building that path changing.
+      thumbnail_hash: thumbnail?.replace(/^\/tn\/(wide\/)?|\.avif$/g, '') ?? null,
+      wide: thumbnail?.startsWith('/tn/wide/') ?? false,
     }
   }
 

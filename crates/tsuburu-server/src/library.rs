@@ -45,6 +45,8 @@ pub struct SummaryBody {
     pub pages: usize,
     #[serde(default)]
     pub thumbnail_hash: Option<String>,
+    #[serde(default)]
+    pub wide: bool,
 }
 
 impl SummaryBody {
@@ -56,6 +58,7 @@ impl SummaryBody {
             kind: self.kind,
             pages: self.pages,
             thumbnail_hash: self.thumbnail_hash,
+            wide: self.wide,
         }
     }
 }

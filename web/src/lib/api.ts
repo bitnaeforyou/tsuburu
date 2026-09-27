@@ -90,6 +90,9 @@ export type Summary = {
   kind: string | null
   pages: number
   thumbnail_hash: string | null
+  /// Whether the cover is wider than it is tall, which decides which of
+  /// hitomi's two thumbnail sizes it is asked for.
+  wide?: boolean
 }
 
 export type Favorite = Summary & { added_at: number; folder?: string | null }

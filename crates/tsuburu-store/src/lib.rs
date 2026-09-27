@@ -62,6 +62,15 @@ pub struct Summary {
     /// 저장된 기록이 죽지 않는다.
     #[serde(default)]
     pub thumbnail_hash: Option<String>,
+    /// Whether the cover is wider than it is tall.
+    ///
+    /// Which of hitomi's two thumbnail sizes to ask for, kept as the fact it
+    /// is decided from rather than as the path it decides - for the same
+    /// reason the hash is kept rather than the URL. Absent on rows written
+    /// before this existed, which reads as upright, which is what almost
+    /// every work is.
+    #[serde(default)]
+    pub wide: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -607,6 +616,7 @@ mod tests {
             kind: Some("doujinshi".into()),
             pages: 20,
             thumbnail_hash: Some("a".repeat(64)),
+            wide: false,
         }
     }
 

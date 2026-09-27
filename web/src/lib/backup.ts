@@ -133,5 +133,6 @@ function summaryOf(item: Summary): Omit<Summary, 'id'> {
     kind: item.kind ?? null,
     pages: Number.isFinite(item.pages) ? item.pages : 0,
     thumbnail_hash: item.thumbnail_hash ?? null,
+    wide: item.wide === true,
   }
 }
