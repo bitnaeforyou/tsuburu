@@ -67,6 +67,10 @@ press ctrl+c to stop
 같이 지우려면 `down -v`입니다. 받아오는 대신 이 저장소에서 직접 빌드하려면
 저장소의 `compose.yaml`이 그렇게 합니다.
 
+새 버전이 나와도 빌드할 것은 없습니다. 이미지 태그를 `latest`로 바꿔 두면
+`docker compose pull && docker compose up -d`로 나올 때마다 따라가고,
+버전을 적어 두면 그 자리에 머뭅니다.
+
 ### 받자마자 되는 것
 
 방금 실행한 파일 하나 말고는 필요한 게 없습니다.

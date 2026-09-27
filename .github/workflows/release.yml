@@ -310,6 +310,9 @@ jobs:
           # if you switch it on - lives in the \`data\` volume and survives
           # \`docker compose down\`. Use \`down -v\` to throw it away too.
 
+          # To take each new release as it comes out, change the tag below to
+          # \`latest\` and run \`docker compose pull && docker compose up -d\`.
+          # Nothing is built either way; the image is already published.
           services:
             tsuburu:
               image: ${image}:${version}

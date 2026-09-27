@@ -68,6 +68,10 @@ Everything it keeps lives in the `data` volume and survives `docker compose
 down`; `down -v` throws that away too. To build from a checkout instead of
 pulling, the `compose.yaml` in this repository does that.
 
+Nothing is compiled for a new release either. Change the image tag to
+`latest` and `docker compose pull && docker compose up -d` takes each one as
+it comes out; leave the version in place and it stays where it is.
+
 ### Out of the box
 
 Nothing beyond the file you just ran:
