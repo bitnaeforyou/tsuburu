@@ -16,7 +16,7 @@
 
 use crate::store::PageText;
 use std::fs::File;
-use std::io::{self, BufReader, Read};
+use std::io::{self, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 const HEADER_LEN: usize = 14;
@@ -72,6 +72,10 @@ pub struct ChunkReader {
     offsets: Vec<u64>,
     index: usize,
     buffer: Vec<u8>,
+    /// How long the records file is. The offsets arrive with the artifact,
+    /// so they say whatever whoever made it says: this is what they are
+    /// checked against before one of them becomes an allocation.
+    length: u64,
 }
 
 impl ChunkReader {
@@ -89,11 +93,13 @@ impl ChunkReader {
             raw.as_chunks::<8>().0.iter().copied().map(u64::from_le_bytes).collect();
         let file =
             File::open(&records_path).map_err(|e| ArtifactError::Io(records_path.clone(), e))?;
+        let length = file.metadata().map_err(|e| ArtifactError::Io(records_path.clone(), e))?.len();
         Ok(Self {
             records: BufReader::with_capacity(4 << 20, file),
             offsets,
             index: 0,
             buffer: Vec::new(),
+            length,
         })
     }
 
@@ -120,6 +126,19 @@ impl Iterator for ChunkReader {
         self.index += 1;
         if end < start {
             return Some(Err(ArtifactError::Corrupt(i, "offsets run backwards".into())));
+        }
+        // An offsets file that says a record runs past the end of the records
+        // file is asking for an allocation the machine does not have, and
+        // with `panic = "abort"` a failed one ends the program rather than
+        // the import.
+        if end > self.length {
+            return Some(Err(ArtifactError::Corrupt(i, "offset runs past the records".into())));
+        }
+        // Read from where the offsets say, not from wherever the last read
+        // stopped: a file whose records are not laid out end to end was
+        // otherwise read entirely from the wrong places.
+        if let Err(e) = self.records.seek(SeekFrom::Start(start)) {
+            return Some(Err(ArtifactError::Io(PathBuf::from("compact-metadata.bin"), e)));
         }
         self.buffer.resize((end - start) as usize, 0);
         if let Err(e) = self.records.read_exact(&mut self.buffer) {

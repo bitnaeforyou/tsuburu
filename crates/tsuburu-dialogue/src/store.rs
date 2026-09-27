@@ -232,6 +232,22 @@ pub struct Found {
     pub hits: Vec<Hit>,
 }
 
+/// One job record, or nothing.
+///
+/// A row that will not parse is one work's bookkeeping, and refusing the
+/// whole listing over it took dialogue search down for good: the counts are
+/// on every answer, and the shard export that could have rebuilt the index
+/// walks the same table.
+fn parsed_job(raw: &str) -> Option<JobRecord> {
+    match serde_json::from_str(raw) {
+        Ok(job) => Some(job),
+        Err(err) => {
+            tracing::warn!(%err, "skipping a job record that could not be read");
+            None
+        }
+    }
+}
+
 /// What one hit costs to hold: its own fields, and the lines it quotes.
 fn weight(hit: &Hit) -> usize {
     size_of::<Hit>()
@@ -657,7 +673,7 @@ impl DialogueStore {
         let mut counts = Counts::default();
         for row in jobs.iter().map_err(db_err)? {
             let (_, value) = row.map_err(db_err)?;
-            let job: JobRecord = serde_json::from_str(value.value())?;
+            let Some(job) = parsed_job(value.value()) else { continue };
             match job.status {
                 Status::Pending => counts.pending += 1,
                 Status::Done => counts.done += 1,
@@ -691,7 +707,7 @@ impl DialogueStore {
         let mut out = std::collections::HashSet::new();
         for row in jobs.iter().map_err(db_err)? {
             let (key, value) = row.map_err(db_err)?;
-            let job: JobRecord = serde_json::from_str(value.value())?;
+            let Some(job) = parsed_job(value.value()) else { continue };
             if job.status == Status::Done && job.source.is_none() {
                 out.insert(key.value());
             }
@@ -884,7 +900,7 @@ impl DialogueStore {
         let mut out = Vec::new();
         for entry in jobs.iter().map_err(db_err)? {
             let (key, value) = entry.map_err(db_err)?;
-            let job: JobRecord = serde_json::from_str(value.value())?;
+            let Some(job) = parsed_job(value.value()) else { continue };
             if job.status != Status::Done || (reading_only && !job.from_reading) {
                 continue;
             }

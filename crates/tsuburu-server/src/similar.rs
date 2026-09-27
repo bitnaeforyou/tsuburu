@@ -158,7 +158,7 @@ pub fn near_local(
         if Some(gallery) == exclude || vector.len() != query.len() {
             return;
         }
-        let score = query.iter().zip(vector).map(|(a, b)| a * b).sum();
+        let score = tsuburu_embed::embedder::cosine(query, vector);
         found.push(Match { gallery_id: gallery, page, score });
     });
     if let Err(err) = scan {
@@ -166,7 +166,12 @@ pub fn near_local(
         return Vec::new();
     }
     found.sort_unstable_by(|a, b| b.score.total_cmp(&a.score));
-    found.dedup_by_key(|m| m.gallery_id);
+    // Best per work: `dedup` only removes neighbours, and this list is
+    // ordered by score, so a work's other passages sat further down and ate
+    // the places the next works should have had. `merge` beside this already
+    // does it this way.
+    let mut seen = std::collections::HashSet::new();
+    found.retain(|m| seen.insert(m.gallery_id));
     found.truncate(limit);
     found
 }

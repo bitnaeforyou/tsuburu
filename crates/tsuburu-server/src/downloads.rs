@@ -61,8 +61,25 @@ impl Jobs {
         }
     }
 
-    fn running(&self, id: i32) -> bool {
-        self.inner.lock().ok().and_then(|j| j.get(&id).map(|s| s.running)).unwrap_or(false)
+    /// Marks a work as being fetched, unless it already is.
+    ///
+    /// Checking and then marking were two steps with the network in between,
+    /// so two presses of Download both passed the check and the second reset
+    /// the first's count to zero.
+    fn claim(&self, id: i32) -> bool {
+        let Ok(mut jobs) = self.inner.lock() else { return false };
+        if jobs.get(&id).is_some_and(|status| status.running) {
+            return false;
+        }
+        jobs.insert(id, JobStatus { running: true, ..JobStatus::default() });
+        true
+    }
+
+    /// Gives it back, for a start that got no further.
+    fn release(&self, id: i32) {
+        if let Ok(mut jobs) = self.inner.lock() {
+            jobs.remove(&id);
+        }
     }
 }
 
@@ -86,10 +103,24 @@ pub async fn start(
     Path(id): Path<i32>,
     Json(body): Json<StartBody>,
 ) -> Result<Json<StartResponse>, ApiError> {
-    let downloads = Arc::clone(store(&state)?);
-    if state.download_jobs.running(id) {
+    // Claimed before anything is fetched, because fetching is where the two
+    // presses of Download used to pass each other.
+    if !state.download_jobs.claim(id) {
         return Err(ApiError::bad_request("that gallery is already downloading"));
     }
+    let started = begin(&state, id, body).await;
+    if started.is_err() {
+        state.download_jobs.release(id);
+    }
+    started
+}
+
+async fn begin(
+    state: &Arc<AppState>,
+    id: i32,
+    body: StartBody,
+) -> Result<Json<StartResponse>, ApiError> {
+    let downloads = Arc::clone(store(state)?);
 
     let gallery = tsuburu_hitomi::fetch_gallery(state.fetcher.as_ref(), &state.cfg, id).await?;
     let gg = tsuburu_hitomi::fetch_gg(state.fetcher.as_ref(), &state.cfg).await?;

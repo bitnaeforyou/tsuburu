@@ -14,6 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
@@ -93,6 +94,10 @@ pub struct Runner {
     child: Mutex<Option<Child>>,
     port: Mutex<Option<u16>>,
     client: reqwest::Client,
+    /// The bring-up that is running, so switching the model off stops it.
+    /// Without this, saying no left two and a half gigabytes still coming
+    /// down and a server starting on top of it a few minutes later.
+    rising: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl Runner {
@@ -104,8 +109,14 @@ impl Runner {
             port: Mutex::new(None),
             client: reqwest::Client::builder()
                 .user_agent(concat!("tsuburu/", env!("CARGO_PKG_VERSION")))
+                // A stalled connection with no deadline left the fetch
+                // showing as still running for ever, and there is no way to
+                // ask for it again while it says that.
+                .connect_timeout(Duration::from_secs(20))
+                .read_timeout(Duration::from_secs(120))
                 .build()
                 .unwrap_or_default(),
+            rising: Mutex::new(None),
         })
     }
 
@@ -165,16 +176,24 @@ impl Runner {
         let _ = std::fs::create_dir_all(&self.dir);
         let _ = std::fs::write(self.dir.join("wanted"), b"");
         let me = Arc::clone(self);
-        tokio::spawn(async move {
+        let rising = tokio::spawn(async move {
             if let Err(error) = me.bring_up().await {
                 tracing::warn!(%error, "the meaning model could not be brought up");
                 me.set(Progress::Failed { error: error.to_string() });
             }
         });
+        if let Ok(mut held) = self.rising.lock() {
+            *held = Some(rising);
+        }
     }
 
     pub fn disable(&self) {
         let _ = std::fs::remove_file(self.dir.join("wanted"));
+        if let Ok(mut held) = self.rising.lock()
+            && let Some(rising) = held.take()
+        {
+            rising.abort();
+        }
         if let Ok(mut held) = self.child.lock()
             && let Some(mut child) = held.take()
         {

@@ -15,8 +15,8 @@ use rav1d::include::dav1d::data::Dav1dData;
 use rav1d::include::dav1d::dav1d::{Dav1dContext, Dav1dSettings};
 use rav1d::include::dav1d::picture::Dav1dPicture;
 use rav1d::src::lib::{
-    dav1d_close, dav1d_data_create, dav1d_default_settings, dav1d_get_picture, dav1d_open,
-    dav1d_picture_unref, dav1d_send_data,
+    dav1d_close, dav1d_data_create, dav1d_data_unref, dav1d_default_settings, dav1d_get_picture,
+    dav1d_open, dav1d_picture_unref, dav1d_send_data,
 };
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -97,12 +97,16 @@ unsafe fn decode_frame(context: Option<Dav1dContext>, payload: &[u8]) -> Result<
             return Err(AvifError::Decode("no room for the image".into()));
         }
         std::ptr::copy_nonoverlapping(payload.as_ptr(), room, payload.len());
+        // Handed over on success, so it is ours to release on either refusal
+        // - a page per refused frame, on a sweep that refuses many.
         if dav1d_send_data(context, NonNull::new(&mut data)).0 < 0 {
+            dav1d_data_unref(NonNull::new(&mut data));
             return Err(AvifError::Decode("the image was refused".into()));
         }
 
         let mut picture: Dav1dPicture = std::mem::zeroed();
         if dav1d_get_picture(context, NonNull::new(&mut picture)).0 < 0 {
+            dav1d_data_unref(NonNull::new(&mut data));
             return Err(AvifError::Decode("no frame came back".into()));
         }
         let grey = read_luma(&picture);
