@@ -85,6 +85,28 @@ impl Config {
         self.nozomi_url(&format!("type/{kind}-{language}.nozomi"))
     }
 
+    /// The list a namespaced term names, if hitomi keeps one.
+    ///
+    /// `female:blowjob` and `male:blowjob` are different works, and the
+    /// search index knows neither: it is keyed on the bare word, so asking it
+    /// for either finds nothing at all. What hitomi does with them - and with
+    /// an artist, a series, a group or a character - is keep a list per name,
+    /// which is also already in the order a search wants.
+    pub fn term_list_url(&self, term: &str, language: &str) -> Option<String> {
+        let (namespace, rest) = term.split_once(':')?;
+        let (namespace, name) = match namespace {
+            // Who a tag is about is part of the tag's own name.
+            "female" | "male" => ("tag", term),
+            "tag" | "artist" | "series" | "group" | "character" => (namespace, rest),
+            _ => return None,
+        };
+        // Underscores for spaces, the way hitomi writes a term in its own
+        // search box: a term has to survive being cut at whitespace on the
+        // way here, and `blue archive` would have arrived as two.
+        let name = name.replace('_', " ");
+        (!name.trim().is_empty()).then(|| self.name_list_url(namespace, &name, language))
+    }
+
     /// One artist's or one series' works, as hitomi itself lists them.
     ///
     /// The search index has no `artist:` key - asking it for one finds
@@ -230,8 +252,34 @@ pub async fn count_without(
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::fetcher::mock::MockFetcher;
+
+    /// `female:blowjob` and `male:blowjob` are different works, and the
+    /// search index knows neither - it is keyed on the bare word.
+    #[test]
+    fn a_term_that_says_who_it_is_about_names_a_list() {
+        let cfg = Config::default();
+        let url = |term: &str| cfg.term_list_url(term, "all");
+        assert!(url("female:blowjob").unwrap().ends_with("/tag/female:blowjob-all.nozomi"));
+        assert!(url("male:blowjob").unwrap().ends_with("/tag/male:blowjob-all.nozomi"));
+        assert!(url("artist:keso").unwrap().ends_with("/artist/keso-all.nozomi"));
+        assert!(url("series:blue_archive").unwrap().ends_with("/series/blue%20archive-all.nozomi"));
+        assert!(url("group:bluemage").unwrap().ends_with("/group/bluemage-all.nozomi"));
+        assert!(url("character:asuna").unwrap().ends_with("/character/asuna-all.nozomi"));
+    }
+
+    #[test]
+    fn everything_else_still_goes_to_the_index() {
+        let cfg = Config::default();
+        assert_eq!(cfg.term_list_url("blowjob", "all"), None);
+        assert_eq!(cfg.term_list_url("naruto", "all"), None);
+        // A namespace hitomi keeps no list for, and an empty name.
+        assert_eq!(cfg.term_list_url("nonsense:x", "all"), None);
+        assert_eq!(cfg.term_list_url("artist:", "all"), None);
+        assert_eq!(cfg.term_list_url("artist:   ", "all"), None);
+    }
 
     fn nozomi(ids: &[i32]) -> Vec<u8> {
         ids.iter().flat_map(|id| id.to_be_bytes()).collect()

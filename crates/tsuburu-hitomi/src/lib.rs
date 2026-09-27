@@ -81,6 +81,28 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+/// How many works hitomi lists under one name, or `None` if it lists none.
+///
+/// Every tag, artist, series, group and character has a list of its own, and
+/// the list is four bytes a work - so its length is the count, and asking for
+/// one byte of it answers both "does this exist" and "how many". That is the
+/// whole of what ranking a suggestion by popularity needs, and it is one
+/// small request that the fetcher then remembers.
+pub async fn works_under(
+    fetcher: &dyn Fetcher,
+    cfg: &Config,
+    namespace: &str,
+    name: &str,
+    language: &str,
+) -> Option<usize> {
+    let url = cfg.name_list_url(namespace, name, language);
+    match fetcher.length(&url).await {
+        Ok(bytes) => Some((bytes / 4) as usize),
+        // A name hitomi does not carry is a 404, which is an answer.
+        Err(_) => None,
+    }
+}
+
 /// 갤러리 인덱스의 현재 버전 문자열.
 pub async fn galleries_index_version(
     fetcher: &dyn Fetcher,
@@ -142,6 +164,15 @@ async fn search_word(
     word: &str,
     limit: Option<usize>,
 ) -> Result<Vec<i32>, SearchError> {
+    // A term that names who it is about, or an artist, has no key in the
+    // index; hitomi keeps it as a list instead.
+    if let Some(url) = cfg.term_list_url(&word.to_lowercase(), "all") {
+        let mut ids = nozomi::decode_ids(&nozomi::all_ids(fetcher, &url).await?);
+        if let Some(limit) = limit {
+            ids.truncate(limit);
+        }
+        return Ok(ids);
+    }
     let key = hash_term(&word.to_lowercase());
     let index_url = cfg.galleries_index_url(version);
     let Some(entry) = b_search(fetcher, &index_url, &key).await? else {
@@ -202,6 +233,13 @@ pub async fn search_page(
         && hidden.is_empty();
     if single_word && filters.is_empty() && sort.is_date() {
         let term = &query.include[0];
+        // A list is already in the order this wants, so a page of it is a
+        // couple of hundred bytes rather than the whole of it.
+        if let Some(url) = cfg.term_list_url(&term.to_lowercase(), language) {
+            let total = nozomi::count_without(fetcher, &url, hidden).await?;
+            let ids = nozomi::page_without(fetcher, &url, hidden, offset, limit).await?;
+            return Ok(SearchPage { total, ids });
+        }
         let key = hash_term(&term.to_lowercase());
         let index_url = cfg.galleries_index_url(version);
         let Some(entry) = b_search(fetcher, &index_url, &key).await? else {
