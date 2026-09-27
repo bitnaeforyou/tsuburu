@@ -18,10 +18,30 @@ export function unfiled(works: Filed[]): number {
   return works.filter((work) => !work.folder).length
 }
 
+/// Whether a shelf is the named one or sits inside it.
+///
+/// A shelf says which shelf it is inside with `/` in its name, so looking at
+/// `읽을 것` has to show what is on `읽을 것/단편` too - otherwise the outer one
+/// reads as empty while holding everything.
+export function within(shelf: string | null | undefined, name: string): boolean {
+  if (!shelf) return false
+  return shelf === name || shelf.startsWith(`${name}/`)
+}
+
 export function onShelf<T extends Filed>(works: T[], picked: Picked): T[] {
   if (picked === 'all') return works
   if (picked === null) return works.filter((work) => !work.folder)
-  return works.filter((work) => work.folder === picked)
+  return works.filter((work) => within(work.folder, picked))
+}
+
+/// The shelf one is inside, and the last part of its own name.
+export function parentOf(name: string): string | null {
+  const cut = name.lastIndexOf('/')
+  return cut === -1 ? null : name.slice(0, cut)
+}
+
+export function leafOf(name: string): string {
+  return name.slice(name.lastIndexOf('/') + 1)
 }
 
 /// The value the picker sends back, as a shelf name or none at all.

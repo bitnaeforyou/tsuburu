@@ -73,7 +73,6 @@
   }
   h1 {
     margin: 0;
-
   }
   .muted {
     color: var(--muted);

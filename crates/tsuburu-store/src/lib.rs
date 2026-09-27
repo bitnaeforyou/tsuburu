@@ -234,7 +234,8 @@ impl Store {
     /// is no folder apart from the works that name one, so none is left
     /// behind empty.
     pub fn set_folder(&self, id: i32, folder: Option<&str>) -> Result<Option<String>, StoreError> {
-        let folder = folder.map(str::trim).filter(|f| !f.is_empty());
+        let folder = folder.and_then(tidy_shelf);
+        let folder = folder.as_deref();
         let tx = self.db.begin_write().map_err(db_err)?;
         {
             let mut meta = tx.open_table(META).map_err(db_err)?;
@@ -287,11 +288,22 @@ impl Store {
     /// on it: emptying it leaves it there to put the next thing on.
     pub fn folders(&self) -> Result<Vec<(String, usize)>, StoreError> {
         let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
-        for name in self.declared_folders()? {
-            counts.entry(name).or_default();
+        let filed: Vec<String> = self.folder_map()?.into_values().collect();
+        // A shelf inside another one implies the one it is inside, even where
+        // that was never made on its own: filing something on `읽을 것/단편`
+        // has to leave `읽을 것` somewhere to be found.
+        for name in self.declared_folders()?.into_iter().chain(filed.iter().cloned()) {
+            for upto in ancestry(&name) {
+                counts.entry(upto).or_default();
+            }
         }
-        for name in self.folder_map()?.into_values() {
-            *counts.entry(name).or_default() += 1;
+        // A shelf counts what is on it and what is on the shelves inside it,
+        // which is what the row saying `읽을 것 12` has to mean for the list it
+        // then shows.
+        for name in &filed {
+            for upto in ancestry(name) {
+                *counts.entry(upto).or_default() += 1;
+            }
         }
         Ok(counts.into_iter().collect())
     }
@@ -305,10 +317,8 @@ impl Store {
     /// Makes an empty shelf, so a reader can set up where things go before
     /// deciding what goes there.
     pub fn add_folder(&self, name: &str) -> Result<bool, StoreError> {
-        let name = name.trim();
-        if name.is_empty() {
-            return Ok(false);
-        }
+        let Some(name) = tidy_shelf(name) else { return Ok(false) };
+        let name = name.as_str();
         let tx = self.db.begin_write().map_err(db_err)?;
         let made = {
             let mut meta = tx.open_table(META).map_err(db_err)?;
@@ -334,7 +344,7 @@ impl Store {
         {
             let mut meta = tx.open_table(META).map_err(db_err)?;
             declare_within(&mut meta, |names| {
-                names.retain(|held| held != name);
+                names.retain(|held| !within(held, name));
                 true
             })?;
             let mut folders = tx.open_table(FOLDERS).map_err(db_err)?;
@@ -348,21 +358,34 @@ impl Store {
 
     /// Calls a shelf something else, taking everything on it along.
     pub fn rename_folder(&self, from: &str, to: &str) -> Result<bool, StoreError> {
-        let to = to.trim();
-        if to.is_empty() || from == to {
-            return Ok(false);
-        }
+        let Some(to) = tidy_shelf(to).filter(|to| to != from) else { return Ok(false) };
+        // Renaming a shelf renames the ones inside it, which keep their own
+        // names: `읽을 것/단편` follows `읽을 것` to `나중에/단편`.
+        let renamed = |held: &str| match held.strip_prefix(from) {
+            Some("") => Some(to.clone()),
+            Some(rest) if rest.starts_with('/') => Some(format!("{to}{rest}")),
+            _ => None,
+        };
         let tx = self.db.begin_write().map_err(db_err)?;
         {
             let mut meta = tx.open_table(META).map_err(db_err)?;
             declare_within(&mut meta, |names| {
-                names.retain(|held| held != from && held != to);
-                names.push(to.to_string());
+                let mut moved: Vec<String> =
+                    names.iter().filter_map(|held| renamed(held)).collect();
+                names.retain(|held| !within(held, from) && !moved.contains(held));
+                names.append(&mut moved);
                 true
             })?;
             let mut folders = tx.open_table(FOLDERS).map_err(db_err)?;
+            let mut moves = Vec::new();
             for id in on_shelf(&folders, from)? {
-                folders.insert(id, to).map_err(db_err)?;
+                let was = folders.get(id).map_err(db_err)?.map(|on| on.value().to_string());
+                if let Some(now) = was.as_deref().and_then(renamed) {
+                    moves.push((id, now));
+                }
+            }
+            for (id, now) in moves {
+                folders.insert(id, now.as_str()).map_err(db_err)?;
             }
         }
         tx.commit().map_err(db_err)?;
@@ -695,6 +718,39 @@ fn declare_within(
     Ok(true)
 }
 
+/// A shelf and every shelf it is inside, outermost last.
+fn ancestry(name: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = name;
+    loop {
+        out.push(rest.to_string());
+        match rest.rsplit_once('/') {
+            Some((upto, _)) => rest = upto,
+            None => return out,
+        }
+    }
+}
+
+/// A shelf name as it is stored: segments separated by `/`, none of them
+/// empty.
+///
+/// `/` is how a shelf says which shelf it is inside, so a name that is only
+/// slashes, or one typed as `읽을 것 / 단편`, has to settle on one spelling or
+/// the same shelf ends up written two ways and shows up twice.
+fn tidy_shelf(name: &str) -> Option<String> {
+    let tidied =
+        name.split('/').map(str::trim).filter(|part| !part.is_empty()).collect::<Vec<_>>().join("/");
+    (!tidied.is_empty()).then_some(tidied)
+}
+
+/// Whether a shelf is the named one or sits inside it.
+///
+/// Taking away `읽을 것` takes `읽을 것/단편` with it: a shelf inside one that
+/// is gone has nothing holding it up.
+fn within(shelf: &str, name: &str) -> bool {
+    shelf == name || shelf.strip_prefix(name).is_some_and(|rest| rest.starts_with('/'))
+}
+
 /// Which works name this shelf, from a table that is already open.
 fn on_shelf(
     folders: &impl redb::ReadableTable<i32, &'static str>,
@@ -703,7 +759,7 @@ fn on_shelf(
     let mut out = Vec::new();
     for row in folders.iter().map_err(db_err)? {
         let (id, on) = row.map_err(db_err)?;
-        if on.value() == name {
+        if within(on.value(), name) {
             out.push(id.value());
         }
     }
@@ -897,6 +953,52 @@ mod tests {
         }
         let store = Store::open(&path).unwrap();
         assert_eq!(store.folders().unwrap(), vec![("나중에".to_string(), 0)]);
+    }
+
+    /// A shelf inside a shelf, which is `/` in the name and nothing else: the
+    /// reader wanted 폴더1 폴더2 폴더3 under one 상위폴더, and the shelf a work
+    /// names is still one string.
+    #[test]
+    fn a_shelf_can_be_inside_another_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().join("test.redb")).unwrap();
+        store.set_folder(1, Some("읽을 것/단편")).unwrap();
+        store.set_folder(2, Some(" 읽을 것 / 장편 ")).unwrap();
+        store.set_folder(3, Some("읽을 것")).unwrap();
+
+        // The one they are inside counts all three, and is there to be found
+        // even though nobody made it.
+        assert_eq!(
+            store.folders().unwrap(),
+            vec![
+                ("읽을 것".to_string(), 3),
+                ("읽을 것/단편".to_string(), 1),
+                ("읽을 것/장편".to_string(), 1),
+            ]
+        );
+
+        assert!(store.rename_folder("읽을 것", "나중에").unwrap());
+        assert_eq!(store.folder(1).unwrap().as_deref(), Some("나중에/단편"));
+        assert_eq!(store.folder(3).unwrap().as_deref(), Some("나중에"));
+
+        // Taking the outer one away takes the ones inside it with it.
+        store.remove_folder("나중에").unwrap();
+        assert!(store.folders().unwrap().is_empty());
+        assert_eq!(store.folder(1).unwrap(), None);
+    }
+
+    /// A shelf whose name is only separators is no name at all.
+    #[test]
+    fn a_shelf_settles_on_one_spelling() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().join("test.redb")).unwrap();
+        assert!(!store.add_folder(" / / ").unwrap());
+        assert!(store.add_folder("//읽을 것//단편//").unwrap());
+        assert!(!store.add_folder("읽을 것/단편").unwrap(), "the same shelf once");
+        assert_eq!(
+            store.folders().unwrap(),
+            vec![("읽을 것".to_string(), 0), ("읽을 것/단편".to_string(), 0)]
+        );
     }
 
     #[test]
