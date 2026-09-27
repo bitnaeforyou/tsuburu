@@ -15,6 +15,7 @@ use redb::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 use tsuburu_text::{codes_bounded, codes_bounded_into};
 
 const WORKS: TableDefinition<i32, &[u8]> = TableDefinition::new("works");
@@ -167,9 +168,17 @@ pub struct ImportSummary {
 
 const NAMESPACES: [&str; 5] = ["tag", "artist", "series", "character", "group"];
 
+/// Id boundaries to cut a scan into, one pair per worker.
+type Ranges = Arc<Vec<(i32, i32)>>;
+
 pub struct MetaStore {
     db: Database,
     path: PathBuf,
+    /// The boundaries a title scan is cut into, and how many rows there were
+    /// when they were taken. Every search walked the whole table once to
+    /// collect them and then scanned it again - two passes for one question,
+    /// and nothing kept between questions.
+    ranges: RwLock<Option<(u64, Ranges)>>,
 }
 
 impl MetaStore {
@@ -179,7 +188,7 @@ impl MetaStore {
             .set_cache_size(CACHE_BYTES)
             .create(&path)
             .map_err(|e| MetaError::Open(e.to_string()))?;
-        let store = Self { db, path };
+        let store = Self { db, path, ranges: RwLock::new(None) };
         store.init_schema()?;
         Ok(store)
     }
@@ -445,31 +454,50 @@ impl MetaStore {
     /// Every title is a candidate, so the scan is split across cores. Ranges
     /// are cut by count rather than id span because galleries cluster in
     /// recent ids.
+    /// The id ranges to cut a title scan into, taken once per import.
+    ///
+    /// Held against the row count, which redb answers without reading them:
+    /// the snapshot only changes when one is imported, and an import is not
+    /// something that happens while somebody is typing.
+    fn title_ranges(&self) -> Result<Ranges, MetaError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let titles = tx.open_table(TITLES).map_err(db_err)?;
+        let rows = titles.len().map_err(db_err)?;
+        if let Ok(held) = self.ranges.read()
+            && let Some((at, ranges)) = held.as_ref()
+            && *at == rows
+        {
+            return Ok(Arc::clone(ranges));
+        }
+
+        let mut keys = Vec::with_capacity(rows as usize);
+        for row in titles.iter().map_err(db_err)? {
+            keys.push(row.map_err(db_err)?.0.value());
+        }
+        let threads =
+            std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 16);
+        let per = keys.len().div_ceil(threads).max(1);
+        let ranges =
+            Arc::new(keys.chunks(per).map(|c| (c[0], c[c.len() - 1])).collect::<Vec<(i32, i32)>>());
+        if let Ok(mut held) = self.ranges.write() {
+            *held = Some((rows, Arc::clone(&ranges)));
+        }
+        Ok(ranges)
+    }
+
     fn scan_titles(
         &self,
         needle: &[u8],
         candidates: Option<&HashSet<i32>>,
     ) -> Result<Vec<i32>, MetaError> {
-        let keys: Vec<i32> = {
-            let tx = self.db.begin_read().map_err(db_err)?;
-            let titles = tx.open_table(TITLES).map_err(db_err)?;
-            let mut keys = Vec::new();
-            for row in titles.iter().map_err(db_err)? {
-                keys.push(row.map_err(db_err)?.0.value());
-            }
-            keys
-        };
-        if keys.is_empty() {
+        let ranges = self.title_ranges()?;
+        if ranges.is_empty() {
             return Ok(Vec::new());
         }
-        let threads =
-            std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 16);
-        let per = keys.len().div_ceil(threads);
-        let ranges: Vec<(i32, i32)> = keys.chunks(per).map(|c| (c[0], c[c.len() - 1])).collect();
 
         Ok(std::thread::scope(|scope| {
             let mut handles = Vec::with_capacity(ranges.len());
-            for (lo, hi) in ranges {
+            for &(lo, hi) in ranges.iter() {
                 handles.push(scope.spawn(move || -> Result<Vec<i32>, MetaError> {
                     let tx = self.db.begin_read().map_err(db_err)?;
                     let titles = tx.open_table(TITLES).map_err(db_err)?;

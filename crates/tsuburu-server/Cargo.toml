@@ -28,8 +28,7 @@ quick_cache = "0.6"
 # rust-embed reads the files off disk at runtime, which is invisible on a
 # desktop and on an iOS simulator - both can see the path it was built
 # from - and leaves a phone with no interface at all.
-rust-embed = { version = "8", features = ["mime-guess", "debug-embed"] }
-mime_guess = "2"
+rust-embed = { version = "8", features = ["debug-embed"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

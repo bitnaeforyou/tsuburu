@@ -1647,7 +1647,6 @@ version = "8.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42ffa149f6aa81b58a5b3011d01a857c4ed12c7a732d2c51947a4c7c692185f0"
 dependencies = [
- "mime_guess",
  "sha2",
  "walkdir",
 ]
@@ -2345,7 +2344,6 @@ version = "0.3.18"
 dependencies = [
  "axum",
  "http-body-util",
- "mime_guess",
  "quick_cache",
  "rust-embed",
  "serde",

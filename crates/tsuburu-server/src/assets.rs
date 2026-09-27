@@ -28,6 +28,23 @@ pub async fn serve(uri: Uri) -> Response {
 }
 
 fn respond(path: &str, file: rust_embed::EmbeddedFile) -> Response {
-    let mime = mime_guess::from_path(path).first_or_octet_stream();
-    ([(header::CONTENT_TYPE, mime.as_ref())], file.data.into_owned()).into_response()
+    ([(header::CONTENT_TYPE, kind_of(path))], file.data.into_owned()).into_response()
+}
+
+/// What the build puts in `web/dist`, and nothing else.
+///
+/// The whole of it is one page, one stylesheet and one script; a table of
+/// every extension anyone has registered is a lot of program to answer three
+/// questions with.
+fn kind_of(path: &str) -> &'static str {
+    match path.rsplit('.').next() {
+        Some("html") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") => "text/javascript; charset=utf-8",
+        Some("json") => "application/json",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("woff2") => "font/woff2",
+        _ => "application/octet-stream",
+    }
 }
