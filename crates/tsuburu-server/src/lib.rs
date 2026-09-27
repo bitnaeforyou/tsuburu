@@ -86,6 +86,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/img/{file}", get(proxy::image))
         .route("/tn/{file}", get(proxy::thumbnail))
+        .route("/tn/wide/{file}", get(proxy::wide_thumbnail))
         .fallback(assets::serve)
         .layer(TraceLayer::new_for_http())
         .with_state(state)

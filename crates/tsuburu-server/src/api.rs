@@ -401,9 +401,17 @@ async fn build_card(
     let gallery = tsuburu_hitomi::fetch_gallery(state.fetcher.as_ref(), &state.cfg, id).await?;
     remember(state, id, &gallery);
     // URL을 실제로 만들어보고, 만들 수 있을 때만 경로를 내보낸다.
+    //
+    // A cover slot is upright. A picture on its side has to be blown up to
+    // fill one, and the small thumbnail is 300 across - so those, and only
+    // those, are asked for at the size that survives it.
     let thumbnail = gallery.files.first().and_then(|f| {
-        tsuburu_hitomi::thumbnail_url(&state.cfg, gg, &f.hash).ok()?;
-        Some(format!("/tn/{}.avif", f.hash))
+        let size = tsuburu_hitomi::Thumbnail::for_shape(f.width, f.height);
+        tsuburu_hitomi::thumbnail_url(&state.cfg, gg, &f.hash, size).ok()?;
+        Some(match size {
+            tsuburu_hitomi::Thumbnail::Big => format!("/tn/wide/{}.avif", f.hash),
+            tsuburu_hitomi::Thumbnail::Small => format!("/tn/{}.avif", f.hash),
+        })
     });
 
     Ok(Card {

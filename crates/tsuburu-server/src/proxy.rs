@@ -67,13 +67,32 @@ pub async fn thumbnail(
     State(state): State<Arc<AppState>>,
     Path(file): Path<String>,
 ) -> Result<Response, ApiError> {
-    let (hash, ext) = split_hash(&file)?;
+    fetch_thumbnail(state, &file, tsuburu_hitomi::Thumbnail::Small).await
+}
+
+/// The same cover at the size hitomi keeps for one that is on its side.
+///
+/// A separate address rather than a query, so a browser that has one does
+/// not have to be told the other is a different picture.
+pub async fn wide_thumbnail(
+    State(state): State<Arc<AppState>>,
+    Path(file): Path<String>,
+) -> Result<Response, ApiError> {
+    fetch_thumbnail(state, &file, tsuburu_hitomi::Thumbnail::Big).await
+}
+
+async fn fetch_thumbnail(
+    state: Arc<AppState>,
+    file: &str,
+    size: tsuburu_hitomi::Thumbnail,
+) -> Result<Response, ApiError> {
+    let (hash, ext) = split_hash(file)?;
     if ext != "avif" {
         return Err(ApiError::bad_request("thumbnails are avif only"));
     }
     // 썸네일 경로는 `gg.b`를 쓰지 않으므로 회전의 영향을 받지 않는다.
     let gg = state.gg().await?;
-    let url = tsuburu_hitomi::thumbnail_url(&state.cfg, &gg, hash)?;
+    let url = tsuburu_hitomi::thumbnail_url(&state.cfg, &gg, hash, size)?;
     stream(&state, &url, ext).await
 }
 

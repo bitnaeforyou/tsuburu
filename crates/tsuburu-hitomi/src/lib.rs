@@ -18,7 +18,7 @@ use std::collections::HashSet;
 
 pub use fetcher::{FetchError, Fetcher};
 pub use gallery::{Gallery, GalleryError, GalleryFile, parse_gallery_info};
-pub use image::{GgMap, ImageError, image_url, parse_gg, thumbnail_url};
+pub use image::{GgMap, ImageError, Thumbnail, image_url, parse_gg, thumbnail_url};
 pub use index::{
     IdBlock, MAX_NODE_SIZE, SearchError, b_search, fetch_gallery_id_block, fetch_gallery_ids,
     hash_term, warm_index,

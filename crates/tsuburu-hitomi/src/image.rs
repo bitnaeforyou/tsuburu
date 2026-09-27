@@ -23,7 +23,35 @@ use std::collections::HashSet;
 /// pixels and so shows as a blur. `smalltn` is 212x300 for 9.6 KB against
 /// 3.6 KB - a page of twenty-five costs 240 KB rather than 90. `bigtn` is
 /// 453x640 but 26 KB, which is a two-thirds of a megabyte a page.
-const THUMBNAIL_DIR: &str = "avifsmalltn";
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Thumbnail {
+    /// 212x300 upright, 300x169 on its side. What a cover slot wants when
+    /// the picture is upright: it fills one almost exactly.
+    Small,
+    /// 453x640 upright, 640x360 on its side.
+    ///
+    /// A cover slot is upright, so a picture on its side has to be blown up
+    /// to fill one - 1.66x for a 16:9 frame, which is what an animated work
+    /// is - and 300 pixels across do not survive that. Nothing upright needs
+    /// it, and nothing upright pays for it.
+    Big,
+}
+
+impl Thumbnail {
+    /// Which of hitomi's thumbnail directories this is.
+    fn dir(self) -> &'static str {
+        match self {
+            Self::Small => "avifsmalltn",
+            Self::Big => "avifbigtn",
+        }
+    }
+
+    /// What a cover of this shape needs. Wider than it is tall is the only
+    /// case a cover slot cannot hold at its own size.
+    pub fn for_shape(width: u32, height: u32) -> Self {
+        if width > height { Self::Big } else { Self::Small }
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ImageError {
@@ -138,7 +166,12 @@ pub fn image_extension(file: &GalleryFile) -> &'static str {
 ///
 /// 실측 크기는 3 KB 남짓이라 결과 그리드에 적합하다. 본문 이미지를 그리드에
 /// 쓰면 한 화면에 수 MB가 나간다.
-pub fn thumbnail_url(cfg: &Config, gg: &GgMap, hash: &str) -> Result<String, ImageError> {
+pub fn thumbnail_url(
+    cfg: &Config,
+    gg: &GgMap,
+    hash: &str,
+    size: Thumbnail,
+) -> Result<String, ImageError> {
     if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(ImageError::BadHash);
     }
@@ -149,7 +182,7 @@ pub fn thumbnail_url(cfg: &Config, gg: &GgMap, hash: &str) -> Result<String, Ima
         cfg.scheme,
         subdomain,
         cfg.content_domain,
-        THUMBNAIL_DIR,
+        size.dir(),
         &hash[63..],
         &hash[61..63],
         hash
@@ -255,7 +288,7 @@ mod tests {
     #[test]
     fn builds_thumbnail_url_with_tn_subdomain() {
         let gg = GgMap::new("999/".into(), [574u32].into_iter().collect(), 1, 0);
-        let url = thumbnail_url(&Config::default(), &gg, HASH).unwrap();
+        let url = thumbnail_url(&Config::default(), &gg, HASH, Thumbnail::Small).unwrap();
         assert_eq!(
             url,
             format!("https://atn.gold-usergeneratedcontent.net/avifsmalltn/2/3e/{HASH}.avif")
@@ -265,14 +298,32 @@ mod tests {
     #[test]
     fn thumbnail_uses_btn_for_unlisted_segment() {
         let gg = GgMap::new("999/".into(), HashSet::new(), 1, 0);
-        let url = thumbnail_url(&Config::default(), &gg, HASH).unwrap();
+        let url = thumbnail_url(&Config::default(), &gg, HASH, Thumbnail::Small).unwrap();
         assert!(url.starts_with("https://btn."), "{url}");
     }
 
     #[test]
     fn thumbnail_rejects_bad_hash() {
         let gg = GgMap::new("999/".into(), HashSet::new(), 1, 0);
-        assert!(thumbnail_url(&Config::default(), &gg, "nope").is_err());
+        assert!(thumbnail_url(&Config::default(), &gg, "nope", Thumbnail::Small).is_err());
+    }
+
+    #[test]
+    fn a_cover_on_its_side_asks_for_the_bigger_thumbnail() {
+        // A cover slot is upright, so only these have to be blown up to fill
+        // one - which is what the small thumbnail does not survive.
+        assert_eq!(Thumbnail::for_shape(1920, 1080), Thumbnail::Big);
+        assert_eq!(Thumbnail::for_shape(1400, 2000), Thumbnail::Small);
+        assert_eq!(Thumbnail::for_shape(1000, 1000), Thumbnail::Small);
+    }
+
+    #[test]
+    fn the_bigger_thumbnail_is_the_same_path_in_another_directory() {
+        let gg = GgMap::new("1/".into(), HashSet::new(), 0, 1);
+        let small = thumbnail_url(&Config::default(), &gg, HASH, Thumbnail::Small).unwrap();
+        let big = thumbnail_url(&Config::default(), &gg, HASH, Thumbnail::Big).unwrap();
+        assert!(small.contains("/avifsmalltn/"), "{small}");
+        assert_eq!(big, small.replace("avifsmalltn", "avifbigtn"));
     }
 
     #[test]
