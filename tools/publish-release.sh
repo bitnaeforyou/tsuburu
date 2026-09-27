@@ -29,7 +29,7 @@ done
 
 # --- the Android package ---
 
-unsigned="$(find mobile/src-tauri/gen/android -name '*-unsigned.apk' | head -1)"
+unsigned="$(find mobile/src-tauri/gen/android -name '*-unsigned.apk' -print -quit)"
 [ -n "$unsigned" ] || { echo "no built APK; run the android build first" >&2; exit 1; }
 
 apk="$work/tsuburu-$version.apk"
@@ -42,7 +42,9 @@ apk="$work/tsuburu-$version.apk"
 
 # The version in the package, not the version in the name: they came apart
 # once, and a rename made it look right.
-said="$("$tools/aapt2" dump badging "$apk" | head -1 | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")"
+# No `head` in the pipeline: it leaves early, the writer takes a SIGPIPE,
+# and `pipefail` turns that into the whole script stopping here.
+said="$("$tools/aapt2" dump badging "$apk" | sed -n "1s/.*versionName='\([^']*\)'.*/\1/p")"
 [ "$said" = "$version" ] || { echo "the package says $said, not $version" >&2; exit 1; }
 "$tools/apksigner" verify "$apk"
 gh release upload "$tag" "$apk" --repo "$repo" --clobber
