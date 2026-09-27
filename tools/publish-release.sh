@@ -20,6 +20,7 @@ version="${tag#v}"
 keys="${TSUBURU_SIGNING_DIR:-$HOME/.tsuburu-signing}"
 sdk="${ANDROID_HOME:?ANDROID_HOME is not set}"
 tools="$(ls -d "$sdk"/build-tools/* | sort -V | tail -1)"
+umask 077
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -34,10 +35,15 @@ unsigned="$(find mobile/src-tauri/gen/android -name '*-unsigned.apk' -print -qui
 
 apk="$work/tsuburu-$version.apk"
 "$tools/zipalign" -p -f 4 "$unsigned" "$work/aligned.apk"
+# `file:` rather than `pass:`: a password on a command line is visible to
+# anyone who can run `ps` while this is signing, and to anything that traces
+# the script. apksigner reads the two it wants from one stream in order, so
+# the same password goes in twice.
+pw="$work/pw"
+printf '%s\n%s\n' "$(cat "$keys/password.txt")" "$(cat "$keys/password.txt")" > "$pw"
 "$tools/apksigner" sign \
   --ks "$keys/tsuburu.jks" --ks-key-alias tsuburu \
-  --ks-pass "pass:$(cat "$keys/password.txt")" \
-  --key-pass "pass:$(cat "$keys/password.txt")" \
+  --ks-pass "file:$pw" --key-pass "file:$pw" \
   --out "$apk" "$work/aligned.apk"
 
 # The version in the package, not the version in the name: they came apart
