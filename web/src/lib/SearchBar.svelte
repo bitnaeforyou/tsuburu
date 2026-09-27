@@ -2,7 +2,7 @@
   import { untrack } from 'svelte'
   import type { Mode, Scope, Sort, SearchState } from './router'
   import * as api from './api'
-  import { t, type Key } from './i18n.svelte'
+  import { number, t, type Key } from './i18n.svelte'
   import ViewToggle from './ViewToggle.svelte'
   import { forget, recent, remember as rememberSearch } from './recent'
 
@@ -95,8 +95,9 @@
   /// of something done here.
   let looked = $state<string[]>([])
   const rows = $derived(
-    input.trim() ? words.map((w) => ({ used: w.used, shown: w.shown, was: false }))
-                 : looked.map((q) => ({ used: q, shown: q, was: true })),
+    input.trim()
+      ? words.map((w) => ({ used: w.used, shown: w.shown, works: w.works, was: false }))
+      : looked.map((q) => ({ used: q, shown: q, works: undefined, was: true })),
   )
 
   $effect(() => {
@@ -214,6 +215,11 @@
               <span class="said">{row.shown}</span>
               <!-- What hitomi calls it, when that is not what is shown. -->
               {#if row.shown !== row.used}<span class="orig">{row.used}</span>{/if}
+              <!-- How many works it has: the reason this one is above that
+                   one, and the difference between two readings of a word. -->
+              {#if row.works !== undefined}
+                <span class="many">{number(row.works)}</span>
+              {/if}
             </button>
             {#if row.was}
               <button
@@ -465,6 +471,14 @@
   .orig {
     color: var(--muted);
     font-size: var(--text-sm);
+  }
+  /* At the far end, so the eye can run down the column: this is the order
+     the list is in, and the reason one reading of a word is above another. */
+  .many {
+    margin-inline-start: auto;
+    color: var(--muted);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
   }
   .drop {
     padding: 0.2rem 0.5rem;

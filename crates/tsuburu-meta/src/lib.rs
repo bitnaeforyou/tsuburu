@@ -392,6 +392,34 @@ impl MetaStore {
         Ok(out)
     }
 
+    /// Names in the snapshot that contain `typed`, with what they are.
+    ///
+    /// The index is keyed `artist:keso`, `series:blue archive` and so on, so
+    /// a reader who imported a snapshot can be offered every name hitomi has
+    /// rather than only the ones they happen to have seen.
+    pub fn named_like(&self, typed: &str, limit: usize) -> Vec<(String, String)> {
+        const OFFERED: [&str; 4] = ["artist", "series", "group", "character"];
+        let Ok(tx) = self.db.begin_read() else { return Vec::new() };
+        let Ok(terms) = tx.open_multimap_table(TERMS) else { return Vec::new() };
+        let mut out = Vec::new();
+        for namespace in OFFERED {
+            // Everything under one namespace, which the key order groups.
+            let from = format!("{namespace}:");
+            let Ok(rows) = terms.range(from.as_str()..) else { continue };
+            for row in rows.flatten() {
+                let key = row.0;
+                let Some(name) = key.value().strip_prefix(&from) else { break };
+                if name.contains(typed) {
+                    out.push((namespace.to_string(), name.to_string()));
+                    if out.len() >= limit {
+                        return out;
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Evaluates a query. Terms and filters intersect; the title, when
     /// given, is matched as a jamo-normalised substring so Korean titles
     /// match regardless of spacing.

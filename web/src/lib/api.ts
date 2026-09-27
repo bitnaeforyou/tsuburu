@@ -139,7 +139,13 @@ function said(): string {
   return `lang=${encodeURIComponent(i18n.locale)}`
 }
 
-export type Word = { used: string; shown: string }
+export type Word = {
+  used: string
+  shown: string
+  /// How many works hitomi lists under it, where it was asked. The list is
+  /// ordered by this.
+  works?: number
+}
 
 /// Words the reader might have meant, while they are still typing one. Read
 /// out of the dictionary, so it needs nothing imported.

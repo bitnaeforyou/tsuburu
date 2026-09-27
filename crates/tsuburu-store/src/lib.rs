@@ -19,6 +19,8 @@ const ARTISTS: TableDefinition<&str, u64> = TableDefinition::new("artists");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 /// Gallery id -> the card the server built for it, and when.
 const CARDS: TableDefinition<i32, &str> = TableDefinition::new("cards");
+/// What hitomi carries a word under, learned by asking once.
+const WORDS: TableDefinition<&str, &str> = TableDefinition::new("words");
 /// Gallery id -> the shelf the reader put it on.
 ///
 /// A property of the work, not of the row that stars it: the same shelf has
@@ -528,6 +530,56 @@ impl Store {
         }
         tx.commit().map_err(db_err)?;
         Ok(())
+    }
+
+    /// What hitomi was found to carry a word under, as it was written down.
+    ///
+    /// Offering a word means knowing whether hitomi has it about a woman, a
+    /// man, or nobody, and how many works each has - which is three small
+    /// requests per word, most of them answering "no such list". The answer
+    /// does not change often, so it is asked once and kept: after the first
+    /// time a word is offered, suggesting it costs nothing.
+    pub fn known_words(&self, words: &[String]) -> Result<Vec<(String, String)>, StoreError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let Ok(t) = tx.open_table(WORDS) else { return Ok(Vec::new()) };
+        let mut out = Vec::new();
+        for word in words {
+            if let Some(found) = t.get(word.as_str()).map_err(db_err)? {
+                out.push((word.clone(), found.value().to_string()));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Writes down what a round of asking found, in one commit.
+    pub fn learn_words<'a>(
+        &self,
+        words: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Result<(), StoreError> {
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut t = tx.open_table(WORDS).map_err(db_err)?;
+            for (word, found) in words {
+                t.insert(word, found).map_err(db_err)?;
+            }
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(())
+    }
+
+    /// Every card kept from browsing, as the JSON it was stored as.
+    ///
+    /// The names in them are the only vocabulary of artists this machine has
+    /// without a metadata snapshot: hitomi publishes no list of who draws for
+    /// it, so what the reader has already seen is what can be suggested.
+    pub fn kept_cards(&self) -> Result<Vec<String>, StoreError> {
+        let tx = self.db.begin_read().map_err(db_err)?;
+        let Ok(t) = tx.open_table(CARDS) else { return Ok(Vec::new()) };
+        let mut out = Vec::new();
+        for row in t.iter().map_err(db_err)? {
+            out.push(row.map_err(db_err)?.1.value().to_string());
+        }
+        Ok(out)
     }
 
     /// How many are held, and throwing them away. Offered in settings because

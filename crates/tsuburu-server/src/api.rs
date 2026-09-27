@@ -7,6 +7,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -178,26 +179,232 @@ pub struct Word {
     pub used: String,
     /// What to put on the screen.
     pub shown: String,
+    /// How many works hitomi lists under it, where that is known. The list
+    /// is ordered by this, so the common reading of a word comes first.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub works: Option<usize>,
 }
+
+/// The namespaces a tag can be about, and the bare form for the ones that
+/// are about nobody.
+///
+/// hitomi keeps `female:blowjob` and `male:blowjob` as separate lists with
+/// separate works in them, so offering one `blowjob` offers a search the
+/// reader did not mean. Which of the three a word has is not written down
+/// anywhere; it is asked, once, and then kept.
+const ABOUT: [&str; 3] = ["female", "male", ""];
+
+/// How many words are taken from the dictionary before their variants are
+/// looked up.
+///
+/// Wide, because most of what the dictionary offers for two letters is a
+/// series or a character rather than a tag, and those fall away. A word only
+/// costs requests the first time anybody is offered it.
+const ASKED_ABOUT: usize = 16;
+
+/// What one word's lists were found to be: a namespace and how many works.
+type Under = Vec<(String, usize)>;
 
 /// Words the reader might have meant, while they are still typing one.
 ///
-/// Read out of the same dictionary that lets them search in Korean, so this
-/// needs nothing imported and works on a phone. Both languages are matched,
-/// because either might be typed.
-pub async fn words(Query(params): Query<WordsParams>) -> Json<Vec<Word>> {
+/// Three sources, because hitomi publishes no list of its own vocabulary
+/// that can be searched by prefix - its indexes are keyed by hash:
+///
+/// - **tags** come from the same dictionary that lets them search in Korean,
+///   so this needs nothing imported and works on a phone;
+/// - **artists** come from the works this machine has already drawn, which
+///   is the only record of who draws for hitomi that a fresh install has;
+/// - **everything** comes from the metadata snapshot where one was imported.
+///
+/// What each one is then measured against is hitomi itself: one small
+/// request per list says whether it carries it and how many works it has,
+/// which is what puts the reading somebody meant at the top. The answers are
+/// written down, so that cost is paid once per word rather than per letter.
+pub async fn words(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<WordsParams>,
+) -> Json<Vec<Word>> {
+    let typed = params.q.trim().to_lowercase();
+    let limit = params.limit.clamp(1, 50);
+    if typed.is_empty() {
+        return Json(Vec::new());
+    }
     let dictionary = tsuburu_korean::Dictionary::embedded();
     let korean = params.lang.as_deref() == Some("ko");
-    Json(
-        dictionary
-            .suggest(&params.q, params.limit.clamp(1, 50))
-            .into_iter()
-            .map(|found| Word {
-                shown: if korean { found.korean.clone() } else { found.used.clone() },
-                used: found.used,
-            })
-            .collect(),
-    )
+
+    let mut said: HashMap<String, String> = HashMap::new();
+    let mut wanted: Vec<String> = Vec::new();
+    for found in dictionary.suggest(&typed, ASKED_ABOUT) {
+        said.insert(found.used.clone(), found.korean);
+        wanted.push(found.used);
+    }
+    let names = named_locally(&state, &typed);
+
+    let under = looked_up(&state, &wanted, &names).await;
+
+    let mut found: Vec<(u8, usize, Word)> = Vec::new();
+    for word in &wanted {
+        for (about, works) in under.get(word).into_iter().flatten() {
+            // Underscores, so the term survives being cut at whitespace on
+            // its way back in through the search box.
+            let used = if about.is_empty() {
+                word.clone()
+            } else {
+                format!("{about}:{}", word.replace(' ', "_"))
+            };
+            let shown = match (korean, about.is_empty()) {
+                (false, _) => used.clone(),
+                (true, true) => said.get(word).cloned().unwrap_or_else(|| word.clone()),
+                (true, false) => {
+                    format!("{about}:{}", said.get(word).cloned().unwrap_or_else(|| word.clone()))
+                }
+            };
+            found.push((
+                rank_of(&typed, word, &shown),
+                *works,
+                Word { used, shown, works: Some(*works) },
+            ));
+        }
+    }
+    for (namespace, name) in &names {
+        let used = format!("{namespace}:{}", name.replace(' ', "_"));
+        let held = format!("{namespace}:{name}");
+        let Some(works) = under.get(&held).and_then(|u| u.first().map(|(_, n)| *n)) else {
+            continue;
+        };
+        found.push((
+            rank_of(&typed, name, &used),
+            works,
+            Word { used: used.clone(), shown: used, works: Some(works) },
+        ));
+    }
+
+    // Prefix before substring, then whichever hitomi has more of.
+    found.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.used.cmp(&b.2.used)));
+    found.dedup_by(|a, b| a.2.used == b.2.used);
+    Json(found.into_iter().take(limit).map(|(_, _, word)| word).collect())
+}
+
+/// What was typed at the front beats what was typed in the middle: somebody
+/// typing `bl` means a word that begins with it.
+///
+/// The namespace is not part of what they typed - nobody starts a search
+/// with `female:` - so the word is what is measured, in either language.
+fn rank_of(typed: &str, word: &str, shown: &str) -> u8 {
+    let bare = |said: &str| said.rsplit(':').next().unwrap_or(said).to_string();
+    u8::from(!bare(word).starts_with(typed) && !bare(shown).starts_with(typed))
+}
+
+/// What hitomi carries each of these under, from what is already written
+/// down, and by asking about the rest.
+async fn looked_up(
+    state: &Arc<AppState>,
+    words: &[String],
+    names: &[(String, String)],
+) -> HashMap<String, Under> {
+    let mut known: HashMap<String, Under> = HashMap::new();
+    let store = state.store.as_ref();
+    let asking: Vec<String> = words
+        .iter()
+        .cloned()
+        .chain(names.iter().map(|(namespace, name)| format!("{namespace}:{name}")))
+        .collect();
+
+    if let Some(store) = store
+        && let Ok(rows) = store.known_words(&asking)
+    {
+        for (word, json) in rows {
+            if let Ok(under) = serde_json::from_str::<Under>(&json) {
+                known.insert(word, under);
+            }
+        }
+    }
+
+    // One task per list that nobody has asked about yet.
+    let mut asked = Vec::new();
+    for word in words.iter().filter(|word| !known.contains_key(*word)) {
+        for about in ABOUT {
+            let state = Arc::clone(state);
+            let (word, about) = (word.clone(), about.to_string());
+            asked.push(tokio::spawn(async move {
+                let name = if about.is_empty() { word.clone() } else { format!("{about}:{word}") };
+                let works = tsuburu_hitomi::works_under(
+                    state.fetcher.as_ref(),
+                    &state.cfg,
+                    "tag",
+                    &name,
+                    "all",
+                )
+                .await;
+                (word, about, works)
+            }));
+        }
+    }
+    for (namespace, name) in names {
+        let held = format!("{namespace}:{name}");
+        if known.contains_key(&held) {
+            continue;
+        }
+        let state = Arc::clone(state);
+        let (namespace, name) = (namespace.clone(), name.clone());
+        asked.push(tokio::spawn(async move {
+            let works = tsuburu_hitomi::works_under(
+                state.fetcher.as_ref(),
+                &state.cfg,
+                &namespace,
+                &name,
+                "all",
+            )
+            .await;
+            (format!("{namespace}:{name}"), namespace, works)
+        }));
+    }
+
+    let mut learned: HashMap<String, Under> = HashMap::new();
+    for task in asked {
+        let Ok((word, about, works)) = task.await else { continue };
+        let entry = learned.entry(word).or_default();
+        if let Some(works) = works.filter(|n| *n > 0) {
+            entry.push((about, works));
+        }
+    }
+
+    if let Some(store) = store {
+        let written: Vec<(String, String)> = learned
+            .iter()
+            .filter_map(|(word, under)| Some((word.clone(), serde_json::to_string(under).ok()?)))
+            .collect();
+        if let Err(err) =
+            store.learn_words(written.iter().map(|(word, json)| (word.as_str(), json.as_str())))
+        {
+            tracing::debug!(%err, "could not write down what a word is");
+        }
+    }
+    known.extend(learned);
+    known
+}
+
+/// Names this machine knows about, because it has seen works by them.
+fn named_locally(state: &AppState, typed: &str) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    if let Some(meta) = state.meta.as_ref() {
+        out.extend(meta.named_like(typed, ASKED_ABOUT));
+    }
+    if let Some(store) = state.store.as_ref()
+        && let Ok(cards) = store.kept_cards()
+    {
+        for json in cards {
+            let Ok(kept) = serde_json::from_str::<Remembered>(&json) else { continue };
+            for artist in kept.card.artists {
+                let name = artist.to_lowercase();
+                if name.contains(typed) && !out.iter().any(|(_, held)| *held == name) {
+                    out.push(("artist".into(), name));
+                }
+            }
+        }
+    }
+    out.truncate(ASKED_ABOUT);
+    out
 }
 
 /// Says the tags in the reader's language where the dictionary knows them.
