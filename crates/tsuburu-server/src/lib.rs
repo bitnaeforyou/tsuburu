@@ -9,6 +9,7 @@ pub mod dialogue;
 pub mod downloads;
 pub mod error;
 pub mod grinder;
+pub mod guard;
 pub mod keywords;
 pub mod library;
 pub mod listed;
@@ -88,6 +89,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/tn/{file}", get(proxy::thumbnail))
         .route("/tn/wide/{file}", get(proxy::wide_thumbnail))
         .fallback(assets::serve)
+        .layer(axum::middleware::from_fn(guard::only_this_machine))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
