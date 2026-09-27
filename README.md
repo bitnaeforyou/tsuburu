@@ -26,6 +26,8 @@ press ctrl+c to stop
 
 ---
 
+<a id="install"></a>
+
 ## Install
 
 Nothing is installed. Download, open, and run — the archive holds the program
@@ -52,7 +54,9 @@ These builds are not signed, so each system warns once, the first time only:
 A browser opens at `http://127.0.0.1:8420/`. Confirm you are an adult once and
 the search screen appears.
 
-### In a container
+<a id="container"></a>
+
+### Container
 
 `compose.yaml` from the release pulls a built image; put it in an empty
 directory and run `docker compose up -d`, then open
@@ -72,7 +76,9 @@ Nothing is compiled for a new release either. Change the image tag to
 `latest` and `docker compose pull && docker compose up -d` takes each one as
 it comes out; leave the version in place and it stays where it is.
 
-### Out of the box
+<a id="included"></a>
+
+### Included
 
 Nothing beyond the file you just ran:
 
@@ -84,7 +90,9 @@ Nothing beyond the file you just ran:
 | **Remember** | favorites and history, on this machine only, in a file you can move |
 | **Dialogue search** | over every work you open — see [below](#dialogue-search) |
 
-### What you bring
+<a id="requirements"></a>
+
+### Requirements
 
 Three files make it much more capable. They are large, they are not shipped
 with tsuburu, and everything above works without them. Corpora of this kind
@@ -104,7 +112,9 @@ like, including an external disk.
 the index. It is a separate multi-gigabyte download, runs as your own local
 server, and the mode stays hidden until you set it up.
 
-### Where things are kept
+<a id="storage"></a>
+
+### Storage
 
 | Platform | Path |
 | :-- | :-- |
@@ -115,7 +125,9 @@ server, and the mode stays hidden until you set it up.
 
 Deleting it resets everything and loses only what you imported and read.
 
-## Searching
+<a id="search"></a>
+
+## Search
 
 One box asks every source at once — hitomi's tags, your local titles, the
 recognised dialogue — and shows each in its own section as it arrives.
@@ -146,7 +158,9 @@ tsuburu serve --port 9000          # pick a port (0 takes a free one)
 tsuburu serve --no-open            # do not launch a browser
 ```
 
-## The reader
+<a id="reader"></a>
+
+## Reader
 
 A work opens on its own page first — cover, title, artists, series, how many
 pages, what it is tagged, every page as a thumbnail, and what else is about the
@@ -190,7 +204,9 @@ rather than a wait, and turning a page at a time holds one page in the window
 instead of all of them — a 1,537-page work is one image element rather than
 1,537.
 
-### On a phone
+<a id="phone"></a>
+
+### Phone
 
 The five destinations sit at the bottom, where a thumb reaches them; the filters
 keep one row and slide sideways; the controls are sized to be pressed rather
@@ -199,7 +215,9 @@ moves a tall page, two pinch — so nothing it does turns into a scroll of the
 page behind it. What the help line says changes with the device: a phone is not
 told about **Esc**.
 
-## Keeping it up to date
+<a id="updates"></a>
+
+## Updates
 
 A published copy knows which release it came from, because the workflow that
 built it told it — the source names nobody. It asks once when it starts whether
@@ -212,7 +230,9 @@ Then it says to start tsuburu again.
 Nothing is fetched or replaced without being pressed. A copy built from a
 checkout has nowhere to ask and offers nothing.
 
-## Taking it with you
+<a id="backup"></a>
+
+## Backup
 
 Favorites, the artists you follow and how far you have read are the only things
 tsuburu keeps about you. **Save a copy** on the Favorites or History screen puts
@@ -220,7 +240,9 @@ all three in one JSON file; **Load a copy** puts them back through the same call
 the interface uses, adding to what is there rather than replacing it. A record
 the program will not accept is skipped and counted; the rest still go in.
 
-## Reading offline
+<a id="offline"></a>
+
+## Offline
 
 The reader has **Download** and **Download this page**; the Downloads tab shows
 what is here and how far each work got.
@@ -231,13 +253,17 @@ still needs. Reading a downloaded work never touches the network: the image
 proxy answers from disk, and if the metadata cannot be fetched, the page list
 on disk is enough to open it.
 
+<a id="dialogue"></a>
+
 ## Dialogue search
 
 hitomi's index knows titles and tags. To find a work by a line you remember,
 the pages have to be read — recognised by the operating system, and the text
 kept. Images are discarded as soon as they are read.
 
-### As you read
+<a id="dialogue-while-reading"></a>
+
+### While reading
 
 **Works you open are read as you go.** Their pages are already coming down to
 be displayed, so the image proxy hands what it is carrying to recognition
@@ -248,7 +274,9 @@ Pages that already have text are skipped, so re-reading costs nothing. The
 Settings tab lists what this collected, with its size, and deletes any of it —
 or all of it — on request.
 
-### The background sweep
+<a id="dialogue-sweep"></a>
+
+### Background sweep
 
 A different thing, and **off by default**: it downloads galleries you have not
 opened. Turn it on from the Settings tab and it works while the app is open,
@@ -261,7 +289,9 @@ most popular Korean galleries first. Two shortcuts narrow it:
 Passages read on this machine are embedded too when a pack is configured, and
 scanned beside the imported index, so this reaches the works you have read.
 
-### Say it in your own words
+<a id="dialogue-meaning"></a>
+
+### Meaning search
 
 One switch, on the Settings tab. Turning it on fetches 2.3 GB once — the
 weights from the people who trained them, and a model server from the people
@@ -293,7 +323,9 @@ answers with plausible vectors and useless results, so it embeds a passage
 already in the index and compares. Below 0.9 it says so rather than leaving it
 to look like a bad corpus. The right model scores 1.000.
 
-### Sharing what has been read
+<a id="dialogue-corpus"></a>
+
+### Corpus sharing
 
 The text is the expensive part and it is small, so it can travel. The Settings
 tab exports what this machine recognised as `.tsd` shards and imports other
@@ -302,7 +334,9 @@ people's; files are checked against the hash in their name.
 Text that came from an imported corpus is never included — a shard is your own
 reading, and a corpus is the importer's to fetch.
 
-## What a work is about
+<a id="keywords"></a>
+
+## Keywords
 
 A keyword graph gives the words running through each work, scored by TF-IDF
 over its dialogue. A few tens of megabytes against the embedding index's 2.6 GB.
@@ -316,13 +350,17 @@ Asked from the second volume of a series it answers with the first: they share
 four character names. Words held by more than 20,000 works are dropped on
 import, and searching for one says so rather than implying it appears nowhere.
 
+<a id="artists"></a>
+
 ## Artists
 
 An artist's name in a work links to everything they drew — newest first, with a
 count per language so you can stay in the one you read. **Follow** keeps a name
 beside your favorites. Needs the metadata snapshot.
 
-## Interface language
+<a id="language"></a>
+
+## Language
 
 한국어, English or 日本語. It follows the browser on first run and remembers the
 choice; the switch sits at the end of the navigation bar and beside the
@@ -336,12 +374,16 @@ part that says what to do, is translated.
 Adding a language is one file under `web/src/lib/locales/`, typed against the
 English one so a missing message is a build error.
 
-## What it costs
+<a id="cost"></a>
+
+## Cost
 
 Measured on an M4 Pro (macOS 26.5, 24 GB) over a residential connection, with
 all three files imported.
 
-### Footprint
+<a id="cost-memory"></a>
+
+### Memory
 
 | What | How much |
 | :-- | --: |
@@ -350,6 +392,8 @@ all three files imported.
 | Memory, idle | **22 MB** |
 | Memory, searching the dialogue corpus | ~540 MB |
 | Memory, with the embedding index open | 2.5 GB (mapped file, reclaimable) |
+
+<a id="cost-disk"></a>
 
 ### Disk
 
@@ -361,6 +405,8 @@ all three files imported.
 | Metadata, 1,464,390 works | 1.1 GB |
 | Keywords, 106,155 works | 174 MB |
 | Embedding index, 2,537,826 passages | 2.6 GB, read in place |
+
+<a id="cost-speed"></a>
 
 ### Speed
 
@@ -404,6 +450,8 @@ Most of a hitomi search is latency, not computation: the index is a B-tree six
 or seven levels deep and each level is a dependent round trip. tsuburu
 prefetches the upper levels at startup, which removes about 70 % of the cost.
 
+<a id="platforms"></a>
+
 ## Platforms
 
 Searching, reading, favorites, history, downloads and the imports work
@@ -424,14 +472,18 @@ Recognition is not equally good everywhere: against Vision's reading of a
 Korean page, tesseract found 7 of the 8 words — enough for matching, which
 ignores spacing inside Hangul and scores fuzzily, but noisier line by line.
 
-### Matching across scripts
+<a id="platforms-scripts"></a>
+
+### Script matching
 
 Titles and dialogue are matched through one encoding covering Hangul, Latin and
 everything else, so a Japanese title or a Cyrillic line matches the way a
 Korean one does. Spacing is ignored inside Hangul and respected between Latin
 words. A work is read in its own language.
 
-## Building
+<a id="build"></a>
+
+## Build
 
 Rust 1.90+, Node 20+.
 
@@ -452,7 +504,9 @@ cargo test -p tsuburu-fetch -- --ignored   # hits the live site
 The offline suite parses real captured bytes, so it verifies the actual format
 rather than an idealised one. The live suite is what tells you the site changed.
 
-## When it breaks
+<a id="troubleshooting"></a>
+
+## Troubleshooting
 
 It will. hitomi's index format is undocumented and its domain has already moved
 once. tsuburu checks what it reads and, when the format is not what it expects,
@@ -461,6 +515,8 @@ results or an empty screen.
 
 All knowledge of hitomi's formats lives in `tsuburu-hitomi`. That is the only
 place a fix has to go.
+
+<a id="notes"></a>
 
 ## Notes
 
@@ -471,7 +527,9 @@ site it searches contains adult material and the application is for adults.
 Stopping with Ctrl-C or a TERM closes the databases. Killing it outright leaves
 them to be repaired on the next start — on a full corpus, half a minute.
 
-## Layout
+<a id="layout"></a>
+
+## Repository layout
 
 ```
 crates/tsuburu-hitomi     hitomi's formats: index, search, metadata, image URLs
