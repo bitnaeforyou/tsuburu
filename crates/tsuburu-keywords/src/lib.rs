@@ -30,6 +30,20 @@ const COMMON: TableDefinition<&str, u32> = TableDefinition::new("common");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 /// 2: words dropped as too common are remembered.
 const SCHEMA_VERSION: &str = "2";
+
+/// Whether a schema this file names is older than the one this build knows.
+///
+/// Compared as numbers, not as text: the versions are counters and will pass
+/// nine, and `"10" < "5"` is true of strings. Getting that backwards tells a
+/// reader their newer index is an old one and to delete it - which is the
+/// data loss the "newer" branch exists to prevent. Anything that is not a
+/// number is not one of ours, so it is not older either.
+fn older_schema(found: &str) -> bool {
+    match (found.parse::<u32>(), SCHEMA_VERSION.parse::<u32>()) {
+        (Ok(found), Ok(known)) => found < known,
+        _ => false,
+    }
+}
 /// Page cache. Posting lists are small and revisited, so this is mostly
 /// enough to keep the hot words resident.
 const CACHE_BYTES: usize = 64 * 1024 * 1024;
@@ -108,7 +122,7 @@ impl KeywordStore {
                     meta.insert("schema", SCHEMA_VERSION).map_err(db_err)?;
                 }
                 Some(found) if found == SCHEMA_VERSION => {}
-                Some(found) if found.as_str() < SCHEMA_VERSION => {
+                Some(found) if older_schema(&found) => {
                     return Err(KeywordError::OlderSchema { found });
                 }
                 Some(found) => return Err(KeywordError::NewerSchema { found }),

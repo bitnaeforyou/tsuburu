@@ -27,6 +27,20 @@ const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 /// 2: titles stored as match codes. 3: those codes keep Latin word bounds.
 /// 4: they cover scripts other than Hangul.
 const SCHEMA_VERSION: &str = "4";
+
+/// Whether a schema this file names is older than the one this build knows.
+///
+/// Compared as numbers, not as text: the versions are counters and will pass
+/// nine, and `"10" < "5"` is true of strings. Getting that backwards tells a
+/// reader their newer index is an old one and to delete it - which is the
+/// data loss the "newer" branch exists to prevent. Anything that is not a
+/// number is not one of ours, so it is not older either.
+fn older_schema(found: &str) -> bool {
+    match (found.parse::<u32>(), SCHEMA_VERSION.parse::<u32>()) {
+        (Ok(found), Ok(known)) => found < known,
+        _ => false,
+    }
+}
 /// Page cache; the title scan streams rather than revisiting.
 const CACHE_BYTES: usize = 128 * 1024 * 1024;
 
@@ -178,7 +192,7 @@ impl MetaStore {
                     meta.insert("schema", SCHEMA_VERSION).map_err(db_err)?;
                 }
                 Some(found) if found == SCHEMA_VERSION => {}
-                Some(found) if found.as_str() < SCHEMA_VERSION => {
+                Some(found) if older_schema(&found) => {
                     return Err(MetaError::OlderSchema { found });
                 }
                 Some(found) => return Err(MetaError::NewerSchema { found }),
@@ -225,6 +239,22 @@ impl MetaStore {
                 let mut titles = tx.open_table(TITLES).map_err(db_err)?;
                 let mut terms = tx.open_multimap_table(TERMS).map_err(db_err)?;
                 for work in pending.drain(..) {
+                    // A second import over the same snapshot replaces the
+                    // record, and the index has to stop pointing at what the
+                    // record no longer says - otherwise a work stays findable
+                    // under a tag it lost, and every import compounds it.
+                    if let Some(previous) = table.get(work.id).map_err(db_err)? {
+                        let previous: Work = serde_json::from_slice(
+                            &lz4_flex::decompress_size_prepended(previous.value())
+                                .map_err(|e| MetaError::Corrupt(e.to_string()))?,
+                        )?;
+                        let keep: HashSet<String> = work.term_keys().into_iter().collect();
+                        for key in previous.term_keys() {
+                            if !keep.contains(&key) {
+                                terms.remove(key.as_str(), work.id).map_err(db_err)?;
+                            }
+                        }
+                    }
                     let encoded = lz4_flex::compress_prepend_size(&serde_json::to_vec(&work)?);
                     table.insert(work.id, encoded.as_slice()).map_err(db_err)?;
                     titles
@@ -583,6 +613,23 @@ mod tests {
         let w = store.work(3).unwrap().unwrap();
         assert_eq!(w.artists, vec!["keso"]);
         assert_eq!(store.works(&[1, 99, 2]).unwrap().len(), 2);
+    }
+
+    /// A second import over the same snapshot replaces the record, and the
+    /// index has to stop pointing at what the record no longer says.
+    #[test]
+    fn re_importing_a_work_drops_the_tags_it_lost() {
+        let (store, _dir) = store();
+        let before = work(1, "제목", "keso", &["glasses"], "korean", "doujinshi");
+        store.import_works(vec![before], 16, |_| {}).unwrap();
+
+        let after = work(1, "제목", "keso", &["bondage"], "korean", "doujinshi");
+        store.import_works(vec![after], 16, |_| {}).unwrap();
+
+        let gone = MetaQuery { terms: vec!["glasses".into()], ..MetaQuery::default() };
+        assert_eq!(store.search(&gone, 0, 10).unwrap().total, 0);
+        let kept = MetaQuery { terms: vec!["bondage".into()], ..MetaQuery::default() };
+        assert_eq!(store.search(&kept, 0, 10).unwrap().total, 1);
     }
 
     #[test]

@@ -233,15 +233,23 @@ impl Store {
     /// behind empty.
     pub fn set_folder(&self, id: i32, folder: Option<&str>) -> Result<Option<String>, StoreError> {
         let folder = folder.map(str::trim).filter(|f| !f.is_empty());
-        // Filing something on a shelf nobody made makes the shelf.
-        if let Some(name) = folder {
-            self.add_folder(name)?;
-        }
         let tx = self.db.begin_write().map_err(db_err)?;
         {
+            let mut meta = tx.open_table(META).map_err(db_err)?;
             let mut t = tx.open_table(FOLDERS).map_err(db_err)?;
             match folder {
                 Some(name) => {
+                    // Filing something on a shelf nobody made makes the
+                    // shelf, in the same commit: two of these at once used to
+                    // read the same list of shelves and write it back over
+                    // each other, losing one.
+                    declare_within(&mut meta, |names| {
+                        if names.iter().any(|held| held == name) {
+                            return false;
+                        }
+                        names.push(name.to_string());
+                        true
+                    })?;
                     t.insert(id, name).map_err(db_err)?;
                 }
                 None => {
@@ -289,21 +297,7 @@ impl Store {
     fn declared_folders(&self) -> Result<Vec<String>, StoreError> {
         let tx = self.db.begin_read().map_err(db_err)?;
         let Ok(t) = tx.open_table(META) else { return Ok(Vec::new()) };
-        match t.get("folders").map_err(db_err)? {
-            Some(v) => Ok(serde_json::from_str(v.value())?),
-            None => Ok(Vec::new()),
-        }
-    }
-
-    fn declare_folders(&self, names: &[String]) -> Result<(), StoreError> {
-        let json = serde_json::to_string(names)?;
-        let tx = self.db.begin_write().map_err(db_err)?;
-        {
-            let mut t = tx.open_table(META).map_err(db_err)?;
-            t.insert("folders", json.as_str()).map_err(db_err)?;
-        }
-        tx.commit().map_err(db_err)?;
-        Ok(())
+        read_declared(&t)
     }
 
     /// Makes an empty shelf, so a reader can set up where things go before
@@ -313,25 +307,40 @@ impl Store {
         if name.is_empty() {
             return Ok(false);
         }
-        let mut names = self.declared_folders()?;
-        if names.iter().any(|held| held == name) {
-            return Ok(false);
-        }
-        names.push(name.to_string());
-        self.declare_folders(&names)?;
-        Ok(true)
+        let tx = self.db.begin_write().map_err(db_err)?;
+        let made = {
+            let mut meta = tx.open_table(META).map_err(db_err)?;
+            declare_within(&mut meta, |names| {
+                if names.iter().any(|held| held == name) {
+                    return false;
+                }
+                names.push(name.to_string());
+                true
+            })?
+        };
+        tx.commit().map_err(db_err)?;
+        Ok(made)
     }
 
     /// Takes a shelf away, and everything off it. The works stay.
+    ///
+    /// One commit: the list and the works that name the shelf have to change
+    /// together, or a failure halfway leaves a shelf that is gone from the
+    /// list and still named by its works - which brings it back.
     pub fn remove_folder(&self, name: &str) -> Result<(), StoreError> {
-        let mut names = self.declared_folders()?;
-        names.retain(|held| held != name);
-        self.declare_folders(&names)?;
-        for (id, on) in self.folder_map()? {
-            if on == name {
-                self.set_folder(id, None)?;
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut meta = tx.open_table(META).map_err(db_err)?;
+            declare_within(&mut meta, |names| {
+                names.retain(|held| held != name);
+                true
+            })?;
+            let mut folders = tx.open_table(FOLDERS).map_err(db_err)?;
+            for id in on_shelf(&folders, name)? {
+                folders.remove(id).map_err(db_err)?;
             }
         }
+        tx.commit().map_err(db_err)?;
         Ok(())
     }
 
@@ -341,15 +350,20 @@ impl Store {
         if to.is_empty() || from == to {
             return Ok(false);
         }
-        let mut names = self.declared_folders()?;
-        names.retain(|held| held != from && held != to);
-        names.push(to.to_string());
-        self.declare_folders(&names)?;
-        for (id, on) in self.folder_map()? {
-            if on == from {
-                self.set_folder(id, Some(to))?;
+        let tx = self.db.begin_write().map_err(db_err)?;
+        {
+            let mut meta = tx.open_table(META).map_err(db_err)?;
+            declare_within(&mut meta, |names| {
+                names.retain(|held| held != from && held != to);
+                names.push(to.to_string());
+                true
+            })?;
+            let mut folders = tx.open_table(FOLDERS).map_err(db_err)?;
+            for id in on_shelf(&folders, from)? {
+                folders.insert(id, to).map_err(db_err)?;
             }
         }
+        tx.commit().map_err(db_err)?;
         Ok(true)
     }
 
@@ -589,6 +603,50 @@ impl Store {
         Ok(out)
     }
 }
+/// The shelves that have been made, from a table that is already open.
+fn read_declared(
+    meta: &impl redb::ReadableTable<&'static str, &'static str>,
+) -> Result<Vec<String>, StoreError> {
+    match meta.get("folders").map_err(db_err)? {
+        Some(v) => Ok(serde_json::from_str(v.value())?),
+        None => Ok(Vec::new()),
+    }
+}
+
+/// Reads the list of shelves, lets `change` edit it, and writes it back -
+/// all inside the caller's transaction.
+///
+/// Read and write used to be two transactions, so two readers making a shelf
+/// at the same moment both read the list as it was and both wrote the whole
+/// of it back: one shelf survived and the other was never made, both having
+/// been told they were.
+fn declare_within(
+    meta: &mut redb::Table<'_, &'static str, &'static str>,
+    change: impl FnOnce(&mut Vec<String>) -> bool,
+) -> Result<bool, StoreError> {
+    let mut names = read_declared(meta)?;
+    if !change(&mut names) {
+        return Ok(false);
+    }
+    let json = serde_json::to_string(&names)?;
+    meta.insert("folders", json.as_str()).map_err(db_err)?;
+    Ok(true)
+}
+
+/// Which works name this shelf, from a table that is already open.
+fn on_shelf(
+    folders: &impl redb::ReadableTable<i32, &'static str>,
+    name: &str,
+) -> Result<Vec<i32>, StoreError> {
+    let mut out = Vec::new();
+    for row in folders.iter().map_err(db_err)? {
+        let (id, on) = row.map_err(db_err)?;
+        if on.value() == name {
+            out.push(id.value());
+        }
+    }
+    Ok(out)
+}
 
 fn db_err(err: impl std::fmt::Display) -> StoreError {
     StoreError::Database(err.to_string())
@@ -795,6 +853,40 @@ mod tests {
         assert!(store.folders().unwrap().is_empty());
         assert_eq!(store.folder(1).unwrap(), None, "the work stays, off every shelf");
         assert!(store.favorites().unwrap().is_empty());
+    }
+
+    /// Two readers making a shelf at once used to read the same list and
+    /// write it back over each other, so one shelf was never made although
+    /// the call said it was.
+    #[test]
+    fn shelves_made_at_the_same_time_all_survive() {
+        let (store, _dir) = store();
+        let store = std::sync::Arc::new(store);
+        let hands: Vec<_> = (0..8)
+            .map(|n| {
+                let store = std::sync::Arc::clone(&store);
+                std::thread::spawn(move || store.add_folder(&format!("shelf {n}")).unwrap())
+            })
+            .collect();
+        for hand in hands {
+            assert!(hand.join().unwrap());
+        }
+        assert_eq!(store.declared_folders().unwrap().len(), 8);
+    }
+
+    #[test]
+    fn taking_a_shelf_away_takes_its_works_off_it_too() {
+        let (store, _dir) = store();
+        store.set_folder(1, Some("읽는 중")).unwrap();
+        store.set_folder(2, Some("읽는 중")).unwrap();
+
+        store.remove_folder("읽는 중").unwrap();
+
+        assert!(store.declared_folders().unwrap().is_empty());
+        assert_eq!(store.folder(1).unwrap(), None);
+        assert_eq!(store.folder(2).unwrap(), None);
+        // It does not come back from the works that used to name it.
+        assert!(store.folders().unwrap().is_empty());
     }
 
     #[test]

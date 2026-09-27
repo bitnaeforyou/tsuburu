@@ -38,12 +38,11 @@ pub async fn only_this_machine(request: Request, next: Next) -> Response {
 
     // A read cannot be replayed into a change, and the rule above is what
     // stops one being read by somebody else.
-    if !matches!(*request.method(), Method::GET | Method::HEAD | Method::OPTIONS) {
-        if let Some(origin) = authority(headers, header::ORIGIN)
-            && Some(&origin) != host.as_ref()
-        {
-            return refuse("this only takes requests from its own pages").into_response();
-        }
+    if !matches!(*request.method(), Method::GET | Method::HEAD | Method::OPTIONS)
+        && let Some(origin) = authority(headers, header::ORIGIN)
+        && Some(&origin) != host.as_ref()
+    {
+        return refuse("this only takes requests from its own pages").into_response();
     }
 
     next.run(request).await

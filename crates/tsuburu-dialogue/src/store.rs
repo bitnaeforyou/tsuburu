@@ -39,6 +39,20 @@ const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 /// 2: LZ4 binary pages. 3: match codes beside the text. 4: codes in their
 /// own table. 5: codes cover scripts other than Hangul.
 const SCHEMA_VERSION: &str = "5";
+
+/// Whether a schema this file names is older than the one this build knows.
+///
+/// Compared as numbers, not as text: the versions are counters and will pass
+/// nine, and `"10" < "5"` is true of strings. Getting that backwards tells a
+/// reader their newer index is an old one and to delete it - which is the
+/// data loss the "newer" branch exists to prevent. Anything that is not a
+/// number is not one of ours, so it is not older either.
+fn older_schema(found: &str) -> bool {
+    match (found.parse::<u32>(), SCHEMA_VERSION.parse::<u32>()) {
+        (Ok(found), Ok(known)) => found < known,
+        _ => false,
+    }
+}
 /// Page cache.
 ///
 /// A search reads the whole codes table, so this is sized to hold it: with
@@ -286,7 +300,7 @@ impl DialogueStore {
                     meta.insert("schema", SCHEMA_VERSION).map_err(db_err)?;
                 }
                 Some(found) if found == SCHEMA_VERSION => {}
-                Some(found) if found.as_str() < SCHEMA_VERSION => {
+                Some(found) if older_schema(&found) => {
                     return Err(DialogueError::OlderSchema { found });
                 }
                 Some(found) => {
@@ -653,48 +667,82 @@ impl DialogueStore {
     /// A work being read hands its pages over one at a time, so the record
     /// grows instead of being replaced, and text that came from an import is
     /// not overwritten by a second reading of the same page.
+    ///
+    /// Read and write are one transaction. They used to be two, and the work
+    /// being read is exactly the case where several of these are in flight at
+    /// once: two pages of the same work both read the record as it was, both
+    /// wrote the whole of it back, and the later commit dropped the other
+    /// page's text for good - the image is cached by then, so it is never
+    /// recognised again.
     pub fn merge_pages(
         &self,
         id: i32,
         pages: &[PageText],
         from_reading: bool,
     ) -> Result<usize, DialogueError> {
-        let mut merged = self.text(id)?.unwrap_or_default();
-        let known: std::collections::HashSet<u16> = merged.iter().map(|p| p.page).collect();
-        let before = merged.len();
-        for page in pages {
-            if page.lines.is_empty() || known.contains(&page.page) {
-                continue;
+        let tx = self.db.begin_write().map_err(db_err)?;
+        let added = {
+            let mut jobs = tx.open_table(JOBS).map_err(db_err)?;
+            let mut queue = tx.open_table(QUEUE).map_err(db_err)?;
+            let mut texts = tx.open_table(TEXT).map_err(db_err)?;
+            let mut codes = tx.open_table(CODES).map_err(db_err)?;
+
+            let mut merged = match texts.get(id).map_err(db_err)? {
+                Some(v) => decode_pages(&decompress(v.value())?)?,
+                None => Vec::new(),
+            };
+            let known: std::collections::HashSet<u16> = merged.iter().map(|p| p.page).collect();
+            let before = merged.len();
+            for page in pages {
+                if page.lines.is_empty() || known.contains(&page.page) {
+                    continue;
+                }
+                merged.push(page.clone());
             }
-            merged.push(page.clone());
-        }
-        let added = merged.len() - before;
+            let added = merged.len() - before;
+            if added > 0 {
+                merged.sort_unstable_by_key(|p| p.page);
+
+                let previous: Option<JobRecord> = jobs
+                    .get(id)
+                    .map_err(db_err)?
+                    .map(|v| serde_json::from_str(v.value()))
+                    .transpose()?;
+                let source = previous.as_ref().and_then(|j| j.source.clone());
+                // A work counts as collected by reading only when reading is
+                // why it is here at all. Adding a page to text that was
+                // imported or swept must not make the whole record something
+                // "delete what I read" would throw away.
+                let collected_by_reading = from_reading && previous.is_none();
+                let encoded = Encoded::from_pages(&merged);
+                let lines: usize = merged.iter().map(|p| p.lines.len()).sum();
+                Self::finish_within(
+                    &mut jobs,
+                    &mut queue,
+                    &mut texts,
+                    &mut codes,
+                    id,
+                    Outcome {
+                        status: Status::Done,
+                        text: Some(&encoded),
+                        pages: merged.len() as u32,
+                        lines: lines as u32,
+                        error: None,
+                        source: source.as_deref(),
+                        from_reading: collected_by_reading,
+                    },
+                )?;
+            }
+            added
+        };
         if added == 0 {
+            // Nothing to say, and an empty commit would still wake everything
+            // that watches this store.
+            drop(tx);
             return Ok(0);
         }
-        merged.sort_unstable_by_key(|p| p.page);
-
-        let previous_job = self.job(id)?;
-        let source = previous_job.as_ref().and_then(|j| j.source.clone());
-        // A work counts as collected by reading only when reading is why it
-        // is here at all. Adding a page to text that was imported or swept
-        // must not make the whole record something "delete what I read"
-        // would throw away.
-        let collected_by_reading = from_reading && previous_job.is_none();
-        let encoded = Encoded::from_pages(&merged);
-        let lines: usize = merged.iter().map(|p| p.lines.len()).sum();
-        self.finish(
-            id,
-            Outcome {
-                status: Status::Done,
-                text: Some(&encoded),
-                pages: merged.len() as u32,
-                lines: lines as u32,
-                error: None,
-                source: source.as_deref(),
-                from_reading: collected_by_reading,
-            },
-        )?;
+        tx.commit().map_err(db_err)?;
+        self.changed();
         Ok(added)
     }
 
@@ -1371,6 +1419,42 @@ fn now_millis() -> u64 {
 mod tests {
     fn page(n: u16, line: &str) -> PageText {
         PageText { page: n, lines: vec![line.to_string()] }
+    }
+
+    #[test]
+    fn a_two_digit_schema_is_newer_than_a_one_digit_one() {
+        // The whole point: "10" sorts before "5" as text, and telling a
+        // reader their 0.5.0 index is old is telling them to delete it.
+        assert!(!older_schema("10"));
+        assert!(!older_schema("6"));
+        assert!(older_schema("1"));
+        assert!(older_schema("4"));
+        assert!(!older_schema(SCHEMA_VERSION));
+        assert!(!older_schema("nonsense"));
+    }
+
+    /// A work being read hands its pages over one at a time and several
+    /// arrive at once, which is how the old read-then-write lost them: both
+    /// read the record as it was, both wrote the whole of it back.
+    #[test]
+    fn pages_arriving_at_the_same_time_all_survive() {
+        let (store, _dir) = store();
+        let store = std::sync::Arc::new(store);
+        let hands: Vec<_> = (0..8u16)
+            .map(|n| {
+                let store = std::sync::Arc::clone(&store);
+                std::thread::spawn(move || {
+                    store.merge_pages(7, &[page(n, "줄")], true).unwrap();
+                })
+            })
+            .collect();
+        for hand in hands {
+            hand.join().unwrap();
+        }
+
+        let mut held: Vec<u16> = store.text(7).unwrap().unwrap().iter().map(|p| p.page).collect();
+        held.sort_unstable();
+        assert_eq!(held, (0..8).collect::<Vec<u16>>());
     }
 
     #[test]
