@@ -18,6 +18,8 @@ export const ja: Messages = {
   'update.get': '{version} を取得',
   'update.fetching': '取得中… {done} / {total}',
   'update.ready': '{version} を用意しました。tsuburu を起動し直すと適用されます。',
+  'update.readyPhone': '{version} を取得しました。Android が開いたインストール画面で完了してください。保存したものはそのまま残ります。',
+  'update.resign': 'リリースから新しい .ipa を取得し、今のものと同じ方法で署名し直してください。',
   'update.failed': '取得できませんでした: {error}',
   'update.unpublished': 'ダウンロードしたものではなく自分でビルドした複製なので、更新元がありません。',
 

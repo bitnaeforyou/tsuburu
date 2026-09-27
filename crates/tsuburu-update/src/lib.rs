@@ -10,6 +10,9 @@
 //! only thing that happens on its own is the asking, and that can be turned
 //! off.
 
+#[cfg(target_os = "android")]
+mod android;
+
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -58,6 +61,8 @@ pub enum UpdateError {
     Unpack(String),
     #[error("could not put it in place: {0}")]
     Replace(String),
+    #[error("could not open the installer: {0}")]
+    Install(String),
 }
 
 #[derive(Deserialize)]
@@ -93,6 +98,14 @@ fn numbers(version: &str) -> Option<[u32; 3]> {
         *slot = parts.next()?.parse().ok()?;
     }
     parts.next().is_none().then_some(out)
+}
+
+/// Whether `name` is the phone package the release publishes.
+///
+/// Unlike every other file, its name carries the version, so there is
+/// nothing constant to compare against.
+pub fn is_package(name: &str) -> bool {
+    name.starts_with("tsuburu-") && name.ends_with(".apk")
 }
 
 /// The published file for this computer, by the name the workflow gives it.
@@ -189,7 +202,7 @@ impl Updater {
         }
         let me = Arc::clone(self);
         tokio::spawn(async move {
-            match me.replace_self().await {
+            match me.become_newer().await {
                 Ok(version) => me.set(Progress::Ready { version }),
                 Err(error) => {
                     tracing::warn!(%error, "the update could not be applied");
@@ -199,6 +212,43 @@ impl Updater {
         });
     }
 
+    /// Whatever this platform means by becoming the newer version.
+    ///
+    /// A computer writes the new program over the old one and is restarted; a
+    /// phone cannot, and hands the package to the system installer instead.
+    async fn become_newer(self: &Arc<Self>) -> Result<String, UpdateError> {
+        #[cfg(target_os = "android")]
+        return self.hand_to_installer().await;
+        #[cfg(not(target_os = "android"))]
+        return self.replace_self().await;
+    }
+
+    /// Fetches the phone package and opens the installer on it.
+    ///
+    /// It goes in the cache directory because that is the one place the
+    /// `FileProvider` in the Android project is already told it may share
+    /// from, and because a package that has been installed is rubbish.
+    #[cfg(target_os = "android")]
+    async fn hand_to_installer(self: &Arc<Self>) -> Result<String, UpdateError> {
+        let release = self.latest().await?.ok_or(UpdateError::Unpublished)?;
+        let asset = release
+            .assets
+            .iter()
+            .find(|a| is_package(&a.name))
+            .ok_or_else(|| UpdateError::NoAsset(release.tag_name.clone()))?
+            .clone();
+
+        let work = cache_dir()?.join("update");
+        let _ = std::fs::remove_dir_all(&work);
+        std::fs::create_dir_all(&work).map_err(|e| UpdateError::Replace(e.to_string()))?;
+        let apk = work.join(&asset.name);
+        self.fetch(&asset.browser_download_url, &apk).await?;
+
+        android::install(&apk).map_err(UpdateError::Install)?;
+        Ok(release.tag_name.trim_start_matches('v').to_string())
+    }
+
+    #[cfg_attr(target_os = "android", allow(dead_code))]
     async fn replace_self(self: &Arc<Self>) -> Result<String, UpdateError> {
         let release = self.latest().await?.ok_or(UpdateError::Unpublished)?;
         let want = asset_for(std::env::consts::OS, std::env::consts::ARCH)
@@ -265,6 +315,17 @@ impl Updater {
         file.flush().await.map_err(|e| UpdateError::Replace(e.to_string()))?;
         Ok(())
     }
+}
+
+/// Where the phone lets this app keep things it may throw away.
+///
+/// Passed in rather than worked out: an Android app has no home directory to
+/// derive one from, and only the framework knows the path.
+#[cfg(target_os = "android")]
+fn cache_dir() -> Result<PathBuf, UpdateError> {
+    std::env::var_os("TSUBURU_CACHE_DIR")
+        .map(PathBuf::from)
+        .ok_or_else(|| UpdateError::Replace("nowhere to keep the package".into()))
 }
 
 /// The one file in the unpacked archive that is the program.

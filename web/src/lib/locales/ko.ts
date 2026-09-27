@@ -18,6 +18,8 @@ export const ko: Messages = {
   'update.get': '{version} 받기',
   'update.fetching': '받는 중… {done} / {total}',
   'update.ready': '{version}을 받아 두었습니다. tsuburu를 다시 시작하면 적용됩니다.',
+  'update.readyPhone': '{version}을 받았습니다. 안드로이드가 연 설치 화면에서 마치면 됩니다. 보관한 것은 그대로 남습니다.',
+  'update.resign': '릴리스에서 새 .ipa를 받아, 지금 것을 서명했던 방법으로 다시 서명하세요.',
   'update.failed': '받지 못했습니다: {error}',
   'update.unpublished': '받아온 것이 아니라 직접 빌드한 복사본이라, 업데이트할 곳이 없습니다.',
 

@@ -382,7 +382,9 @@
                 total: megabytes(update.total ?? 0),
               })}
             {:else if update?.state === 'ready'}
-              {t('update.ready', { version: update.version ?? '' })}
+              {update.platform === 'android'
+                ? t('update.readyPhone', { version: update.version ?? '' })
+                : t('update.ready', { version: update.version ?? '' })}
             {:else if update?.state === 'failed'}
               {t('update.failed', { error: update.error ?? '' })}
             {:else if update && !update.published}
@@ -395,7 +397,11 @@
           </p>
         </div>
 
-        {#if update?.state === 'found'}
+        {#if update?.state === 'found' && update.platform === 'ios'}
+          <!-- Nothing on an iPhone may install anything, this app included.
+               Saying what to do is all there is to offer. -->
+          <p class="muted small">{t('update.resign')}</p>
+        {:else if update?.state === 'found'}
           <button class="primary" onclick={() => void api.applyUpdate().then((u) => (update = u))}>
             {t('update.get', { version: update.version ?? '' })}
           </button>

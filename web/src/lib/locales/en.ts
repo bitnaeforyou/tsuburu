@@ -18,6 +18,8 @@ export const en = {
   'update.get': 'Get {version}',
   'update.fetching': 'Fetching… {done} / {total}',
   'update.ready': '{version} is in place. Start tsuburu again to use it.',
+  'update.readyPhone': '{version} has been fetched. Finish in the installer Android has opened; what you have kept stays where it is.',
+  'update.resign': 'Fetch the new .ipa from the release and sign it again the way you signed this one.',
   'update.failed': 'It could not be fetched: {error}',
   'update.unpublished': 'This copy was built rather than downloaded, so there is nowhere to update from.',
 

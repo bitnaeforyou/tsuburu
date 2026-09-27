@@ -16,6 +16,11 @@ pub struct UpdateState {
     /// Whether this copy came from a release at all. A build from a checkout
     /// has nowhere to ask and nothing to offer.
     pub published: bool,
+    /// What becoming the newer version means here. A computer replaces the
+    /// program and is started again; a phone opens the system installer, and
+    /// the screen has to say so rather than asking for a restart that is not
+    /// how a phone works.
+    pub platform: &'static str,
 }
 
 fn state_of(state: &AppState) -> UpdateState {
@@ -23,6 +28,7 @@ fn state_of(state: &AppState) -> UpdateState {
         progress: state.updater.progress(),
         here: tsuburu_update::HERE,
         published: state.updater.publishable(),
+        platform: std::env::consts::OS,
     }
 }
 

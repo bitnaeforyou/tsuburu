@@ -31,6 +31,14 @@ pub fn run() {
                 unsafe { std::env::set_var("TSUBURU_DATA_DIR", &dir) };
                 tracing::info!(path = %dir.display(), "keeping things here");
             }
+            // The update puts the package it fetched here: it is the one
+            // directory the FileProvider is allowed to share out of, which is
+            // how the system installer gets to read it.
+            if let Ok(dir) = app.path().app_cache_dir() {
+                std::fs::create_dir_all(&dir).ok();
+                // SAFETY: as above - nothing else is running yet.
+                unsafe { std::env::set_var("TSUBURU_CACHE_DIR", &dir) };
+            }
             // Port 0: the operating system picks one that is free. A phone has
             // no terminal to tell a clash to, and the address is handed
             // straight to the webview anyway, so nothing needs to guess it.

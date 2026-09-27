@@ -16,3 +16,10 @@ futures-util = { version = "0.3", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
+
+# Handing an APK to the system installer is the one thing on a phone that
+# cannot be done through the standard library: it is an Android intent, and
+# an intent is a Java call.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"
