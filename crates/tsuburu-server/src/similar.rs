@@ -37,82 +37,33 @@ impl Similarity {
         Ok(Self { index, locator })
     }
 
-    /// Galleries whose passages sit closest to `(gallery, page)`.
+    /// The widened count to ask the index for.
     ///
-    /// One gallery contributes once, at its best passage, so a long work
-    /// cannot fill the answer with its own chapters. `duplicate` folds
-    /// re-uploads together: hitomi carries the same work under several ids,
-    /// and every copy is equally near.
-    pub fn near(
+    /// Asking wide is what gives the folding below something to drop.
+    /// `clamp` insists its floor is below its ceiling, and a caller is free
+    /// to ask for more than the ceiling - 400 with a floor of 402 is a panic,
+    /// and `panic = "abort"` makes that the whole program.
+    fn widened(limit: usize) -> usize {
+        limit.saturating_mul(8).min(WIDEST).max(limit)
+    }
+
+    /// One work per answer, at its best passage, with hitomi's re-uploads of
+    /// it folded in.
+    ///
+    /// A long work would otherwise fill the answer with its own chapters,
+    /// and hitomi carries the same work under several ids where every copy
+    /// is equally near. `seeded` is the query's own passage, where there is
+    /// one, so the re-uploads of the thing being asked about drop out too.
+    fn best_per_work(
         &self,
-        gallery: i32,
-        page: u16,
+        neighbours: impl IntoIterator<Item = tsuburu_embed::Neighbour>,
         limit: usize,
         duplicate: &dyn Fn(i32, u16) -> Option<Vec<u8>>,
-    ) -> Result<Vec<Match>, String> {
-        let chunk = self
-            .locator
-            .chunk_for(gallery, page)
-            .ok_or_else(|| format!("gallery {gallery} is not in the embedding index"))?;
-
-        // Ask for more than needed: neighbours cluster inside one work.
-        // `clamp` insists its floor is below its ceiling, and a caller is
-        // free to ask for more than the ceiling: 400 with a floor of 402 is
-        // a panic, and `panic = "abort"` makes that the whole program.
-        let wanted = limit.saturating_mul(8).min(WIDEST).max(limit);
-        let neighbours = self
-            .index
-            .nearest_to_chunk(chunk, wanted, &|c| {
-                self.locator.locate(c).is_some_and(|(w, _)| w == gallery)
-            })
-            .map_err(|e| e.to_string())?;
-
+        seeded: Option<Vec<u8>>,
+    ) -> Vec<Match> {
         let mut out: Vec<Match> = Vec::new();
         let mut seen_work = std::collections::HashSet::new();
-        let mut seen_passage = std::collections::HashSet::new();
-        // The source itself is excluded by work, but hitomi's re-uploads of
-        // it are separate galleries that match it perfectly. Seed the
-        // passage with the query's own so those drop out too.
-        if let Some(key) = duplicate(gallery, page) {
-            seen_passage.insert(key);
-        }
-        for neighbour in neighbours {
-            let Some((work, first_page)) = self.locator.locate(neighbour.chunk) else { continue };
-            if !seen_work.insert(work) {
-                continue;
-            }
-            if let Some(key) = duplicate(work, first_page)
-                && !seen_passage.insert(key)
-            {
-                continue;
-            }
-            out.push(Match { gallery_id: work, page: first_page, score: neighbour.score });
-            if out.len() >= limit {
-                break;
-            }
-        }
-        Ok(out)
-    }
-
-    pub fn vectors(&self) -> usize {
-        self.index.len()
-    }
-
-    /// Passages nearest to a vector that came from outside the index.
-    pub fn near_vector(
-        &self,
-        query: &[f32],
-        limit: usize,
-        duplicate: &dyn Fn(i32, u16) -> Option<Vec<u8>>,
-    ) -> Vec<Match> {
-        // `clamp` insists its floor is below its ceiling, and a caller is
-        // free to ask for more than the ceiling: 400 with a floor of 402 is
-        // a panic, and `panic = "abort"` makes that the whole program.
-        let wanted = limit.saturating_mul(8).min(WIDEST).max(limit);
-        let neighbours = self.index.nearest(query, wanted, &|_| false);
-        let mut out = Vec::new();
-        let mut seen_work = std::collections::HashSet::new();
-        let mut seen_passage = std::collections::HashSet::new();
+        let mut seen_passage: std::collections::HashSet<Vec<u8>> = seeded.into_iter().collect();
         for neighbour in neighbours {
             let Some((work, page)) = self.locator.locate(neighbour.chunk) else { continue };
             if !seen_work.insert(work) {
@@ -129,6 +80,44 @@ impl Similarity {
             }
         }
         out
+    }
+
+    /// Galleries whose passages sit closest to `(gallery, page)`.
+    pub fn near(
+        &self,
+        gallery: i32,
+        page: u16,
+        limit: usize,
+        duplicate: &dyn Fn(i32, u16) -> Option<Vec<u8>>,
+    ) -> Result<Vec<Match>, String> {
+        let chunk = self
+            .locator
+            .chunk_for(gallery, page)
+            .ok_or_else(|| format!("gallery {gallery} is not in the embedding index"))?;
+
+        let neighbours = self
+            .index
+            .nearest_to_chunk(chunk, Self::widened(limit), &|c| {
+                self.locator.locate(c).is_some_and(|(w, _)| w == gallery)
+            })
+            .map_err(|e| e.to_string())?;
+
+        Ok(self.best_per_work(neighbours, limit, duplicate, duplicate(gallery, page)))
+    }
+
+    pub fn vectors(&self) -> usize {
+        self.index.len()
+    }
+
+    /// Passages nearest to a vector that came from outside the index.
+    pub fn near_vector(
+        &self,
+        query: &[f32],
+        limit: usize,
+        duplicate: &dyn Fn(i32, u16) -> Option<Vec<u8>>,
+    ) -> Vec<Match> {
+        let neighbours = self.index.nearest(query, Self::widened(limit), &|_| false);
+        self.best_per_work(neighbours, limit, duplicate, None)
     }
 
     /// The stored vector for a passage, so a pack can be checked against it.

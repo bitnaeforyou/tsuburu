@@ -43,12 +43,6 @@ pub struct SearchParams {
     /// series, character, group or tag. Results are the union.
     #[serde(default)]
     pub q: String,
-    /// Free text matched against titles only (spacing-insensitive, Korean aware).
-    #[serde(default)]
-    pub title: String,
-    /// Space separated terms; `artist:keso`, `tag:glasses`, or bare words.
-    #[serde(default)]
-    pub terms: String,
     #[serde(default)]
     pub language: Option<String>,
     #[serde(default)]
@@ -77,23 +71,14 @@ pub async fn search(
     let language = params.language.filter(|s| !s.is_empty() && s != "all");
     let kind = params.kind.filter(|s| !s.is_empty() && s != "all");
     let free = params.q.trim().to_string();
-    let base = MetaQuery {
-        title: Some(params.title.trim().to_string()).filter(|t| !t.is_empty()),
-        terms: split_terms(&params.terms),
-        language,
-        kind,
-        exists_only: true,
-    };
+    let base = MetaQuery { language, kind, exists_only: true, ..MetaQuery::default() };
     if base.is_empty() && free.is_empty() {
-        return Err(ApiError::bad_request("give a title, a term, or a filter"));
+        return Err(ApiError::bad_request("give something to look for, or a filter"));
     }
     let limit = params.limit.clamp(1, MAX_LIMIT);
     let offset = params.offset;
     let page = tokio::task::spawn_blocking(
         move || -> Result<tsuburu_meta::Page, tsuburu_meta::MetaError> {
-            if free.is_empty() {
-                return meta.search(&base, offset, limit);
-            }
             // Free text: title substring, or the whole text as one term.
             let by_title = meta.search(
                 &MetaQuery { title: Some(free.clone()), ..base.clone() },
@@ -122,37 +107,6 @@ pub async fn search(
     Ok(Json(SearchResponse { total: page.total, ids: page.ids }))
 }
 
-/// Terms are split on whitespace, except that a namespaced term keeps its
-/// spaces: `tag:big breasts artist:keso` -> ["tag:big breasts", "artist:keso"].
-fn split_terms(s: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for word in s.split_whitespace() {
-        let namespaced = word.contains(':');
-        match out.last_mut() {
-            Some(last) if !namespaced && last.contains(':') => {
-                last.push(' ');
-                last.push_str(word);
-            }
-            _ => out.push(word.to_string()),
-        }
-    }
-    out
-}
-
 fn storage(err: impl std::fmt::Display) -> ApiError {
     ApiError { error: ErrorKind::Storage, message: err.to_string(), code: None }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::split_terms;
-
-    #[test]
-    fn namespaced_terms_keep_their_spaces() {
-        assert_eq!(
-            split_terms("tag:big breasts artist:keso glasses"),
-            vec!["tag:big breasts", "artist:keso glasses"]
-        );
-        assert_eq!(split_terms("keso glasses"), vec!["keso", "glasses"]);
-    }
 }
