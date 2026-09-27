@@ -317,7 +317,7 @@
     gap: 0.75rem 1.25rem;
     padding: 0.7rem var(--gutter);
     background: var(--bg);
-    border-bottom: 1px solid var(--line);
+    border-block-end: 1px solid var(--line);
   }
 
   .again {

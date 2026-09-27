@@ -478,7 +478,7 @@
     height: calc(var(--chrome) + var(--safe-top));
     padding: var(--safe-top) var(--gutter) 0;
     background: var(--bg);
-    border-bottom: 1px solid var(--line);
+    border-block-end: 1px solid var(--line);
   }
   header.bare {
     display: none;

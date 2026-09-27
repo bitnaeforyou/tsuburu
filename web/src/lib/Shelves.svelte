@@ -60,13 +60,21 @@
 
 <ul class="shelves">
   <li>
-    <button class:on={picked === 'all'} onclick={() => (picked = 'all')}>
+    <button
+      class:on={picked === 'all'}
+      aria-pressed={picked === 'all'}
+      onclick={() => (picked = 'all')}
+    >
       {t('folders.all')} <span class="count">{works.length}</span>
     </button>
   </li>
   {#each shelves as shelf (shelf.name)}
     <li class:on={picked === shelf.name}>
-      <button class:on={picked === shelf.name} onclick={() => (picked = shelf.name)}>
+      <button
+        class:on={picked === shelf.name}
+        aria-pressed={picked === shelf.name}
+        onclick={() => (picked = shelf.name)}
+      >
         {shelf.name} <span class="count">{shelf.works}</span>
       </button>
       {#if picked === shelf.name}
@@ -91,7 +99,7 @@
   {/each}
   {#if loose > 0 && shelves.length > 0}
     <li>
-      <button class:on={picked === null} onclick={() => (picked = null)}>
+      <button class:on={picked === null} aria-pressed={picked === null} onclick={() => (picked = null)}>
         {t('folders.loose')} <span class="count">{loose}</span>
       </button>
     </li>

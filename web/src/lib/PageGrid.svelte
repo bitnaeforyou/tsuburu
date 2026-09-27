@@ -107,7 +107,7 @@
     gap: 0.75rem;
     /* Covers the whole window, so it meets the clock strip too. */
     padding: calc(0.7rem + var(--safe-top)) 1rem 0.7rem;
-    border-bottom: 1px solid var(--line);
+    border-block-end: 1px solid var(--line);
   }
   header strong {
     font-weight: 600;

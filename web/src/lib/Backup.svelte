@@ -116,7 +116,7 @@
   .backup {
     margin-top: 2rem;
     padding-top: 1rem;
-    border-top: 1px solid var(--line);
+    border-block-start: 1px solid var(--line);
   }
   .what {
     margin: 0 0 0.5rem;

@@ -526,7 +526,7 @@
           {/if}
         </div>
         {#if settings}
-          <button class:on={settings.enabled} onclick={toggleIndexing}>
+          <button class:on={settings.enabled} aria-pressed={settings.enabled} onclick={toggleIndexing}>
             {settings.enabled ? t('dialogue.stop') : t('dialogue.start')}
           </button>
         {/if}

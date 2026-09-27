@@ -77,7 +77,7 @@
        strip. */
     padding: calc(0.7rem + var(--safe-top)) var(--gutter) 0.7rem;
     background: var(--bg);
-    border-bottom: 1px solid var(--line);
+    border-block-end: 1px solid var(--line);
   }
 
   .brand {
@@ -139,7 +139,7 @@
       gap: 0;
       padding: 0.25rem 0 calc(0.25rem + env(safe-area-inset-bottom));
       background: var(--bg);
-      border-top: 1px solid var(--line);
+      border-block-start: 1px solid var(--line);
     }
 
     nav a {

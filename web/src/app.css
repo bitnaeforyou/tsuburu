@@ -58,12 +58,14 @@
      control is findable without reading its label. */
   --edge: var(--neutral-600);
   --accent: var(--azure-700);
-  --accent-quiet: var(--azure-100);
   --accent-solid: var(--azure-700);
   --accent-on: #ffffff;
   --danger: var(--red-700);
-  --danger-quiet: var(--red-200);
-  --focus: var(--azure-500);
+  /* Drawn inside the control, so it sits on the control's own fill rather
+     than on the page: measured against those, 500 carries 2.88:1 and 2.58:1
+     where an indicator needs 3, and 700 carries 5.27 and 4.73. The dark
+     scheme keeps 400, which measures 7.21 on the same surfaces. */
+  --focus: var(--azure-700);
   /* The hairline around a cover: plain black at a tenth, so it reads as the
      image's own edge rather than as a border the interface put there. */
   --image-edge: #0000001a;
@@ -78,7 +80,6 @@
 
   --radius: 8px;
   --radius-sm: 5px;
-  --radius-lg: 12px;
   color-scheme: light dark;
 }
 
@@ -95,11 +96,9 @@
     --line: var(--neutral-900);
     --edge: var(--neutral-600);
     --accent: var(--azure-400);
-    --accent-quiet: var(--azure-950);
     --accent-solid: var(--azure-800);
     --accent-on: #ffffff;
     --danger: var(--red-400);
-    --danger-quiet: var(--red-950);
     --focus: var(--azure-400);
     --image-edge: #ffffff1a;
     --tag-female: var(--rose-400);
@@ -137,7 +136,7 @@
   /* For pages that are mostly words rather than covers. */
   --page-narrow: 58rem;
   /* Bars run edge to edge, but what is in them lines up with the page. */
-  --gutter: max(1rem, calc((100vw - var(--page)) / 2));
+  --gutter: max(1rem, env(safe-area-inset-left, 0px), calc((100vw - var(--page)) / 2));
 }
 
 * { box-sizing: border-box; }
@@ -240,7 +239,11 @@ input {
    label: accent text on a neutral button reads as a link, not a button. */
 button.primary {
   background: var(--accent-solid);
-  border-color: var(--accent-solid);
+  /* Not the fill: the fill is chosen to sit under white text, and against
+     the page behind it that is 2.45:1 - the label is readable and the button
+     is not findable without reading it. The border carries the 3:1 that
+     every other control's edge carries. */
+  border-color: var(--accent);
   color: var(--accent-on);
   font-weight: 500;
 }
@@ -288,7 +291,7 @@ main:focus {
 @media (max-width: 640px) {
   :root {
     --chrome: 3.4rem;
-    --gutter: 0.75rem;
+    --gutter: max(0.75rem, env(safe-area-inset-left, 0px));
   }
   body.has-tabs { padding-bottom: calc(3.4rem + env(safe-area-inset-bottom)); }
   button { padding: 0.55rem 0.9rem; }

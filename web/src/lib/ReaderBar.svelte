@@ -90,7 +90,7 @@
     </button>
 
     <label class="pick">
-      <span class="sr">{t('reader.fit')}</span>
+      <span class="sr-only">{t('reader.fit')}</span>
       <select
         value={fitOf(settings)}
         onchange={(event) =>
@@ -187,9 +187,15 @@
     border-start-end-radius: var(--radius);
     border-end-end-radius: var(--radius);
   }
+  /* Pressed, not merely blue: colour on its own is the one cue somebody who
+     does not separate these hues has nothing of. The rest of the project's
+     toggles swap a symbol or a label; this one has neither to swap, so the
+     surface says it instead. */
   .group button.on {
     color: var(--accent);
     border-color: var(--accent);
+    background: var(--raised);
+    font-weight: 500;
     z-index: 1;
   }
 
@@ -212,15 +218,6 @@
     gap: 0.3rem;
     color: var(--muted);
     font-size: var(--text-sm);
-  }
-
-  .sr {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
   }
 
   /* Everything here is pressed with a thumb on a phone, so it is bigger, and

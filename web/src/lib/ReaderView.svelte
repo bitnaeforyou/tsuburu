@@ -251,6 +251,23 @@
         void toggleFullscreen()
         return
       }
+      // Magnifying was a double-click, a pinch or ctrl and the wheel, so
+      // without a pointer there was no way to it at all.
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault()
+        magnify(zoom + 0.5)
+        return
+      }
+      if (event.key === '-' || event.key === '_') {
+        event.preventDefault()
+        magnify(zoom - 0.5)
+        return
+      }
+      if (event.key === '0') {
+        event.preventDefault()
+        magnify(1)
+        return
+      }
       const forward = forwardFor(event.key, settings.direction)
       if (forward === null) return
       // Space keeps scrolling in the scrolling layout, the way it does
@@ -393,15 +410,21 @@
   function onDoubleClick(event: MouseEvent) {
     if (!paged || onChrome(event)) return
     event.preventDefault()
-    zoom = zoom > 1 ? 1 : 2
+    magnify(zoom > 1 ? 1 : 2)
     pan = { x: 0, y: 0 }
+  }
+
+  /// The one place the magnification is set, so the keys, the wheel and the
+  /// double-click cannot drift apart on what the limits are.
+  function magnify(to: number) {
+    zoom = Math.min(Math.max(to, 1), 4)
+    if (zoom === 1) pan = { x: 0, y: 0 }
   }
 
   function onWheel(event: WheelEvent) {
     if (!paged || !event.ctrlKey) return
     event.preventDefault()
-    zoom = Math.min(Math.max(zoom - event.deltaY / 400, 1), 4)
-    if (zoom === 1) pan = { x: 0, y: 0 }
+    magnify(zoom - event.deltaY / 400)
   }
 
   async function toggleFullscreen() {
@@ -452,6 +475,8 @@
       {/each}
     </div>
 
+    <p class="sr-only" role="status">{t('common.page', { n: where + 1 })}</p>
+
     {#if onpages}
       <button class="corner where" onclick={onpages} title={t('reader.pages')}>
         {where + 1} / {pages.length}
@@ -459,6 +484,16 @@
     {:else}
       <span class="corner where">{where + 1} / {pages.length}</span>
     {/if}
+
+    <button
+      class="corner zoom"
+      onclick={() => magnify(zoom > 1 ? 1 : 2)}
+      aria-pressed={zoom > 1}
+      title={zoom > 1 ? t('reader.zoomOut') : t('reader.zoomIn')}
+      aria-label={zoom > 1 ? t('reader.zoomOut') : t('reader.zoomIn')}
+    >
+      {zoom > 1 ? '−' : '+'}
+    </button>
 
     <button class="corner full" onclick={toggleFullscreen} title={t('reader.fullscreen')}>
       {fullscreen ? '⤡' : '⤢'}
@@ -627,6 +662,10 @@
   }
   .full {
     inset-inline-end: 0.6rem;
+    font-size: var(--text-md);
+  }
+  .zoom {
+    inset-inline-end: 2.8rem;
     font-size: var(--text-md);
   }
 </style>

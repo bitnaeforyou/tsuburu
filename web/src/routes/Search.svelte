@@ -313,6 +313,25 @@
   const filtering = $derived(
     params.language !== defaultSearch.language || params.kind !== defaultSearch.kind,
   )
+  /// What the results add up to, as one sentence - which is also what is
+  /// read out when they change.
+  const counted = $derived.by(() => {
+    if (total > 0) {
+      const said = [t('search.results', { n: number(total) })]
+      if (params.scope === 'local') said.push(t('search.fromSnapshot'))
+      if (!params.query && !filtering) said.push(t('search.browsingAll'))
+      return said.join(' · ')
+    }
+    if (loading || error) return ''
+    const said = [
+      params.query ? t('search.noResultsFor', { query: params.query }) : t('search.noResults'),
+    ]
+    // The dialogue is only as big as what has been read, and a reader who has
+    // read forty works is not looking at a broken search.
+    if (params.scope === 'dialogue') said.push(t('search.readSoFar', { n: number(readSoFar) }))
+    return said.join(' · ')
+  })
+
   // 결과가 좁은데 인기순이면 목록을 크게 훑어야 한다(스펙 3.2절).
   const slowSort = $derived(loading && params.sort !== 'date' && total > 0 && total < 500)
 </script>
@@ -345,22 +364,10 @@
   {:else}
   <Terms {terms} />
 
-  {#if total > 0}
-    <p class="count">
-      {t('search.results', { n: number(total) })}
-      {#if params.scope === 'local'}&middot; {t('search.fromSnapshot')}{/if}
-      {#if !params.query && !filtering}&middot; {t('search.browsingAll')}{/if}
-    </p>
-  {:else if !loading && !error}
-    <p class="count">
-      {params.query ? t('search.noResultsFor', { query: params.query }) : t('search.noResults')}
-      <!-- The dialogue is only as big as what has been read, and a reader who
-           has read forty works is not looking at a broken search. -->
-      {#if params.scope === 'dialogue'}
-        &middot; {t('search.readSoFar', { n: number(readSoFar) })}
-      {/if}
-    </p>
-  {/if}
+  <!-- One paragraph, always in the page: a live region has to be there
+       before its text changes, or the change is not announced. Submitting a
+       search swapped the whole grid in silence. -->
+  <p class="count" class:quiet={!counted} role="status">{counted}</p>
 
   {#if slowSort}
     <p class="count">{t('search.slowSort')}</p>
@@ -404,6 +411,12 @@
   .count {
     color: var(--muted);
     margin: 0 0 1rem;
+  }
+
+  /* Still in the page so it can announce the next change; taking up none of
+     it while it has nothing to say. */
+  .count.quiet {
+    margin: 0;
   }
 
   .more {

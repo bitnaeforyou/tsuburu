@@ -83,7 +83,7 @@
       {/if}
     </div>
     {#if info && namespace === 'artist'}
-      <button class:on={info.following} onclick={toggleFollow}>
+      <button class:on={info.following} aria-pressed={info.following} onclick={toggleFollow}>
         {info.following ? `★ ${t('artist.following')}` : `☆ ${t('artist.follow')}`}
       </button>
     {/if}

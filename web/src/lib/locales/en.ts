@@ -56,8 +56,8 @@ export const en = {
 
   'error.changed': 'hitomi has changed',
   'error.generic': 'Something went wrong',
-  'error.network': 'hitomi could not be reached.',
-  'error.storage': 'The local database could not be read.',
+  'error.network': 'hitomi could not be reached. Try again, or search what is already on this computer.',
+  'error.storage': 'The local database could not be read, so favorites, history and downloads are off. Starting tsuburu again usually fixes it.',
   'error.badRequest': 'That request was not something tsuburu can answer.',
   'error.unsupported': 'That is not available here.',
   'error.code.import_meta': 'Import a data.db snapshot to search titles and artists offline.',
@@ -164,6 +164,8 @@ export const en = {
   'reader.pages': 'Pages',
   'reader.pagesClose': 'Close',
   'reader.fullscreen': 'Full screen',
+  'reader.zoomIn': 'Magnify',
+  'reader.zoomOut': 'Back to fitting',
   'reader.hintTouch':
     'Tap the sides or swipe to turn · the middle clears everything else away · pinch to zoom',
   'reader.hintPaged':
@@ -176,8 +178,8 @@ export const en = {
   'backup.saved': 'Saved {works} favorites, {artists} artists, {read} read.',
   'backup.putting': 'Putting it back… {done} / {total}',
   'backup.restored': 'Put {n} things back.',
-  'backup.restoredSome': 'Put {n} things back; {failed} were refused.',
-  'backup.notOurs': 'That is not a tsuburu file.',
+  'backup.restoredSome': 'Put {n} things back. {failed} were refused for being unreadable, and the rest of the file was taken in.',
+  'backup.notOurs': 'That is not a tsuburu file. Choose the one an export made — it ends in .json.',
 
   'favorites.artists': 'Artists you follow',
   'favorites.empty': 'No favorites yet. Press the star on any result to keep it here.',

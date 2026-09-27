@@ -6,7 +6,7 @@
   import { split as splitTag } from './tags'
   import { view } from './view.svelte'
   import { toGallery } from './router'
-  import { t } from './i18n.svelte'
+  import { MESSAGES, t, type Key } from './i18n.svelte'
 
   let {
     id,
@@ -35,6 +35,16 @@
   const title = $derived(card?.title ?? preset?.title ?? `#${id}`)
   const pages = $derived(card?.pages ?? preset?.pages ?? 0)
   const language = $derived(card?.language ?? preset?.language ?? null)
+  /// hitomi names languages in lowercase English. The filter beside this on
+  /// the same screen says them in the reader's own, and one concept written
+  /// two ways on one screen reads as two.
+  const said = $derived.by(() => {
+    if (!language) return ''
+    const key = `lang.${language}` as Key
+    // A language hitomi adds that the catalogue has not caught up with is
+    // better said in its own words than not at all.
+    return key in MESSAGES ? t(key) : language
+  })
   const favorited = $derived(library.has(id))
   /// What the work is, in the three words a card has room for. Namespaced
   /// tags say female:/male:; the part after the colon is the word.
@@ -123,7 +133,7 @@
     <svelte:element this={`h${level}`} class="title" title={title}>{title}</svelte:element>
     <p class="meta">
       <span class="id">#{id}</span>
-      &middot; {t('common.pages', { n: pages })}{language ? ` · ${language}` : ''}
+      &middot; {t('common.pages', { n: pages })}{said ? ` · ${said}` : ''}
     </p>
     {#if card?.listed === false}
       <p class="unlisted" title={t('card.unlistedNote')}>{t('card.unlisted')}</p>
