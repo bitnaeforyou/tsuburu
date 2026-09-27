@@ -67,6 +67,8 @@ pub enum UpdateError {
     Install(String),
     #[error("{0} is not what the release says it is")]
     NotAsPublished(String),
+    #[error("this release was not signed by whoever publishes tsuburu")]
+    NotSigned,
     #[error("the release points at {0}, which is not where it is published")]
     NotFromGitHub(String),
 }
@@ -89,6 +91,25 @@ struct Asset {
 /// The file every release carries, naming what each of the others should
 /// come to.
 const SUMS: &str = "SHA256SUMS";
+
+/// The signature over that file.
+const SIGNATURE: &str = "SHA256SUMS.sig";
+
+/// The key that says a release is ours.
+///
+/// Public, so it belongs in the source: this is the half that checks, and
+/// the half that signs has never been on GitHub and never will be. It lives
+/// on one machine beside the key that signs the Android package, which is
+/// what makes this worth more than the digests alone - whoever takes the
+/// account that publishes cannot sign with it.
+///
+/// Changing this abandons everyone running an older copy: their update will
+/// refuse a release they cannot verify, which is the right answer and also a
+/// dead end. Losing the other half means the same thing.
+const PUBLISHER: [u8; 32] = [
+    0x7e, 0xf5, 0x29, 0xbf, 0x94, 0x5a, 0xe8, 0x73, 0x23, 0x1c, 0x5d, 0xe6, 0x2a, 0xdc, 0x58, 0xc3,
+    0xed, 0xc3, 0x8d, 0x2c, 0xd9, 0xe8, 0xf3, 0xc2, 0x46, 0xdd, 0xea, 0x86, 0x7a, 0x0d, 0x12, 0x54,
+];
 
 /// Hosts a release may be fetched from.
 ///
@@ -114,6 +135,19 @@ fn published_digest(sums: &str, name: &str) -> Option<String> {
         let (digest, said) = line.split_once("  ")?;
         (said.trim() == name).then(|| digest.trim().to_ascii_lowercase())
     })
+}
+
+/// Whether the publisher signed this listing.
+///
+/// `verify_strict` rather than `verify`: it refuses the small-order keys and
+/// signatures that make a plain check accept one thing as two.
+fn signed_by_publisher(listing: &[u8], signature: &[u8]) -> Result<(), UpdateError> {
+    use ed25519_dalek::{Signature, VerifyingKey};
+
+    let key = VerifyingKey::from_bytes(&PUBLISHER).map_err(|_| UpdateError::NotSigned)?;
+    let signature: [u8; 64] = signature.try_into().map_err(|_| UpdateError::NotSigned)?;
+    key.verify_strict(listing, &Signature::from_bytes(&signature))
+        .map_err(|_| UpdateError::NotSigned)
 }
 
 fn digest_of(path: &Path) -> Result<String, UpdateError> {
@@ -357,16 +391,17 @@ impl Updater {
             }
         }
 
-        let listing = self
-            .client
-            .get(&sums.browser_download_url)
-            .send()
-            .await
-            .and_then(reqwest::Response::error_for_status)
-            .map_err(|e| UpdateError::Unreachable(e.to_string()))?
-            .text()
-            .await
-            .map_err(|e| UpdateError::Unreachable(e.to_string()))?;
+        let signature =
+            release.assets.iter().find(|a| a.name == SIGNATURE).ok_or(UpdateError::NotSigned)?;
+        if !is_published_at(&signature.browser_download_url) {
+            return Err(UpdateError::NotFromGitHub(signature.browser_download_url.clone()));
+        }
+
+        let listing = self.body(&sums.browser_download_url).await?;
+        let signed = self.body(&signature.browser_download_url).await?;
+        signed_by_publisher(&listing, &signed)?;
+
+        let listing = String::from_utf8(listing).map_err(|_| UpdateError::NotSigned)?;
         let want = published_digest(&listing, &asset.name)
             .ok_or_else(|| UpdateError::NotAsPublished(asset.name.clone()))?;
 
@@ -376,6 +411,20 @@ impl Updater {
             return Err(UpdateError::NotAsPublished(asset.name.clone()));
         }
         Ok(())
+    }
+
+    async fn body(self: &Arc<Self>, url: &str) -> Result<Vec<u8>, UpdateError> {
+        Ok(self
+            .client
+            .get(url)
+            .send()
+            .await
+            .and_then(reqwest::Response::error_for_status)
+            .map_err(|e| UpdateError::Unreachable(e.to_string()))?
+            .bytes()
+            .await
+            .map_err(|e| UpdateError::Unreachable(e.to_string()))?
+            .to_vec())
     }
 
     async fn fetch(self: &Arc<Self>, url: &str, to: &Path) -> Result<(), UpdateError> {
@@ -494,6 +543,38 @@ fn first_lines(body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Made with the key that is kept off this machine's repository, by
+    /// `openssl pkeyutl -sign -rawin`, which is what the release script runs.
+    const SIGNED_LISTING: &[u8] = b"aaaa  tsuburu-x86_64-unknown-linux-gnu.tar.gz\n";
+    const REAL_SIGNATURE: [u8; 64] = [
+        0xdf, 0x82, 0x2a, 0x2a, 0x1b, 0xb5, 0x36, 0x68, 0x83, 0x26, 0xc4, 0x36, 0x2d, 0xa9, 0xfd,
+        0xd3, 0x7e, 0x03, 0x07, 0x99, 0xdb, 0x55, 0xcf, 0xa2, 0x09, 0x88, 0xed, 0x02, 0x2a, 0x7f,
+        0x5a, 0x6d, 0x19, 0xe8, 0x30, 0x1d, 0x53, 0x82, 0xef, 0x88, 0xbe, 0x60, 0x66, 0x69, 0xe3,
+        0x65, 0x80, 0x19, 0x88, 0xe0, 0xad, 0x35, 0x48, 0x70, 0x56, 0x65, 0x8a, 0xb9, 0x7f, 0x3c,
+        0x83, 0x20, 0xbb, 0x0f,
+    ];
+
+    #[test]
+    fn a_listing_the_publisher_signed_is_accepted() {
+        assert!(signed_by_publisher(SIGNED_LISTING, &REAL_SIGNATURE).is_ok());
+    }
+
+    #[test]
+    fn a_listing_that_was_changed_after_signing_is_refused() {
+        let tampered = b"bbbb  tsuburu-x86_64-unknown-linux-gnu.tar.gz\n";
+        assert!(signed_by_publisher(tampered, &REAL_SIGNATURE).is_err());
+    }
+
+    #[test]
+    fn a_signature_by_somebody_else_is_refused() {
+        let mut theirs = REAL_SIGNATURE;
+        theirs[0] ^= 0x01;
+        assert!(signed_by_publisher(SIGNED_LISTING, &theirs).is_err());
+        // And nothing at all where a signature should be.
+        assert!(signed_by_publisher(SIGNED_LISTING, &[]).is_err());
+        assert!(signed_by_publisher(SIGNED_LISTING, &[0u8; 63]).is_err());
+    }
 
     #[test]
     fn only_github_is_fetched_from() {

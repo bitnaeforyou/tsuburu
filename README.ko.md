@@ -42,7 +42,13 @@ press ctrl+c to stop
 | Linux | `…linux-gnu.tar.gz` | **start.sh** 실행 |
 | Docker | `compose.yaml` | `docker compose pull && docker compose up -d` |
 
-서명이 없는 빌드라 각 운영체제가 **처음 한 번만** 경고합니다.
+릴리스마다 `SHA256SUMS`가 각 파일이 어떤 값이어야 하는지 말하고,
+`SHA256SUMS.sig`가 그 목록을 서명합니다. 서명에 쓰는 키는 릴리스를 올리는
+계정에 없습니다. tsuburu는 자기를 교체하기 전에 이것을 확인합니다. 직접
+확인하려면 `shasum -a 256 -c SHA256SUMS --ignore-missing`입니다.
+
+그것과 별개로 운영체제가 요구하는 코드 서명은 없는 빌드라, 각 운영체제가
+**처음 한 번만** 경고합니다.
 
 - **Windows** — 파란 *Windows의 PC 보호* 창이 뜹니다. *추가 정보* → *실행*.
 - **macOS** — *개발자를 확인할 수 없어 열 수 없습니다*. **Start

@@ -41,7 +41,14 @@ and a `START-HERE.txt` that says the same thing in two languages.
 | Linux | `…linux-gnu.tar.gz` | run **start.sh** |
 | Docker | `compose.yaml` | `docker compose pull && docker compose up -d` |
 
-These builds are not signed, so each system warns once, the first time only:
+Every release carries `SHA256SUMS`, saying what each of its files should come
+to, and `SHA256SUMS.sig`, signing that list with a key that is not on the
+account that publishes them. That is what tsuburu checks before it replaces
+itself; to check a download by hand, `shasum -a 256 -c SHA256SUMS
+--ignore-missing`.
+
+None of that is the code signing each operating system wants, so each of them
+warns once, the first time only:
 
 - **Windows** — a blue *Windows protected your PC* box. Click *More info*,
   then *Run anyway*.

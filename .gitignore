@@ -7,3 +7,10 @@
 *.log
 .env
 .env.*
+
+# Nothing that signs anything. The Android keystore and the key that signs
+# what a release says its files are both live outside this directory, at
+# ~/.tsuburu-signing; this is here so a stray copy cannot be committed.
+*.key
+*.jks
+*.pem

@@ -338,7 +338,9 @@ jobs:
 
       # What each file should come to, so an update can refuse one that
       # arrived as something else. The program will not apply a release that
-      # does not carry this.
+      # does not carry this, nor one whose signature is missing - and the
+      # signature is added from the machine that holds the key, along with
+      # the Android package, by tools/publish-release.sh.
       - name: Say what the files are
         working-directory: dist
         run: |
@@ -368,6 +370,15 @@ jobs:
           | **Mac** (Intel) | `…x86_64-apple-darwin.zip` | double-click `Start tsuburu.command` |
           | **Linux** | `…linux-gnu.tar.gz` | run `start.sh` |
           | **Docker** | `compose.yaml` | `docker compose pull && docker compose up -d` |
+
+          `SHA256SUMS` says what each of these should come to, and
+          `SHA256SUMS.sig` signs that list with a key that is not on GitHub -
+          which is what the program checks before it replaces itself. To check
+          a download by hand:
+
+          ```
+          shasum -a 256 -c SHA256SUMS --ignore-missing
+          ```
           | **Android** | `tsuburu-….apk` | open it on the phone and allow the install |
           | **iPhone** | `…unsigned.ipa` | sign it yourself, below |
 

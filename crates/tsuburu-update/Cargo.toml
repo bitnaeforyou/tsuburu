@@ -13,6 +13,9 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 tokio = { workspace = true, features = ["process", "fs", "time", "io-util", "rt"] }
 futures-util = { version = "0.3", default-features = false }
 sha2 = "0.11"
+# Verifying a release signature, and nothing else: no key generation, no
+# signing, neither of which belongs in the program people download.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 tempfile = "3"
