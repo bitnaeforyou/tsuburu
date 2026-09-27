@@ -40,6 +40,38 @@
   /// A pointer that wandered further than this was not aiming at a tap zone.
   const SLOP = 10
 
+  /// How many times a page that did not arrive is asked for again.
+  ///
+  /// A page fails for reasons that pass. The phone reclaims the memory a
+  /// decoder wanted - which is why the works that break are the animated
+  /// ones, where a single page holds every frame at once - or hitomi rotates
+  /// a path under us, or the network blinks. Without this the reader is left
+  /// looking at a broken image with no way to ask for it again short of
+  /// leaving the work and coming back.
+  const RETRIES = 3
+
+  let attempts = $state<Record<number, number>>({})
+
+  $effect(() => {
+    void pages
+    attempts = {}
+  })
+
+  function askAgain(at: number) {
+    const tried = attempts[at] ?? 0
+    if (tried >= RETRIES) return
+    // Spaced out: an immediate retry asks again while whatever went wrong is
+    // still going wrong, and three of those are gone in a frame.
+    setTimeout(() => (attempts = { ...attempts, [at]: tried + 1 }), 400 * (tried + 1))
+  }
+
+  /// Where page `at` is, made different on each retry so the browser fetches
+  /// it rather than handing back the failure it has already cached.
+  function source(at: number): string {
+    const tried = attempts[at] ?? 0
+    return tried === 0 ? pages[at].src : `${pages[at].src}?again=${tried}`
+  }
+
   const settings = $derived(reader.settings)
   const fit = $derived(fitOf(settings))
   const paged = $derived(settings.layout !== 'scroll')
@@ -379,13 +411,14 @@
     >
       {#each showing as at (at)}
         <img
-          src={pages[at].src}
+          src={source(at)}
           alt={t('common.page', { n: at + 1 })}
           width={pages[at].width}
           height={pages[at].height}
           draggable="false"
           decoding="async"
           fetchpriority="high"
+          onerror={() => askAgain(at)}
         />
       {/each}
     </div>
@@ -409,12 +442,13 @@
         bind:this={elements[at]}
         data-page={at}
         class={fit}
-        src={page.src}
+        src={source(at)}
         alt={t('common.page', { n: at + 1 })}
         width={page.width}
         height={page.height}
         loading={at <= PREFETCH ? 'eager' : 'lazy'}
         decoding="async"
+        onerror={() => askAgain(at)}
       />
     {/each}
   </div>
