@@ -183,6 +183,7 @@ export const en = {
 
   'favorites.artists': 'Artists you follow',
   'favorites.empty': 'No favorites yet. Press the star on any result to keep it here.',
+  'favorites.emptyShelf': 'Nothing on this shelf yet.',
   'favorites.count': '{n} saved',
 
   'history.clear': 'Clear',

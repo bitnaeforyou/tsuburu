@@ -181,6 +181,7 @@ export const ko: Messages = {
 
   'favorites.artists': '팔로우한 작가',
   'favorites.empty': '아직 없습니다. 결과에서 별을 누르면 여기에 담깁니다.',
+  'favorites.emptyShelf': '이 책장에는 아직 아무것도 없습니다.',
   'favorites.count': '{n}편 저장됨',
 
   'history.clear': '비우기',

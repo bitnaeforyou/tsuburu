@@ -233,9 +233,17 @@
     font-variant-numeric: tabular-nums;
     opacity: 0.75;
   }
+  /* Attached to the shelf beside them rather than standing on their own:
+     with the same outline as a shelf, three tools per shelf read as more
+     shelves than there are. */
   .edit {
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0.4rem;
     line-height: 1;
+    border-color: transparent;
+    background: transparent;
+  }
+  .edit:hover:not(:disabled) {
+    border-color: var(--line);
   }
   .make {
     border-style: dashed;

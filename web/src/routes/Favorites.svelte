@@ -103,7 +103,7 @@
     <ErrorNote {error} onretry={load} />
   {:else if loading}
     <p class="count">{t('common.loading')}</p>
-  {:else if visible.length === 0}
+  {:else if starred.length === 0}
     <p class="count">{t('favorites.empty')}</p>
   {:else}
     <div class="tidy">
@@ -121,7 +121,11 @@
       </div>
     </div>
 
-    <p class="count">{t('favorites.count', { n: visible.length })}</p>
+    <!-- A shelf with nothing on it is still a shelf, and the reader has to be
+         able to leave it: the row above stays whatever this says. -->
+    <p class="count">
+      {visible.length === 0 ? t('favorites.emptyShelf') : t('favorites.count', { n: visible.length })}
+    </p>
     <Grid>
       {#each visible as item (item.id)}
         <div class="filed">

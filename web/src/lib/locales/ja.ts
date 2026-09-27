@@ -181,6 +181,7 @@ export const ja: Messages = {
 
   'favorites.artists': 'フォロー中の作家',
   'favorites.empty': 'まだありません。結果の星を押すとここに入ります。',
+  'favorites.emptyShelf': 'この棚にはまだ何もありません。',
   'favorites.count': '{n}作品を保存',
 
   'history.clear': '消去',
