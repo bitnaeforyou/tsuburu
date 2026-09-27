@@ -75,6 +75,7 @@ export const ko: Messages = {
   'search.placeholder': '검색어 · 품번 · hitomi 주소 아무거나 · -단어로 제외',
   'search.placeholderLocal': '제목·작가·시리즈·캐릭터, 또는 품번',
   'search.clear': '검색어 지우기',
+  'search.reload': '새로 올라온 작품 보기',
   'search.in': '범위',
   'search.scopeAll': '전체',
   'search.atLeast': '{n}건 이상',

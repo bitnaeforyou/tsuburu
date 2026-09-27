@@ -76,6 +76,7 @@ export const en = {
   'search.placeholder': 'Words, a gallery number, or a hitomi address · -word excludes',
   'search.placeholderLocal': 'Title, artist, series, character — or a gallery number',
   'search.clear': 'Clear search',
+  'search.reload': 'Look for new works',
   'search.in': 'In',
   'search.scopeAll': 'everywhere',
   'search.atLeast': '{n}+ results',

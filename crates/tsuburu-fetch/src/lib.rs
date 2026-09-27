@@ -89,6 +89,17 @@ impl HttpFetcher {
         })
     }
 
+    /// Throws away everything read so far, so the next read asks hitomi.
+    ///
+    /// The byte ranges of a `.nozomi` list are cached with no expiry, which
+    /// is right while a reader looks through one answer and wrong when they
+    /// want to see what has been posted since. Nothing clears it on a timer;
+    /// only a reader asking for it does.
+    pub fn forget(&self) {
+        self.cache.clear();
+        self.lengths.clear();
+    }
+
     pub fn stats(&self) -> Stats {
         Stats {
             requests: self.counters.requests.load(Ordering::Relaxed),

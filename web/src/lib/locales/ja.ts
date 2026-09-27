@@ -75,6 +75,7 @@ export const ja: Messages = {
   'search.placeholder': '検索語・作品番号・hitomi のアドレス · -語 で除外',
   'search.placeholderLocal': 'タイトル・作家・シリーズ・キャラクター、または作品番号',
   'search.clear': '検索語を消す',
+  'search.reload': '新着を読み込む',
   'search.in': '範囲',
   'search.scopeAll': 'すべて',
   'search.atLeast': '{n}件以上',

@@ -105,6 +105,14 @@ export type SearchParams = {
   kind?: string
 }
 
+/// Throws away what the server has already read from hitomi.
+///
+/// Answered from memory, a search made an hour ago still shows what hitomi
+/// held an hour ago. This is what the reload on the search screen presses.
+export async function refresh(): Promise<void> {
+  await fetch('/api/refresh', { method: 'POST' })
+}
+
 export function search(params: SearchParams, signal?: AbortSignal): Promise<SearchResponse> {
   const search = new URLSearchParams({
     q: params.q,
@@ -506,6 +514,9 @@ export type UpdateState = {
   error?: string
   here: string
   published: boolean
+  /// What becoming the newer version means here: a computer is started again,
+  /// a phone opens its installer.
+  platform: string
 }
 
 export function updateState(): Promise<UpdateState> {

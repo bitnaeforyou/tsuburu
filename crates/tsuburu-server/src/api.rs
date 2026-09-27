@@ -5,6 +5,7 @@
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -50,6 +51,17 @@ pub struct SearchResponse {
     /// 치환하면 작가 검색이 빈손으로 돌아올 때 "안 되는 기능"이 아니라
     /// "고장난 앱"으로 보인다(스펙 4.2절).
     pub terms: Vec<tsuburu_korean::Term>,
+}
+
+/// Forgets what has already been read from hitomi.
+///
+/// Answering a search out of this process is what makes paging through one
+/// instant, and is also why a list looked at an hour ago is the list as it
+/// was an hour ago. A reader who wants to see what has been posted since
+/// says so here, and the next search is asked of hitomi.
+pub async fn refresh(State(state): State<Arc<AppState>>) -> StatusCode {
+    state.forget_fetched().await;
+    StatusCode::NO_CONTENT
 }
 
 pub async fn search(

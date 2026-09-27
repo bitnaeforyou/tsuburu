@@ -4,7 +4,8 @@
   import { defaultSearch, galleryNamed, toGallery, toSearch, type SearchState } from '../lib/router'
   import { remember as rememberSearch } from '../lib/preferences'
   import { library } from '../lib/library.svelte'
-  import { markScroll, recall, remember } from '../lib/results.svelte'
+  import { forget as forgetResults, markScroll, recall, remember } from '../lib/results.svelte'
+  import { forget as forgetCards } from '../lib/cards.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -35,6 +36,9 @@
   /// How many works have been read, so a search that finds nothing can say
   /// how small the haystack was rather than implying the needle is not there.
   let readSoFar = $state(0)
+  /// An everywhere search draws its sections from a child that fetches on
+  /// mount, so the only way to make it ask again is to build it again.
+  let generation = $state(0)
 
   $effect(() => {
     void library.load().catch(() => {})
@@ -237,6 +241,28 @@
     }
   }
 
+  /// Asks hitomi the same question over again.
+  ///
+  /// Three caches sit between the reader and hitomi - the results on this
+  /// page, the cards in this tab, the lists in the server - and together they
+  /// are why paging is instant and why a screen left open is an hour out of
+  /// date. A button rather than a timer: refetching under someone who is
+  /// reading a list moves it.
+  async function again() {
+    forgetResults()
+    forgetCards()
+    try {
+      await api.refresh()
+    } catch {
+      // The server not answering is the search's problem to report, not
+      // this button's.
+    }
+    generation += 1
+    if (sectioned) return
+    await load(0)
+    scrollTo(0, 0)
+  }
+
   function go(changes: Partial<SearchState>) {
     const next = { ...params, ...changes }
     // A number or a hitomi address is the work itself, not something to look
@@ -271,7 +297,13 @@
   const slowSort = $derived(loading && params.sort !== 'date' && total > 0 && total < 500)
 </script>
 
-<AppHeader active="search" />
+<AppHeader active="search">
+  {#snippet actions()}
+    <button class="again" onclick={again} disabled={loading} title={t('search.reload')} aria-label={t('search.reload')}>
+      <span aria-hidden="true">↻</span>
+    </button>
+  {/snippet}
+</AppHeader>
 <SearchBar {params} onchange={go} {localAvailable} {dialogueAvailable} />
 
 <main>
@@ -286,7 +318,9 @@
   {/if}
 
   {#if sectioned}
-    <AllResults {params} {localAvailable} {dialogueAvailable} />
+    {#key generation}
+      <AllResults {params} {localAvailable} {dialogueAvailable} />
+    {/key}
   {:else}
   <Terms {terms} />
 
@@ -352,5 +386,43 @@
   .more {
     margin: 1.5rem auto 0;
     display: block;
+  }
+
+  .again {
+    display: grid;
+    place-items: center;
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    padding: 0;
+    font-size: 1.1rem;
+    line-height: 1;
+    color: var(--muted);
+    background: none;
+    border: none;
+    border-radius: var(--radius);
+  }
+
+  .again:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--raised);
+  }
+
+  /* Turning while it works is the only sign anything is happening: the list
+     below does not change until the answer comes back. */
+  .again:disabled span {
+    animation: turn 0.9s linear infinite;
+  }
+
+  @keyframes turn {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .again:disabled span {
+      animation: none;
+      opacity: 0.5;
+    }
   }
 </style>

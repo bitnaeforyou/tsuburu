@@ -168,6 +168,20 @@ impl AppState {
         self
     }
 
+    /// Forgets what hitomi has already answered, so the next question goes
+    /// to hitomi.
+    ///
+    /// Everything here is cached because none of it changes while a reader
+    /// looks at one answer - but hitomi is posted to continuously, and a
+    /// reader who comes back an hour later is looking at the list as it was
+    /// when they arrived. This is what the reload on the search screen does.
+    pub async fn forget_fetched(&self) {
+        self.fetcher.forget();
+        *self.version.write().await = None;
+        *self.gg.write().await = None;
+        self.cards.clear();
+    }
+
     pub async fn version(&self) -> Result<String, tsuburu_hitomi::SearchError> {
         if let Some(cached) = self.version.read().await.as_ref()
             && cached.is_fresh()

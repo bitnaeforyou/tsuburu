@@ -33,6 +33,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/search", get(api::search))
         .route("/api/cards", get(api::cards))
         .route("/api/words", get(api::words))
+        .route("/api/refresh", post(api::refresh))
         .route("/api/gallery/{id}", get(api::gallery))
         .route("/api/favorites", get(library::list_favorites))
         .route("/api/favorites/{id}", put(library::add_favorite).delete(library::remove_favorite))
