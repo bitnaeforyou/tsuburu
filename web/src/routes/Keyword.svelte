@@ -17,17 +17,23 @@
     void load(word)
   })
 
+  /// Which fetch is the current one; a word left for another must not have
+  /// its answer land on the new one.
+  let asked = 0
+
   async function load(term: string) {
+    const mine = ++asked
     loading = true
     error = null
     try {
       const found = await api.keywordSearch(term, 50)
+      if (mine !== asked) return
       ids = found.works.map((w) => w.id)
       tooCommon = found.too_common ?? null
     } catch (cause) {
-      error = cause
+      if (mine === asked) error = cause
     } finally {
-      loading = false
+      if (mine === asked) loading = false
     }
   }
 </script>

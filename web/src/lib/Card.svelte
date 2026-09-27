@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import * as api from './api'
   import * as cards from './cards.svelte'
   import { library, read } from './library.svelte'
@@ -56,7 +57,9 @@
 
   // 갤러리 메타데이터는 한 건에 수십~수백 KB다. 화면에 들어온 카드만 받는다.
   $effect(() => {
-    if ((preset && preset.thumbnail_hash) || card || !element) return
+    // `card` is what the fetch below writes, so reading it here made every
+    // answer re-run this and build an observer for a card that has arrived.
+    if ((preset && preset.thumbnail_hash) || untrack(() => card) || !element) return
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((e) => e.isIntersecting)) return
@@ -127,7 +130,11 @@
     {/if}
     {#if topTags.length}
       <p class="tags" title={topTags.map((tag) => tag.word).join(' · ')}>
-        {#each topTags as tag, i (tag.word)}
+        <!-- Keyed by place, not by the word: hitomi ships the same tag for
+             both people - `female:cheating` and `male:cheating` - and the
+             namespace is what this strips, so two rows can say the same
+             thing. -->
+        {#each topTags as tag, i (i)}
           {#if i > 0}<span class="dot">·</span>{/if}<span class={tag.who ?? 'plain'}>{tag.word}</span>
         {/each}
       </p>

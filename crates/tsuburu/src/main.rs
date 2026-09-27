@@ -394,11 +394,23 @@ fn describe_gallery(err: tsuburu_hitomi::GalleryFetchError) -> anyhow::Error {
     }
 }
 
+/// `Targets` rather than `EnvFilter`: it reads the same
+/// `tsuburu=debug,other=warn` that anyone would type, and `EnvFilter`'s extra
+/// syntax - matching on a field's value - costs a regex engine, which was
+/// 130 KB of a 2.6 MB program to serve one environment variable.
 fn init_tracing(verbose: bool) {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+
     let default = if verbose { "tsuburu=debug,tsuburu_fetch=debug" } else { "warn" };
-    let filter = tracing_subscriber::EnvFilter::try_from_env("TSUBURU_LOG")
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default));
-    tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).init();
+    let filter: tracing_subscriber::filter::Targets = std::env::var("TSUBURU_LOG")
+        .ok()
+        .and_then(|asked| asked.parse().ok())
+        .unwrap_or_else(|| default.parse().expect("the built-in filter parses"));
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(filter)
+        .init();
 }
 
 /// Reading a `data.db` through the `sqlite3` command.

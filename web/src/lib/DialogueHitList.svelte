@@ -8,6 +8,10 @@
   /// A line that was found, and the work it was found in. The line is the
   /// answer, so it is what the row is mostly made of; the cover and the title
   /// are there to say which book it came out of.
+  ///
+  /// What it looks up is kept for as long as the list is, so the caller
+  /// builds a new one per search rather than letting one accumulate every
+  /// work the reader has ever searched past.
   let { hits }: { hits: DialogueHit[] } = $props()
 
   let known = $state(new Map<number, api.Card | null>())
@@ -31,17 +35,23 @@
     return [...seen.values()]
   })
 
+  /// Which ids have been asked for, kept outside the reactive map: the
+  /// effect below reads it to decide, and writes the map - reading the map
+  /// as well made every answer re-run the effect over the whole page.
+  let asked = new Set<number>()
+
   // One request for the page of results rather than one per row.
   $effect(() => {
     for (const hit of hits) {
-      if (known.has(hit.gallery_id)) continue
-      known.set(hit.gallery_id, null)
+      if (asked.has(hit.gallery_id)) continue
+      asked.add(hit.gallery_id)
       void cards
         .card(hit.gallery_id)
         .then((card) => (known = new Map(known).set(hit.gallery_id, card)))
         .catch(() => {})
     }
   })
+
 
 </script>
 

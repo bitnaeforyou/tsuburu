@@ -28,7 +28,13 @@
     void load(0)
   })
 
+  /// Which fetch is the current one. This screen is reused from one artist
+  /// to the next, so a slow answer for the one you left must not land on the
+  /// one you opened.
+  let asked = 0
+
   async function load(from: number) {
+    const mine = ++asked
     loading = true
     error = null
     try {
@@ -36,12 +42,13 @@
         namespace === 'series'
           ? await api.series(artist, from, PAGE, language)
           : await api.artist(artist, from, PAGE, language)
+      if (mine !== asked) return
       info = page
       ids = from === 0 ? page.ids : [...ids, ...page.ids]
     } catch (cause) {
-      error = cause
+      if (mine === asked) error = cause
     } finally {
-      loading = false
+      if (mine === asked) loading = false
     }
   }
 

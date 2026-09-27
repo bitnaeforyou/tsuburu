@@ -52,9 +52,21 @@
 
   let attempts = $state<Record<number, number>>({})
 
+  /// Retries waiting to happen, so leaving the work cancels them rather than
+  /// letting them fire at a component that is gone and at an index the next
+  /// work may not have.
+  let pending = new Set<ReturnType<typeof setTimeout>>()
+
   $effect(() => {
     void pages
     attempts = {}
+    decoded = new Set()
+    for (const timer of pending) clearTimeout(timer)
+    pending = new Set()
+    return () => {
+      for (const timer of pending) clearTimeout(timer)
+      pending.clear()
+    }
   })
 
   function askAgain(at: number) {
@@ -62,7 +74,11 @@
     if (tried >= RETRIES) return
     // Spaced out: an immediate retry asks again while whatever went wrong is
     // still going wrong, and three of those are gone in a frame.
-    setTimeout(() => (attempts = { ...attempts, [at]: tried + 1 }), 400 * (tried + 1))
+    const timer = setTimeout(() => {
+      pending.delete(timer)
+      attempts = { ...attempts, [at]: tried + 1 }
+    }, 400 * (tried + 1))
+    pending.add(timer)
   }
 
   /// Where page `at` is, made different on each retry so the browser fetches
@@ -165,9 +181,22 @@
     elements[page]?.scrollIntoView({ block: 'start' })
   })
 
+  /// Pages already decoded ahead, so one is never decoded twice. Cleared
+  /// with the retries when the work changes.
+  let decoded = new Set<number>()
+
   // Decoding ahead, not just fetching: a decode on the turn is what stutters.
+  //
+  // Only where pages are turned. Scrolling moves `where` past every page of
+  // the work, so this used to run once per page and decode four full-size
+  // images each time - a hundred and thirty pages of an animated work is
+  // several hundred decodes of something the browser is lazily loading by
+  // itself, which is the memory pressure that made those works break.
   $effect(() => {
+    if (!paged) return
     for (const at of toPrefetch(where, pages.length, PREFETCH)) {
+      if (decoded.has(at)) continue
+      decoded.add(at)
       const image = new Image()
       image.src = pages[at].src
       void image.decode().catch(() => {})

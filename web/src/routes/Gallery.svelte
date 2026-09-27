@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
+  import { keptThisVisit } from '../lib/kept'
   import { untrack } from 'svelte'
   import { i18n, t, number } from '../lib/i18n.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
@@ -91,6 +92,9 @@
   /// Which fetch is the current one. An older one that comes back late must
   /// not put its answer on the screen, and must not take it off either.
   let asked = 0
+  /// The same, for what is optional beside the work: they are asked for
+  /// separately, so they are counted separately.
+  let wanted = 0
 
   $effect(() => {
     // Both are read here, so that arriving at another work - or at another page
@@ -142,17 +146,25 @@
   }
 
   // Keywords come from an optional import; their absence is not an error.
+  //
+  // Counted like the work itself: this screen is reused from one work to the
+  // next, so an answer for the one you just left would otherwise land on the
+  // one you just opened.
   $effect(() => {
-    void id
+    const mine = ++wanted
     keywords = []
     near = []
     void api
       .keywords(id)
-      .then((found) => (keywords = found.words.slice(0, 12)))
+      .then((found) => {
+        if (mine === wanted) keywords = found.words.slice(0, 12)
+      })
       .catch(() => {})
     void api
       .nearWorks(id, 12)
-      .then((found) => (near = found))
+      .then((found) => {
+        if (mine === wanted) near = found
+      })
       .catch(() => {})
   })
 
@@ -237,7 +249,7 @@
       history.back()
       return
     }
-    location.hash = sessionStorage.getItem('tsuburu.lastSearch') ?? toSearch()
+    location.hash = keptThisVisit('tsuburu.lastSearch') ?? toSearch()
   }
 
   /// Opening the reader is a step of its own, so closing it comes back here

@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as api from './api'
   import { t, number } from './i18n.svelte'
+  import { keep, kept } from './kept'
 
   let {
     /// Whether saying no should be remembered.
@@ -18,28 +19,25 @@
   let dismissed = $state(false)
 
   function remember() {
-    if (!ask) return
-    try {
-      localStorage.setItem(ASKED, 'yes')
-    } catch {
-      // A private window forgets; being asked twice is not a fault.
-    }
+    // A private window forgets; being asked twice is not a fault.
+    if (ask) keep(ASKED, 'yes')
   }
 
   function asked(): boolean {
-    if (!ask) return false
-    try {
-      return localStorage.getItem(ASKED) === 'yes'
-    } catch {
-      return false
-    }
+    return ask && kept(ASKED) === 'yes'
   }
 
+  // Watched only while there is something to watch. The poll's one
+  // dependency used to be a prop that never changes, so pressing "not now",
+  // or the corpus finishing, hid the banner and left a request a second
+  // running for as long as the screen was open - two of them on the search
+  // screen, which mounts this twice.
   $effect(() => {
     if (asked()) {
       dismissed = true
       return
     }
+    if (dismissed || corpus?.available === false || corpus?.state === 'ready') return
     void look()
     const timer = setInterval(() => void look(), 1000)
     return () => clearInterval(timer)

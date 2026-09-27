@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import type { Mode, Scope, Sort, SearchState } from './router'
   import * as api from './api'
   import { t, type Key } from './i18n.svelte'
@@ -39,9 +40,16 @@
   const LANGUAGES = ['all', 'korean', 'japanese', 'english', 'chinese', 'spanish']
   const KINDS = ['all', 'doujinshi', 'manga', 'artistcg', 'gamecg', 'imageset']
 
-  let input = $state(params.query)
+  let input = $state(untrack(() => params.query))
+  /// The query the box was last told about. Every navigation hands over a
+  /// fresh `params`, so syncing on that alone threw away whatever had been
+  /// typed and not yet submitted - change a filter chip and the words were
+  /// gone.
+  let told = untrack(() => params.query)
 
   $effect(() => {
+    if (params.query === told) return
+    told = params.query
     input = params.query
   })
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { parse, type Route } from './lib/router'
+  import { kept } from './lib/kept'
   import Search from './routes/Search.svelte'
   import Gallery from './routes/Gallery.svelte'
   import Favorites from './routes/Favorites.svelte'
@@ -17,7 +18,7 @@
   $effect(() => {
     document.documentElement.lang = i18n.locale
   })
-  let confirmed = $state(localStorage.getItem('tsuburu.age') === 'ok')
+  let confirmed = $state(kept('tsuburu.age') === 'ok')
 
   $effect(() => {
     const onHash = () => (route = parse(location.hash))

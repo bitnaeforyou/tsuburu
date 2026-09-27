@@ -140,7 +140,9 @@
 {#if dialogueAvailable && (dialogue.state === 'loading' || dialogue.items.length)}
   <section>
     {@render heading(t('search.scopeDialogue'), dialogue, toSearch({ ...params, scope: 'dialogue' }))}
-    <DialogueHitList hits={dialogue.items} />
+    {#key params.query}
+      <DialogueHitList hits={dialogue.items} />
+    {/key}
   </section>
 {/if}
 

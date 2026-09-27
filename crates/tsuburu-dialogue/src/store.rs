@@ -255,6 +255,10 @@ pub struct DialogueStore {
     /// that cost more than the search it was preparing for: over a second,
     /// against four hundred milliseconds of actual matching.
     keys: RwLock<Option<(u64, Arc<Vec<i32>>)>>,
+    /// How many works are in each state, as of a generation. Every dialogue
+    /// search answer carries this, and working it out reads and parses every
+    /// job record - 65 ms against the 7 ms the rest of a held answer costs.
+    tallied: RwLock<Option<(u64, Counts)>>,
     /// The last few answers, newest first.
     answers: Mutex<Vec<Answer>>,
 }
@@ -275,6 +279,7 @@ impl DialogueStore {
             path,
             generation: AtomicU64::new(0),
             keys: RwLock::new(None),
+            tallied: RwLock::new(None),
             answers: Mutex::new(Vec::new()),
         };
         store.init_schema()?;
@@ -329,6 +334,14 @@ impl DialogueStore {
     }
 
     /// The ids to partition a search over, read once per change.
+    ///
+    /// Taken from the jobs rather than from the codes, although the codes are
+    /// what gets scanned. Every work with codes has a job, so the boundaries
+    /// are the same or wider - and a boundary is all these are, since each
+    /// worker scans the codes between two of them. Walking the codes instead
+    /// dragged the whole of their values through redb's iterator: on a
+    /// hundred thousand works that is a gigabyte read to collect a list of
+    /// integers, and it measured 7.4 s against 65 ms.
     fn search_keys(&self) -> Result<Arc<Vec<i32>>, DialogueError> {
         let now = self.generation();
         if let Ok(held) = self.keys.read()
@@ -339,9 +352,9 @@ impl DialogueStore {
         }
 
         let tx = self.db.begin_read().map_err(db_err)?;
-        let codes = tx.open_table(CODES).map_err(db_err)?;
+        let jobs = tx.open_table(JOBS).map_err(db_err)?;
         let mut keys = Vec::new();
-        for row in codes.iter().map_err(db_err)? {
+        for row in jobs.iter().map_err(db_err)? {
             keys.push(row.map_err(db_err)?.0.value());
         }
         let keys = Arc::new(keys);
@@ -352,22 +365,31 @@ impl DialogueStore {
     }
 
     /// The total, and the page of it that is held.
-    fn remembered(&self, query: &str) -> Option<(usize, Vec<Hit>)> {
+    /// The page of a held answer, if the answer is still good.
+    ///
+    /// Only the page is copied. Copying the whole answer to hand back twenty
+    /// rows cost 7 ms a page on an answer of forty-six thousand hits, and
+    /// paging through it is the one thing holding the answer was for.
+    fn remembered(&self, query: &str, offset: usize, limit: usize) -> Option<Found> {
         let now = self.generation();
         let mut answers = self.answers.lock().ok()?;
         let at = answers.iter().position(|(at, q, _, _)| *at == now && q == query)?;
         // Asked again, so it is the most recent thing anyone wanted.
         let found = answers.remove(at);
-        let answer = (found.2, found.3.clone());
+        let page = Found {
+            total: found.2,
+            reachable: found.3.len(),
+            hits: found.3.iter().skip(offset).take(limit).cloned().collect(),
+        };
         answers.insert(0, found);
-        Some(answer)
+        Some(page)
     }
 
-    fn remember(&self, query: &str, total: usize, hits: &[Hit]) {
+    fn remember(&self, query: &str, total: usize, hits: Vec<Hit>) {
         let now = self.generation();
         let Ok(mut answers) = self.answers.lock() else { return };
         answers.retain(|(at, q, _, _)| *at == now && q != query);
-        answers.insert(0, (now, query.to_string(), total, hits.to_vec()));
+        answers.insert(0, (now, query.to_string(), total, hits));
         answers.truncate(REMEMBERED);
 
         // Oldest first, until what is left fits. The newest answer is the one
@@ -615,6 +637,21 @@ impl DialogueStore {
     }
 
     pub fn counts(&self) -> Result<Counts, DialogueError> {
+        let now = self.generation();
+        if let Ok(held) = self.tallied.read()
+            && let Some((at, counts)) = held.as_ref()
+            && *at == now
+        {
+            return Ok(counts.clone());
+        }
+        let counts = self.tally()?;
+        if let Ok(mut held) = self.tallied.write() {
+            *held = Some((now, counts.clone()));
+        }
+        Ok(counts)
+    }
+
+    fn tally(&self) -> Result<Counts, DialogueError> {
         let tx = self.db.begin_read().map_err(db_err)?;
         let jobs = tx.open_table(JOBS).map_err(db_err)?;
         let mut counts = Counts::default();
@@ -851,14 +888,11 @@ impl DialogueStore {
             if job.status != Status::Done || (reading_only && !job.from_reading) {
                 continue;
             }
-            let id = key.value();
-            let bytes = texts.get(id).map_err(db_err)?.map(|v| v.value().len()).unwrap_or(0)
-                + codes.get(id).map_err(db_err)?.map(|v| v.value().len()).unwrap_or(0);
             out.push(Stored {
-                id,
+                id: key.value(),
                 pages: job.pages,
                 lines: job.lines,
-                bytes: bytes as u64,
+                bytes: 0,
                 finished_at: job.finished_at,
                 from_reading: job.from_reading,
                 imported: job.source.is_some(),
@@ -866,6 +900,16 @@ impl DialogueStore {
         }
         out.sort_unstable_by(|a, b| b.finished_at.cmp(&a.finished_at).then(b.id.cmp(&a.id)));
         out.truncate(limit);
+
+        // How much each one takes is two random lookups in tables the size of
+        // the corpus, and the caller asked for a page of them: doing it
+        // before the truncation did it a hundred thousand times to answer
+        // with twenty rows.
+        for row in &mut out {
+            row.bytes = (texts.get(row.id).map_err(db_err)?.map(|v| v.value().len()).unwrap_or(0)
+                + codes.get(row.id).map_err(db_err)?.map(|v| v.value().len()).unwrap_or(0))
+                as u64;
+        }
         Ok(out)
     }
 
@@ -1074,17 +1118,12 @@ impl DialogueStore {
         offset: usize,
         limit: usize,
     ) -> Result<Found, DialogueError> {
-        let page = |total: usize, kept: Vec<Hit>| Found {
-            total,
-            reachable: kept.len(),
-            hits: kept.into_iter().skip(offset).take(limit).collect(),
-        };
         let query = Query::new(asked);
         if query.is_empty() || limit == 0 {
             return Ok(Found::default());
         }
-        if let Some((total, kept)) = self.remembered(asked) {
-            return Ok(page(total, kept));
+        if let Some(page) = self.remembered(asked, offset, limit) {
+            return Ok(page);
         }
 
         // Galleries cluster in recent ids, so ranges are cut by count, not by
@@ -1145,8 +1184,13 @@ impl DialogueStore {
             })
             .count();
         hits.truncate(fits.max(1).min(total));
-        self.remember(asked, total, &hits);
-        Ok(page(total, hits))
+        let page = Found {
+            total,
+            reachable: hits.len(),
+            hits: hits.iter().skip(offset).take(limit).cloned().collect(),
+        };
+        self.remember(asked, total, hits);
+        Ok(page)
     }
 
     fn scan_range(
@@ -1722,8 +1766,8 @@ mod tests {
         assert_eq!(again[0].snippet, first[0].snippet);
         // Kept by the phrase, not by the page size: a second page of the same
         // question is answered without touching the disk again.
-        assert!(store.remembered("구급차").is_some());
-        assert!(store.remembered("소방차").is_none());
+        assert!(store.remembered("구급차", 0, 10).is_some());
+        assert!(store.remembered("소방차", 0, 10).is_none());
     }
 
     /// A shard taken in once is not fetched again.
@@ -1777,12 +1821,12 @@ mod tests {
         let store = DialogueStore::open(dir.path().join("d.redb")).unwrap();
         store.complete(1, &[page(0, "구급차라도 부르는 게 좋겠어요")]).unwrap();
         assert_eq!(store.search("구급차", 5).unwrap().len(), 1);
-        assert!(store.remembered("구급차").is_some());
+        assert!(store.remembered("구급차", 0, 10).is_some());
         let keys = store.search_keys().unwrap();
         assert_eq!(keys.len(), 1);
 
         store.complete(2, &[page(0, "구급차를 불렀다")]).unwrap();
-        assert!(store.remembered("구급차").is_none(), "the old answer is stale");
+        assert!(store.remembered("구급차", 0, 10).is_none(), "the old answer is stale");
         assert_eq!(store.search_keys().unwrap().len(), 2, "the new work is searchable");
         assert_eq!(store.search("구급차", 5).unwrap().len(), 2);
     }

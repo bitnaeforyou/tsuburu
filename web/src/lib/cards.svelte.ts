@@ -8,8 +8,12 @@
 
 import * as api from './api'
 
-/** The server refuses more than this per request. */
+/** The server answers at most this many per request and drops the rest. */
 const MAX_PER_REQUEST = 50
+/// How many cards to keep. A long session pages through thousands of them,
+/// and each holds a title, the artists and the tags - on the device most
+/// likely to have its memory taken away.
+const KEEP = 400
 /** Long enough for a page of cards to mount, short enough not to be felt. */
 const BATCH_MS = 20
 
@@ -30,7 +34,12 @@ export function forget() {
 
 export function card(id: number): Promise<api.Card | null> {
   const cached = resolved.get(id)
-  if (cached) return Promise.resolve(cached)
+  if (cached) {
+    // Asked for again, so it is not the one to drop next.
+    resolved.delete(id)
+    resolved.set(id, cached)
+    return Promise.resolve(cached)
+  }
 
   return new Promise((resolve, reject) => {
     const queue = waiting.get(id)
@@ -41,6 +50,16 @@ export function card(id: number): Promise<api.Card | null> {
     waiting.set(id, [{ resolve, reject }])
     if (timer === null) timer = setTimeout(flush, BATCH_MS)
   })
+}
+
+/// Drops the ones asked for longest ago. A Map keeps insertion order, so
+/// the oldest is the first one out.
+function trim() {
+  while (resolved.size > KEEP) {
+    const oldest = resolved.keys().next().value
+    if (oldest === undefined) break
+    resolved.delete(oldest)
+  }
 }
 
 async function flush() {
@@ -64,6 +83,7 @@ async function flush() {
       if (found) resolved.set(id, found)
       for (const listener of listeners) listener.resolve(found)
     }
+    trim()
   } catch (error) {
     for (const listeners of claimed.values()) {
       for (const listener of listeners) listener.reject(error)

@@ -1,10 +1,11 @@
 <script lang="ts">
   import { t } from './i18n.svelte'
+  import { keep } from './kept'
 
   let { onconfirm }: { onconfirm: () => void } = $props()
 
   function confirm() {
-    localStorage.setItem('tsuburu.age', 'ok')
+    keep('tsuburu.age', 'ok')
     onconfirm()
   }
 </script>

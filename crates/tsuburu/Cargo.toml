@@ -26,4 +26,4 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi", "registry"] }

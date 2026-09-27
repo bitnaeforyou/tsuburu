@@ -6,6 +6,7 @@
   import { library } from '../lib/library.svelte'
   import { forget as forgetResults, markScroll, recall, remember } from '../lib/results.svelte'
   import { forget as forgetCards } from '../lib/cards.svelte'
+  import { keepThisVisit } from '../lib/kept'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -57,7 +58,7 @@
   const sectioned = $derived(params.scope === 'all' && params.query.trim().length > 0)
 
   $effect(() => {
-    if (params.query) sessionStorage.setItem('tsuburu.lastSearch', location.hash)
+    if (params.query) keepThisVisit('tsuburu.lastSearch', location.hash)
   })
 
   // The same for a search arrived at by its own address, so a pasted
@@ -85,6 +86,8 @@
   // 검색어나 정렬, 필터가 바뀌면 처음부터 다시 그린다.
   $effect(() => {
     const asked = key
+    stopRestore?.()
+    stopRestore = undefined
     ids = []
     terms = []
     hits = []
@@ -104,7 +107,7 @@
       hits = before.hits
       total = before.total
       offset = before.offset
-      restoreScroll(before.scrollY)
+      stopRestore = restoreScroll(before.scrollY)
       return
     }
     // What was written down carries the ids but not the passages a dialogue
@@ -121,13 +124,22 @@
     void load(0)
   })
 
+  /// Cancels the scroll restore that is still settling, if one is.
+  let stopRestore: (() => void) | undefined
+
+  // Whatever is still settling when this screen goes has to go with it.
+  $effect(() => () => {
+    stopRestore?.()
+    stopRestore = undefined
+  })
+
   /// Puts the page back where it was.
   ///
   /// Once is not enough: the cards below the fold have no height until they
   /// are drawn, and their covers arrive later still, so an early attempt runs
   /// out of page before it gets there. It keeps asking for a second while the
   /// page settles, and stops as soon as the reader takes over.
-  function restoreScroll(want: number) {
+  function restoreScroll(want: number): (() => void) | undefined {
     if (want <= 0) return
     let settled = false
     const give = () => (settled = true)
@@ -144,12 +156,20 @@
         scrollTo(0, want)
       }, after),
     )
-    setTimeout(() => {
+    const stop = () => {
       removeEventListener('wheel', give)
       removeEventListener('touchstart', give)
       removeEventListener('keydown', give)
       timers.forEach(clearTimeout)
-    }, 1400)
+    }
+    const last = setTimeout(stop, 1400)
+    // Handed back so leaving the screen cancels them. They used to outlive
+    // it: tapping a result within the second put the gallery that replaced
+    // this screen back to where the search had been scrolled to.
+    return () => {
+      clearTimeout(last)
+      stop()
+    }
   }
 
   // Kept as it changes, and the place on the page kept as it is left.
@@ -182,7 +202,7 @@
   /// without the passages in it.
   async function reload(upTo: number, scrollY: number) {
     await load(0, Math.max(PAGE, upTo))
-    restoreScroll(scrollY)
+    stopRestore = restoreScroll(scrollY)
   }
 
   async function load(from: number, want = PAGE) {
@@ -350,7 +370,9 @@
     <!-- Where it is worth the most: the results are thin, and the reason is
          that the corpus is not in yet. -->
     <CorpusOffer />
-    <DialogueHitList {hits} />
+    {#key key}
+      <DialogueHitList {hits} />
+    {/key}
     {#if beyondPaging}
       <p class="count">{t('search.beyondPaging', { n: number(reachable), total: number(total) })}</p>
     {/if}

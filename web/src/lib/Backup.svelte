@@ -41,13 +41,20 @@
 
   /// A blob the browser saves under a name, which is as close as a page gets
   /// to writing a file.
+  ///
+  /// The link has to be in the document before it is pressed - a detached one
+  /// is ignored by some browsers - and the blob has to outlive the press,
+  /// which revoking it in the same tick did not let it do for a large backup.
   function offer(text: string, name: string) {
     const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
     const link = document.createElement('a')
     link.href = url
     link.download = name
+    link.style.display = 'none'
+    document.body.append(link)
     link.click()
-    URL.revokeObjectURL(url)
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 0)
   }
 
   async function load(event: Event) {
