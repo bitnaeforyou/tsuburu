@@ -11,9 +11,10 @@
 //! has been refused since Android 7.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicPtr, Ordering};
 
 use jni::objects::{JClass, JObject, JValue};
-use jni::sys::{JavaVM as RawVm, jint, jsize};
+use jni::sys::JavaVM as RawVm;
 use jni::{JNIEnv, JavaVM};
 
 /// `Intent.FLAG_GRANT_READ_URI_PERMISSION` - without it the installer, which
@@ -32,23 +33,36 @@ const PACKAGE: &str = "application/vnd.android.package-archive";
 pub fn install(apk: &Path) -> Result<(), String> {
     let vm = machine()?;
     let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
-    let context = application(&mut env)?;
+
+    let done = ask(&mut env, apk);
+    // A Java call that threw leaves the exception standing, and a thread that
+    // detaches with one standing takes the process down - so the update would
+    // not report a failure, it would end the app.
+    if env.exception_check().unwrap_or(false) {
+        env.exception_describe().ok();
+        env.exception_clear().ok();
+    }
+    done
+}
+
+fn ask(env: &mut JNIEnv, apk: &Path) -> Result<(), String> {
+    let context = application(env)?;
 
     // The reader has to have allowed this app to install applications, and
     // the only thing that can ask them is the settings screen for it.
-    if !may_install(&mut env, &context)? {
-        return ask_to_allow(&mut env, &context);
+    if !may_install(env, &context)? {
+        return ask_to_allow(env, &context);
     }
 
     // Matches `android:authorities` on the provider in the manifest.
-    let name = package_name(&mut env, &context)?;
-    let authority = text(&mut env, &format!("{name}.fileprovider"))?;
-    let path = text(&mut env, &apk.to_string_lossy())?;
+    let name = package_name(env, &context)?;
+    let authority = text(env, &format!("{name}.fileprovider"))?;
+    let path = text(env, &apk.to_string_lossy())?;
     let file = env
         .new_object("java/io/File", "(Ljava/lang/String;)V", &[JValue::Object(&path)])
         .map_err(|e| e.to_string())?;
 
-    let provider = app_class(&mut env, &context, "androidx.core.content.FileProvider")?;
+    let provider = app_class(env, &context, "androidx.core.content.FileProvider")?;
     let uri = env
         .call_static_method(
             &provider,
@@ -59,8 +73,8 @@ pub fn install(apk: &Path) -> Result<(), String> {
         .and_then(|value| value.l())
         .map_err(|e| e.to_string())?;
 
-    let intent = intent(&mut env, "android.intent.action.VIEW")?;
-    let kind = text(&mut env, PACKAGE)?;
+    let intent = intent(env, "android.intent.action.VIEW")?;
+    let kind = text(env, PACKAGE)?;
     env.call_method(
         &intent,
         "setDataAndType",
@@ -76,29 +90,26 @@ pub fn install(apk: &Path) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
-    start(&mut env, &context, &intent)
+    start(env, &context, &intent)
 }
 
 /// The Java machine this process is already running.
 ///
-/// Asked for at runtime rather than kept from an entry point, because the
-/// entry points here belong to Tauri and none of them hands one over. The
-/// symbol is in the runtime that is already loaded, so it is looked up in the
-/// process rather than linked against - the NDK publishes no library to link
-/// it from.
+/// Handed over once, as the library is loaded, and never offered again:
+/// there is no way to ask for it later. `dlsym` does not answer for it
+/// either - `JNI_GetCreatedJavaVMs` lives in a library an app is not allowed
+/// to reach into.
+static MACHINE: AtomicPtr<RawVm> = AtomicPtr::new(std::ptr::null_mut());
+
+/// Called by the library's entry point with what Android handed it.
+pub fn note_machine(vm: *mut std::ffi::c_void) {
+    MACHINE.store(vm.cast(), Ordering::Release);
+}
+
 fn machine() -> Result<JavaVM, String> {
-    type Created = unsafe extern "C" fn(*mut *mut RawVm, jsize, *mut jsize) -> jint;
-
-    let symbol = unsafe { libc::dlsym(libc::RTLD_DEFAULT, c"JNI_GetCreatedJavaVMs".as_ptr()) };
-    if symbol.is_null() {
-        return Err("this process has no Java machine in it".into());
-    }
-    let created: Created = unsafe { std::mem::transmute(symbol) };
-
-    let mut raw: *mut RawVm = std::ptr::null_mut();
-    let mut found: jsize = 0;
-    if unsafe { created(&mut raw, 1, &mut found) } != 0 || found == 0 || raw.is_null() {
-        return Err("the Java machine could not be reached".into());
+    let raw = MACHINE.load(Ordering::Acquire);
+    if raw.is_null() {
+        return Err("the Java machine was never handed over".into());
     }
     unsafe { JavaVM::from_raw(raw) }.map_err(|e| e.to_string())
 }

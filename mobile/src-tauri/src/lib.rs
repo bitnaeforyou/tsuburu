@@ -10,6 +10,17 @@ use std::sync::Arc;
 
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
+/// Android hands the Java machine to a library as it loads it, and never
+/// offers it again. The update needs it: replacing this app is done by asking
+/// the system installer, and asking is a Java call.
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "C" fn JNI_OnLoad(vm: *mut std::ffi::c_void, _reserved: *mut std::ffi::c_void) -> i32 {
+    tsuburu_update::note_machine(vm);
+    // JNI_VERSION_1_6, the oldest every Android supports.
+    0x0001_0006
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_subscriber::fmt()

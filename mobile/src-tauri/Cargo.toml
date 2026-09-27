@@ -23,6 +23,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 tsuburu-server = { path = "../../crates/tsuburu-server" }
+tsuburu-update = { path = "../../crates/tsuburu-update" }
 tsuburu-hitomi = { path = "../../crates/tsuburu-hitomi" }
 
 # Its own lockfile and profile: the root workspace builds a desktop program

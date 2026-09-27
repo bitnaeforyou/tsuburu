@@ -12,6 +12,8 @@
 
 #[cfg(target_os = "android")]
 mod android;
+#[cfg(target_os = "android")]
+pub use android::note_machine;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
