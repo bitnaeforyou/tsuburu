@@ -12,6 +12,12 @@
 #
 # Run it after the build that makes everything else has finished, and after
 # `npx tauri android build --target aarch64 --apk` in mobile/.
+#
+# Run it again after *any* push of the tag, including a forced one. A tag push
+# starts the release build over, and that build writes its own SHA256SUMS over
+# this one - leaving a list that does not mention the Android package and a
+# signature over a file that is no longer there. Every copy out there then
+# refuses to update, which is the safe direction but is still broken.
 set -euo pipefail
 
 tag="${1:?usage: publish-release.sh <tag> <owner/repo>}"
