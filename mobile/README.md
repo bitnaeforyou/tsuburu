@@ -90,10 +90,12 @@ $ keytool -genkeypair -v -keystore tsuburu.jks -alias tsuburu \
     -keyalg RSA -keysize 4096 -validity 10950
 ```
 
-Then, for each release:
+Then, for each release. `TSUBURU_RELEASES` is where the built copy will look
+for its own updates; the workflow sets it for every other platform, and a
+package built without it can never update itself again:
 
 ```console
-$ npx tauri android build --target aarch64 --apk
+$ TSUBURU_RELEASES=<owner/repo> npx tauri android build --target aarch64 --apk
 $ zipalign -p -f 4 <the unsigned apk> aligned.apk
 $ apksigner sign --ks tsuburu.jks --ks-key-alias tsuburu \
     --out tsuburu-<version>.apk aligned.apk

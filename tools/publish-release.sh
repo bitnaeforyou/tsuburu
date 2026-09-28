@@ -58,6 +58,18 @@ printf '%s\n%s\n' "$(cat "$keys/password.txt")" "$(cat "$keys/password.txt")" > 
 # and `pipefail` turns that into the whole script stopping here.
 said="$("$tools/aapt2" dump badging "$apk" | sed -n "1s/.*versionName='\([^']*\)'.*/\1/p")"
 [ "$said" = "$version" ] || { echo "the package says $said, not $version" >&2; exit 1; }
+
+# Where it was published from is baked in at compile time, and a build that
+# was not told has no way to ever update itself again. Every other platform
+# is built by the workflow, which always sets it; this one is built by hand,
+# where it is one forgotten variable away from shipping a dead end. v0.4.1
+# went out like that.
+unzip -p "$apk" 'lib/arm64-v8a/*.so' > "$work/lib.so"
+grep -qa "$repo" "$work/lib.so" || {
+  echo "the package does not know where it was published from." >&2
+  echo "rebuild it with TSUBURU_RELEASES=$repo set, then run this again." >&2
+  exit 1
+}
 "$tools/apksigner" verify "$apk"
 gh release upload "$tag" "$apk" --repo "$repo" --clobber
 
