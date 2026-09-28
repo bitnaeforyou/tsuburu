@@ -215,6 +215,20 @@ input {
   padding: 0.5rem 0.7rem;
 }
 
+/* The one control still left at the browser's own size: thirteen pixels of
+   box beside fourteen of text, and none of the accent the rest of the
+   interface uses to mean "you did this". The label wrapped around each of
+   these is what makes it hittable; this is what makes it match. */
+input[type='checkbox'],
+input[type='radio'] {
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 /* A dropdown stands next to a button or an input almost everywhere here -
    the sort beside the view toggle, three filters in a row, one on every
    card. Left at the browser's own shape it is a different height with a

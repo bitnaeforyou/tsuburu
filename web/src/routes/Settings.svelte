@@ -892,8 +892,19 @@
     max-width: 68ch;
     text-wrap: pretty;
   }
+  /* The box and its words are one control: pressing either works, so they
+     have to sit on one line and stay together. */
+  /* The box and its words are one control: pressing either works, so they
+     have to sit on one line and stay together. The block padding is what
+     makes that one control tall enough to press - the words alone came to
+     twenty pixels, and the box inside them to seventeen. */
   .check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding-block: 0.35rem;
     margin-inline-end: 0.6rem;
+    cursor: pointer;
   }
   button.on {
     border-color: var(--accent);
