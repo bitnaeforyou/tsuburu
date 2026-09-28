@@ -215,6 +215,33 @@ input {
   padding: 0.5rem 0.7rem;
 }
 
+/* A dropdown stands next to a button or an input almost everywhere here -
+   the sort beside the view toggle, three filters in a row, one on every
+   card. Left at the browser's own shape it is a different height with a
+   different edge and no hover, and the row reads as parts from two
+   interfaces. The arrow stays the platform's, which `color-scheme` above
+   already draws for the right scheme. */
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  /* Less on the trailing side than a button: the arrow is drawn inside the
+     control and brings its own room. */
+  padding: 0.45rem 0.4rem 0.45rem 0.6rem;
+  cursor: pointer;
+}
+
+select:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* The ring has a role of its own: it has to be findable on a control whose
    border is already the accent because the pointer is over it.
 
@@ -296,6 +323,7 @@ main:focus {
   body.has-tabs { padding-bottom: calc(3.4rem + env(safe-area-inset-bottom)); }
   button { padding: 0.55rem 0.9rem; }
   input { padding: 0.6rem 0.75rem; }
+  select { padding: 0.55rem 0.4rem 0.55rem 0.7rem; }
   /* Under 16px, iOS Safari zooms the page on focus and the only way back is
      a pinch. Every typed-into or opened control holds the base size. */
   input, select, textarea { font-size: var(--text-base); }

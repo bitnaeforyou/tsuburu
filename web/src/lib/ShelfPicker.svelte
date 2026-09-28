@@ -74,10 +74,11 @@
 </select>
 
 <style>
+  /* Padding comes from the shared dropdown rule: set here it came to
+     nineteen pixels, and this is how a work gets filed. */
   .shelf {
     width: 100%;
     font-size: var(--text-xs);
-    padding: 0.2rem 0.3rem;
     color: var(--muted);
   }
 </style>

@@ -265,24 +265,45 @@
   }
   .progress span { position: relative; }
 
+  /* Square rather than padded around a glyph: 0.1rem each side of a star
+     came to nineteen pixels, under the floor for something to press, and it
+     rides on a cover where there is nothing else to aim at. */
   .star {
     position: absolute;
     top: 0.3rem;
     inset-inline-end: 0.3rem;
-    padding: 0.1rem 0.35rem;
-    line-height: 1.2;
+    display: grid;
+    place-items: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    padding: 0;
+    line-height: 1;
     background: color-mix(in srgb, var(--bg) 70%, transparent);
-    border-color: transparent;
+    border: 1px solid transparent;
     color: var(--muted);
   }
-  .star.on { color: var(--accent); }
 
-  /* A star meant for a mouse is too small for a thumb. */
+  /* Its own, because the global rule turns the edge the accent colour and
+     this control has no edge to turn - a line would appear out of nothing
+     over the picture. The ground goes more solid instead. */
+  .star:hover:not(:disabled) {
+    color: var(--text);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    border-color: transparent;
+  }
+
+  .star.on,
+  .star.on:hover:not(:disabled) {
+    color: var(--accent);
+  }
+
+  /* A star meant for a mouse is still too small for a thumb. */
   @media (max-width: 640px) {
     .star {
       top: 0.25rem;
       inset-inline-end: 0.25rem;
-      padding: 0.35rem 0.55rem;
+      inline-size: 2.4rem;
+      block-size: 2.4rem;
     }
   }
 

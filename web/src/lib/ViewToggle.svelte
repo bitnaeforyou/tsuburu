@@ -41,15 +41,39 @@
     display: flex;
     gap: 0.15rem;
   }
+
+  /* The same quiet icon button as the reload that sits beside it: no edge
+     while resting, a filled shape under the pointer. Two conventions in one
+     row of tools read as two interfaces, and the square is what makes it
+     big enough to hit - it used to be 0.3rem of padding around a 14px icon,
+     which is under the floor for a target. */
   .views button {
     display: grid;
     place-items: center;
-    padding: 0.3rem 0.45rem;
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    padding: 0;
     color: var(--muted);
-    border-color: transparent;
-    background: transparent;
+    background: none;
+    /* Transparent rather than absent: the one that is on takes this edge,
+       and a border appearing would move the icon by a pixel. */
+    border: 1px solid transparent;
+    border-radius: var(--radius);
   }
-  .views button.on {
+
+  /* Said here rather than left to the global rule, which turns the edge the
+     accent colour: on a control with no edge at rest that is a line
+     appearing out of nothing. */
+  .views button:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--raised);
+    border-color: transparent;
+  }
+
+  /* Which one is on is not a hover - it keeps its shape when the pointer
+     leaves, and says so with an edge as well as a fill. */
+  .views button.on,
+  .views button.on:hover:not(:disabled) {
     color: var(--text);
     background: var(--surface);
     border-color: var(--edge);

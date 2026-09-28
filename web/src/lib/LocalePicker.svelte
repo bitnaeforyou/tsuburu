@@ -15,14 +15,13 @@
 
 <style>
   /* Not a place to go, so it does not look like the tabs beside it. */
+  /* Shape comes from the one rule every dropdown here shares; this says
+     only what makes it the quiet one in a bar of links. It used to set its
+     own padding, which came to twenty pixels tall - under the floor for
+     something to press. */
   .locale {
-    font: inherit;
     font-size: var(--text-md);
     color: var(--muted);
-    background: var(--bg);
-    border: 1px solid var(--edge);
-    border-radius: var(--radius);
-    padding: 0.2rem 0.3rem;
   }
 
   @media (max-width: 640px) {

@@ -377,12 +377,17 @@
     padding-inline-end: 4.2rem;
   }
 
+  /* Square, like every other icon-only tool here. Both of these ride inside
+     the box rather than beside it, which is the one place a target can end
+     up smaller than the thing it sits on. */
   .submit {
     position: absolute;
     inset-inline-end: 0.25rem;
     display: grid;
     place-items: center;
-    padding: 0.3rem 0.45rem;
+    inline-size: 2rem;
+    block-size: 2rem;
+    padding: 0;
     background: transparent;
     border-color: transparent;
     color: var(--muted);
@@ -394,8 +399,13 @@
 
   .clear {
     position: absolute;
-    inset-inline-end: 2.2rem;
-    padding: 0.1rem 0.4rem;
+    /* Clear of the magnifier, which is now a 2rem square ending 0.25rem in. */
+    inset-inline-end: 2.35rem;
+    display: grid;
+    place-items: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    padding: 0;
     background: transparent;
     border-color: transparent;
     color: var(--muted);
@@ -445,11 +455,16 @@
     padding: 0.2rem 0.5rem 0.35rem;
   }
   .wipe {
-    padding: 0.1rem 0.4rem;
+    padding: 0.35rem 0.5rem;
     font-size: var(--text-xs);
     background: transparent;
-    border-color: transparent;
+    border: 1px solid transparent;
     color: var(--muted);
+  }
+  .wipe:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--raised);
+    border-color: transparent;
   }
   .word {
     flex: 1;
@@ -480,12 +495,24 @@
     font-size: var(--text-sm);
     font-variant-numeric: tabular-nums;
   }
+  /* Quiet until reached for, like every other icon-only tool here, and big
+     enough to hit: 0.2rem around a glyph was a target a third of the floor,
+     sitting inside a row that is itself pressable. */
   .drop {
-    padding: 0.2rem 0.5rem;
+    display: grid;
+    place-items: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    padding: 0;
     background: transparent;
-    border-color: transparent;
+    border: 1px solid transparent;
     color: var(--muted);
     line-height: 1;
+  }
+  .drop:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--raised);
+    border-color: transparent;
   }
 
   .filters {

@@ -812,7 +812,11 @@
     font-size: var(--text-md);
   }
   .chips .drop {
-    padding: 0.1rem 0.4rem;
+    display: grid;
+    place-items: center;
+    inline-size: 1.6rem;
+    block-size: 1.6rem;
+    padding: 0;
     background: transparent;
     border-color: transparent;
     color: var(--muted);
