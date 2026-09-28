@@ -6,6 +6,7 @@
   import Grid from '../lib/Grid.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import { preferred, remember } from '../lib/preferences'
+  import { keepScroll } from '../lib/keepScroll.svelte'
 
   // A series lists the same way an artist does and comes from the same kind
   // of list; the only thing an artist has that a series does not is somebody
@@ -23,6 +24,10 @@
   let language = $state(preferred.language)
   let loading = $state(false)
   let error = $state<unknown>(null)
+
+  // Opening a work and coming back should land where the list was left. The
+  // key is the artist, so two of them do not share a position.
+  $effect(() => keepScroll(`${namespace}:${artist}`, () => ids.length > 0))
 
   $effect(() => {
     const key = `${namespace}:${artist}:${language}`
