@@ -35,6 +35,12 @@
   const title = $derived(card?.title ?? preset?.title ?? `#${id}`)
   const pages = $derived(card?.pages ?? preset?.pages ?? 0)
   const language = $derived(card?.language ?? preset?.language ?? null)
+  /// Whoever the work names. hitomi gives most works an artist; the ones it
+  /// does not usually name the group that published it, and those used to
+  /// show nobody.
+  /// A kept summary carries no names - it is what the library wrote down,
+  /// not what hitomi says - so this waits for the card to arrive.
+  const by = $derived(card?.artists?.length ? card.artists : (card?.groups ?? []))
   /// hitomi names languages in lowercase English. The filter beside this on
   /// the same screen says them in the reader's own, and one concept written
   /// two ways on one screen reads as two.
@@ -135,6 +141,13 @@
       <span class="id">#{id}</span>
       &middot; {t('common.pages', { n: pages })}{said ? ` · ${said}` : ''}
     </p>
+    <!-- Who made it. A result used to say a number, a length and a language
+         and never a name, which is the first thing anybody scanning a page
+         of covers is looking for. Plain text rather than a link: the whole
+         card is already one, and a link inside a link is neither. -->
+    {#if by.length}
+      <p class="by" title={by.join(' · ')}>{by.join(' · ')}</p>
+    {/if}
     {#if card?.listed === false}
       <p class="unlisted" title={t('card.unlistedNote')}>{t('card.unlisted')}</p>
     {/if}
@@ -344,6 +357,14 @@
     font-size: var(--text-xs);
   }
 
+  .by {
+    margin: 0.15rem 0 0;
+    color: var(--muted);
+    font-size: var(--text-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .tags {
     margin: 0.1rem 0 0;
     color: var(--muted);

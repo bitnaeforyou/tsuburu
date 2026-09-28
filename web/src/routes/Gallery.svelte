@@ -5,7 +5,7 @@
   import { i18n, t, number } from '../lib/i18n.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import { library, read as readSoFar } from '../lib/library.svelte'
-  import { toArtist, toGallery, toKeyword, toSearch, toSeries } from '../lib/router'
+  import { toArtist, toGallery, toKeyword, toSearch, toSeries, toTerm } from '../lib/router'
   import { split as splitTag } from '../lib/tags'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -350,13 +350,23 @@
           {#if gallery.date}&middot; {gallery.date.slice(0, 10)}{/if}
         </p>
 
-        {#if gallery.artists.length || gallery.series.length}
+        <!-- Plenty of works carry a group and no artist at all, and those
+             used to show nobody at all. A group and a character have no
+             screen of their own; hitomi keeps a list per name and the search
+             reads it, which is where these go. -->
+        {#if gallery.artists.length || gallery.groups.length || gallery.series.length || gallery.characters.length}
           <p class="credits">
             {#each gallery.artists as name (name)}
               <a href={toArtist(name)}>{name}</a>
             {/each}
+            {#each gallery.groups as name (name)}
+              <a href={toTerm('group', name)}>{name}</a>
+            {/each}
             {#each gallery.series as name (name)}
               <a class="series" href={toSeries(name)}>{name}</a>
+            {/each}
+            {#each gallery.characters as name (name)}
+              <a class="series" href={toTerm('character', name)}>{name}</a>
             {/each}
           </p>
         {/if}

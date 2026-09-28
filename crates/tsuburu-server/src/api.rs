@@ -135,6 +135,8 @@ pub struct Card {
     /// Who drew it, where that is known: hitomi writes "N/A" when it is not,
     /// which is not a name and is not shown as one.
     pub artists: Vec<String>,
+    /// Who published it, for the works that name a group and nobody else.
+    pub groups: Vec<String>,
     pub tags: Vec<String>,
     /// 이 서버의 썸네일 프록시 경로. 브라우저는 hitomi를 직접 보지 않는다.
     pub thumbnail: Option<String>,
@@ -612,6 +614,7 @@ fn card_from_work(w: tsuburu_meta::Work) -> Card {
         language: (!w.language.is_empty()).then_some(w.language),
         pages: w.pages as usize,
         artists: named(w.artists),
+        groups: named(w.groups),
         tags: w.tags.into_iter().take(8).collect(),
         thumbnail: w.thumbnail_hash.map(|h| format!("/tn/{h}.avif")),
         listed: None,
@@ -670,6 +673,7 @@ async fn build_card(
         language: gallery.language,
         pages: gallery.files.len(),
         artists: named(gallery.artists),
+        groups: named(gallery.groups),
         tags: gallery.tags.into_iter().take(8).collect(),
         thumbnail,
         listed: None,
@@ -687,7 +691,9 @@ fn from_download(stored: tsuburu_downloads::Download) -> GalleryResponse {
         date: None,
         tags: Vec::new(),
         artists: Vec::new(),
+        groups: Vec::new(),
         series: Vec::new(),
+        characters: Vec::new(),
         pages: stored
             .pages
             .into_iter()
@@ -766,7 +772,11 @@ pub struct GalleryResponse {
     pub date: Option<String>,
     pub tags: Vec<String>,
     pub artists: Vec<String>,
+    /// Who published it. Plenty of works carry a group and no artist at all,
+    /// and those used to arrive with nobody's name on them.
+    pub groups: Vec<String>,
     pub series: Vec<String>,
+    pub characters: Vec<String>,
     pub pages: Vec<Page>,
 }
 
@@ -831,6 +841,8 @@ pub async fn gallery(
         date: gallery.date,
         tags,
         artists: gallery.artists,
+        groups: gallery.groups,
+        characters: gallery.characters,
         series: gallery.series,
         pages,
     }))

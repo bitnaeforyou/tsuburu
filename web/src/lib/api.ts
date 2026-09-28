@@ -62,6 +62,7 @@ export type Card = {
   language: string | null
   pages: number
   artists: string[]
+  groups: string[]
   tags: string[]
   /// Whether hitomi still lists it. Absent until the list has been read.
   listed?: boolean
@@ -79,6 +80,8 @@ export type Gallery = {
   date: string | null
   tags: string[]
   artists: string[]
+  groups: string[]
+  characters: string[]
   series: string[]
   pages: Page[]
 }

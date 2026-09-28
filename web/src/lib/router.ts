@@ -148,6 +148,16 @@ export function toArtist(name: string): string {
   return `#/artist/${encodeURIComponent(name)}`
 }
 
+/// A search for everything under one name hitomi indexes by.
+///
+/// Groups and characters have no screen of their own the way an artist and a
+/// series do, and they do not need one: hitomi keeps a list per name and the
+/// search reads it. Underscores because that is how hitomi writes a term
+/// with a space in it, and how the search box has to receive one.
+export function toTerm(namespace: string, name: string): string {
+  return toSearch({ query: `${namespace}:${name.replace(/ /g, '_')}` })
+}
+
 export function toKeyword(word: string): string {
   return `#/keyword/${encodeURIComponent(word)}`
 }
