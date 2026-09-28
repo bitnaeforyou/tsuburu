@@ -370,15 +370,6 @@ jobs:
           | **Mac** (Intel) | `…x86_64-apple-darwin.zip` | double-click `Start tsuburu.command` |
           | **Linux** | `…linux-gnu.tar.gz` | run `start.sh` |
           | **Docker** | `compose.yaml` | `docker compose pull && docker compose up -d` |
-
-          `SHA256SUMS` says what each of these should come to, and
-          `SHA256SUMS.sig` signs that list with a key that is not on GitHub -
-          which is what the program checks before it replaces itself. To check
-          a download by hand:
-
-          ```
-          shasum -a 256 -c SHA256SUMS --ignore-missing
-          ```
           | **Android** | `tsuburu-….apk` | open it on the phone and allow the install |
           | **iPhone** | `…unsigned.ipa` | sign it yourself, below |
 
@@ -391,6 +382,22 @@ jobs:
           you. Sign it with your own through **AltStore** or **SideStore** on
           the phone, or **Sideloadly** from a computer. A free Apple ID lasts
           seven days before it has to be signed again; a paid one lasts a year.
+
+          <details>
+          <summary>What the two <code>SHA256SUMS</code> files are for</summary>
+
+          They are how tsuburu knows an update is really ours. `SHA256SUMS`
+          says what each file above should come to, and `SHA256SUMS.sig` signs
+          that list with a key that has never been on this account - the
+          program checks both before it replaces itself, so taking the
+          publishing account is not enough to hand anybody a different
+          tsuburu. To check a download by hand:
+
+          ```
+          shasum -a 256 -c SHA256SUMS --ignore-missing
+          ```
+
+          </details>
           TAIL
 
       - uses: softprops/action-gh-release@v2
