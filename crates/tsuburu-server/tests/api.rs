@@ -373,3 +373,37 @@ async fn image_proxy_refreshes_gg_after_a_404() {
     assert_ne!(status, StatusCode::OK);
     assert_eq!(body["error"], "network");
 }
+
+/// hitomi not answering is not hitomi saying no.
+///
+/// Suggestions are only offered for words hitomi confirms it has a list for,
+/// which is what keeps a bare `blowjob` - a word its index holds no key for -
+/// out of the box. A request that fails arrives at the same place as a 404,
+/// and reading it as one empties the suggestion box the moment the network
+/// falters, and then remembers that emptiness for good.
+#[tokio::test]
+async fn a_word_is_still_offered_when_hitomi_cannot_be_reached() {
+    // No mock server at all: every probe fails to connect.
+    let cfg =
+        Config { scheme: "http".into(), ltn_domain: "127.0.0.1:1".into(), ..Config::default() };
+    let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
+    let app = router(Arc::new(AppState::new(fetcher, cfg)), Reach::ThisMachine);
+
+    let response = app
+        .oneshot(
+            Request::builder().uri("/api/words?q=blowjob&limit=5").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let words: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let words = words.as_array().expect("an array of words");
+    assert!(!words.is_empty(), "the box went empty because hitomi could not be reached: {words:?}");
+    // And without a count, because none was learned.
+    assert!(
+        words.iter().all(|w| w.get("works").is_none()),
+        "a count was invented for a word nobody could ask about: {words:?}"
+    );
+}

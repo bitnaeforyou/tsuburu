@@ -242,10 +242,27 @@ pub async fn words(
     }
     let names = named_locally(&state, &typed);
 
-    let under = looked_up(&state, &wanted, &names).await;
+    let (under, unsure) = looked_up(&state, &wanted, &names).await;
 
     let mut found: Vec<(u8, usize, Word)> = Vec::new();
     for word in &wanted {
+        // hitomi could not be asked, so nothing is known about who this word
+        // is about. Offering it plain is what this did before it learned to
+        // ask; offering nothing at all is the search box going empty because
+        // the network faltered.
+        if unsure.contains(word) && under.get(word).is_none_or(Vec::is_empty) {
+            let shown = if korean {
+                said.get(word).cloned().unwrap_or_else(|| word.clone())
+            } else {
+                word.clone()
+            };
+            found.push((
+                rank_of(&typed, word, &shown),
+                0,
+                Word { used: word.replace(' ', "_"), shown, works: None },
+            ));
+            continue;
+        }
         for (about, works) in under.get(word).into_iter().flatten() {
             // Underscores, so the term survives being cut at whitespace on
             // its way back in through the search box.
@@ -303,7 +320,7 @@ async fn looked_up(
     state: &Arc<AppState>,
     words: &[String],
     names: &[(String, String)],
-) -> HashMap<String, Under> {
+) -> (HashMap<String, Under>, std::collections::HashSet<String>) {
     let mut known: HashMap<String, Under> = HashMap::new();
     let store = state.store.as_ref();
     let asking: Vec<String> = words
@@ -363,17 +380,27 @@ async fn looked_up(
     }
 
     let mut learned: HashMap<String, Under> = HashMap::new();
+    // Words hitomi was asked about and did not answer. "It has none" and
+    // "it did not say" arrive at the same place and must not be read as the
+    // same thing: one is worth remembering and the other would hide the word
+    // from every later search on this machine.
+    let mut unsure: std::collections::HashSet<String> = std::collections::HashSet::new();
     for task in asked {
-        let Ok((word, about, works)) = task.await else { continue };
-        let entry = learned.entry(word).or_default();
-        if let Some(works) = works.filter(|n| *n > 0) {
-            entry.push((about, works));
+        let Ok((word, about, answer)) = task.await else { continue };
+        let entry = learned.entry(word.clone()).or_default();
+        match answer {
+            tsuburu_hitomi::Under::Works(works) if works > 0 => entry.push((about, works)),
+            tsuburu_hitomi::Under::Works(_) | tsuburu_hitomi::Under::Nothing => {}
+            tsuburu_hitomi::Under::Unknown => {
+                unsure.insert(word);
+            }
         }
     }
 
     if let Some(store) = store {
         let written: Vec<(String, String)> = learned
             .iter()
+            .filter(|(word, _)| !unsure.contains(*word))
             .filter_map(|(word, under)| Some((word.clone(), serde_json::to_string(under).ok()?)))
             .collect();
         if let Err(err) =
@@ -383,7 +410,7 @@ async fn looked_up(
         }
     }
     known.extend(learned);
-    known
+    (known, unsure)
 }
 
 /// Artists, series, groups and characters the reader may be typing.

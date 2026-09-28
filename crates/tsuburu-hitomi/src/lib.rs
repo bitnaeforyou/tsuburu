@@ -94,13 +94,28 @@ pub async fn works_under(
     namespace: &str,
     name: &str,
     language: &str,
-) -> Option<usize> {
+) -> Under {
     let url = cfg.name_list_url(namespace, name, language);
     match fetcher.length(&url).await {
-        Ok(bytes) => Some((bytes / 4) as usize),
+        Ok(bytes) => Under::Works((bytes / 4) as usize),
         // A name hitomi does not carry is a 404, which is an answer.
-        Err(_) => None,
+        Err(FetchError::Status(404)) => Under::Nothing,
+        // Anything else is hitomi not answering, which is not the same as
+        // answering no, and must not be read as one.
+        Err(_) => Under::Unknown,
     }
+}
+
+/// What asking hitomi about one name came back with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Under {
+    /// hitomi lists this many works under it.
+    Works(usize),
+    /// hitomi has no list of that name.
+    Nothing,
+    /// The question could not be put. A caller that drops a name on this is
+    /// hiding it from the reader because the network faltered.
+    Unknown,
 }
 
 /// 갤러리 인덱스의 현재 버전 문자열.
