@@ -67,7 +67,9 @@ pub fn run() {
 async fn start() -> Result<std::net::SocketAddr, Box<dyn std::error::Error>> {
     let cfg = tsuburu_hitomi::Config::default();
     let state = tsuburu_server::boot::assemble(cfg).await.map_err(|e| e.to_string())?;
-    let router = tsuburu_server::router(Arc::clone(&state));
+    // The phone binds loopback and nothing else can reach it.
+    let router =
+        tsuburu_server::router(Arc::clone(&state), tsuburu_server::guard::Reach::ThisMachine);
 
     let listener = bind().await?;
     let address = listener.local_addr()?;

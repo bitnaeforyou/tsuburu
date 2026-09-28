@@ -292,7 +292,12 @@ async fn serve(
     // Asked once, at the start, and only asked: nothing is replaced until
     // somebody presses the button.
     state.updater.check();
-    let app = tsuburu_server::router(Arc::clone(&state));
+    let reach = if is_loopback(&host) {
+        tsuburu_server::guard::Reach::ThisMachine
+    } else {
+        tsuburu_server::guard::Reach::Network
+    };
+    let app = tsuburu_server::router(Arc::clone(&state), reach);
 
     // 상위 노드 예열은 배경에서 돌린다. 서버 기동을 막지 않는다.
     if warm_levels > 0 {

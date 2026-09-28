@@ -33,7 +33,12 @@ pub const MAX_LIMIT: usize = 100;
 /// A shard of a whole language is a few hundred megabytes at most.
 const SHARD_UPLOAD_LIMIT: usize = 1024 * 1024 * 1024;
 
-pub fn router(state: Arc<AppState>) -> Router {
+/// The whole interface and API.
+///
+/// `reach` is what the person who started it chose: a program on their
+/// machine, or a server on a network. It decides whether a request arriving
+/// under a name is somebody's proxy or somebody's trick.
+pub fn router(state: Arc<AppState>, reach: guard::Reach) -> Router {
     Router::new()
         .route("/api/search", get(api::search))
         .route("/api/cards", get(api::cards))
@@ -91,7 +96,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/tn/{file}", get(proxy::thumbnail))
         .route("/tn/wide/{file}", get(proxy::wide_thumbnail))
         .fallback(assets::serve)
-        .layer(axum::middleware::from_fn(guard::only_this_machine))
+        .layer(axum::middleware::from_fn_with_state(reach, guard::only_this_machine))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

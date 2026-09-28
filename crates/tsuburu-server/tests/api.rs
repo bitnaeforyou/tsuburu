@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 use tsuburu_fetch::{FetchConfig, HttpFetcher};
 use tsuburu_hitomi::Config;
+use tsuburu_server::guard::Reach;
 use tsuburu_server::{AppState, router};
 use wiremock::matchers::{method, path as path_matcher};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -127,7 +128,7 @@ fn app(server: &MockServer) -> axum::Router {
     let host = server.uri().trim_start_matches("http://").to_string();
     let cfg = Config { scheme: "http".into(), ltn_domain: host, ..Config::default() };
     let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
-    router(Arc::new(AppState::new(fetcher, cfg)))
+    router(Arc::new(AppState::new(fetcher, cfg)), Reach::ThisMachine)
 }
 
 async fn get_json(app: axum::Router, uri: &str) -> (StatusCode, serde_json::Value) {
@@ -290,7 +291,7 @@ async fn unreachable_hitomi_is_reported_as_a_network_error() {
         ..Config::default()
     };
     let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
-    let app = router(Arc::new(AppState::new(fetcher, cfg)));
+    let app = router(Arc::new(AppState::new(fetcher, cfg)), Reach::ThisMachine);
 
     let (status, body) = get_json(app, "/api/search?q=naruto").await;
 

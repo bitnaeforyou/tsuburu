@@ -10,6 +10,7 @@ use tsuburu_fetch::{FetchConfig, HttpFetcher};
 use tsuburu_hitomi::Config;
 use tsuburu_ocr::MockOcr;
 use tsuburu_server::grinder::Grinder;
+use tsuburu_server::guard::Reach;
 use tsuburu_server::{AppState, router};
 
 fn grinder(dir: &tempfile::TempDir, ocr: MockOcr) -> Arc<Grinder> {
@@ -36,7 +37,7 @@ fn app_with_shards(
     if let Some(dir) = shards {
         state = state.with_shards_dir(dir);
     }
-    router(Arc::new(state))
+    router(Arc::new(state), Reach::ThisMachine)
 }
 
 async fn call(
@@ -281,7 +282,7 @@ fn app_over(downloads: &Arc<tsuburu_downloads::DownloadStore>) -> axum::Router {
     let cfg =
         Config { scheme: "http".into(), ltn_domain: "127.0.0.1:9".into(), ..Config::default() };
     let state = AppState::full(fetcher, cfg, None, None).with_downloads(Arc::clone(downloads));
-    router(Arc::new(state))
+    router(Arc::new(state), Reach::ThisMachine)
 }
 
 fn open_downloads(dir: &tempfile::TempDir) -> Arc<tsuburu_downloads::DownloadStore> {

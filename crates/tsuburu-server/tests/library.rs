@@ -7,17 +7,21 @@ use std::sync::Arc;
 use tower::ServiceExt;
 use tsuburu_fetch::{FetchConfig, HttpFetcher};
 use tsuburu_hitomi::Config;
+use tsuburu_server::guard::Reach;
 use tsuburu_server::{AppState, router};
 
 fn app_with_library(dir: &tempfile::TempDir) -> axum::Router {
     let store = tsuburu_store::Store::open(dir.path().join("test.redb")).unwrap();
     let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
-    router(Arc::new(AppState::with_store(fetcher, Config::default(), Some(store))))
+    router(
+        Arc::new(AppState::with_store(fetcher, Config::default(), Some(store))),
+        Reach::ThisMachine,
+    )
 }
 
 fn app_without_library() -> axum::Router {
     let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
-    router(Arc::new(AppState::new(fetcher, Config::default())))
+    router(Arc::new(AppState::new(fetcher, Config::default())), Reach::ThisMachine)
 }
 
 async fn call(

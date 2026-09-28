@@ -8,6 +8,7 @@ use tower::ServiceExt;
 use tsuburu_fetch::{FetchConfig, HttpFetcher};
 use tsuburu_hitomi::Config;
 use tsuburu_keywords::KeywordStore;
+use tsuburu_server::guard::Reach;
 use tsuburu_server::{AppState, router};
 
 const HEAD: &str = "article_id,rank,keyword,score,tf,df,total_pages,dialogue_count,char_count\n";
@@ -21,7 +22,7 @@ fn app_over(keywords: Option<&Arc<KeywordStore>>) -> axum::Router {
     if let Some(store) = keywords {
         state = state.with_keywords(Arc::clone(store));
     }
-    router(Arc::new(state))
+    router(Arc::new(state), Reach::ThisMachine)
 }
 
 fn imported(dir: &tempfile::TempDir) -> Arc<KeywordStore> {

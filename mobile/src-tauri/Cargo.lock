@@ -4722,6 +4722,7 @@ dependencies = [
  "tsuburu-ocr",
  "tsuburu-store",
  "tsuburu-update",
+ "tsuburu-vocabulary",
 ]
 
 [[package]]
@@ -4753,6 +4754,13 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "tsuburu-vocabulary"
+version = "0.4.2"
+dependencies = [
+ "flate2",
 ]
 
 [[package]]
