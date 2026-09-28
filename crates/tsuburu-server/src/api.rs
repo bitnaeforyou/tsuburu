@@ -384,11 +384,30 @@ async fn looked_up(
     known
 }
 
-/// Names this machine knows about, because it has seen works by them.
+/// Artists, series, groups and characters the reader may be typing.
+///
+/// Three places know a name, in the order they are trusted. The vocabulary
+/// built into this binary covers hitomi as it stood when the release was
+/// made, which is the only thing a fresh install has - hitomi publishes
+/// nothing that can be searched by prefix. A snapshot the reader imported
+/// is newer than that where there is one. What they have already read
+/// covers whoever appeared after the release went out.
 fn named_locally(state: &AppState, typed: &str) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = Vec::new();
+    for (namespace, name) in
+        tsuburu_vocabulary::Vocabulary::embedded().named_like(typed, ASKED_ABOUT)
+    {
+        out.push((namespace.to_string(), name.to_string()));
+    }
+    // The two that follow hold names with spaces in them too, and what was
+    // typed reached here through a box that cuts at every space.
+    let typed = &typed.replace('_', " ");
     if let Some(meta) = state.meta.as_ref() {
-        out.extend(meta.named_like(typed, ASKED_ABOUT));
+        for (namespace, name) in meta.named_like(typed, ASKED_ABOUT) {
+            if !out.iter().any(|(_, held)| *held == name) {
+                out.push((namespace, name));
+            }
+        }
     }
     if let Some(store) = state.store.as_ref()
         && let Ok(cards) = store.kept_cards()
