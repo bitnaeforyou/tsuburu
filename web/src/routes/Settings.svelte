@@ -373,7 +373,7 @@
               {t('update.failed', { error: update.error ?? '' })}
             {:else if update && !update.published}
               {t('update.unpublished')}
-            {:else if update?.state === 'checking'}
+            {:else if update?.state === 'checking' || !update}
               {t('update.checking')}
             {:else}
               {t('update.none')}
@@ -395,7 +395,12 @@
           </button>
         {/if}
       </div>
-      <p class="muted small">{t('update.here', { version: update?.here ?? '' })}</p>
+      <!-- Only once it is known. Before the first answer arrives this said
+           "Running" and then nothing, which on a phone is long enough to
+           read. -->
+      {#if update?.here}
+        <p class="muted small">{t('update.here', { version: update.here })}</p>
+      {/if}
     </section>
 
   <!-- Everything below reads dialogue out of pictures, which not every

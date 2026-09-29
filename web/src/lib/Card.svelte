@@ -318,6 +318,24 @@
       inline-size: 2.4rem;
       block-size: 2.4rem;
     }
+
+    /* Two cards to a row on a phone, so each one is about a hundred and
+       sixty pixels wide and every line under the cover wraps. The number,
+       the length and the language took three lines between them, the maker
+       a fourth and the tags a fifth - the words under a cover were taller
+       than the cover. Each is one line now, cut where it runs out. */
+    .meta,
+    .by,
+    .tags {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Which leaves the title as the one thing allowed to take its room. */
+    .title {
+      margin-block-start: 0.4rem;
+    }
   }
 
   .title {
