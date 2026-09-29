@@ -137,7 +137,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
     gap: 0.5rem;
-    padding: 0.75rem 1rem calc(1rem + env(safe-area-inset-bottom));
+    padding: 0.75rem 1rem calc(1rem + var(--safe-bottom));
   }
 
   .page {
@@ -179,7 +179,7 @@
   @media (max-width: 640px) {
     .wall {
       grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-      padding: 0.6rem 0.75rem calc(1rem + env(safe-area-inset-bottom));
+      padding: 0.6rem 0.75rem calc(1rem + var(--safe-bottom));
     }
   }
 </style>

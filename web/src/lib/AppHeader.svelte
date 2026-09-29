@@ -137,7 +137,7 @@
       z-index: 3;
       justify-content: space-around;
       gap: 0;
-      padding: 0.25rem 0 calc(0.25rem + env(safe-area-inset-bottom));
+      padding: 0.25rem 0 calc(0.25rem + var(--safe-bottom));
       background: var(--bg);
       border-block-start: 1px solid var(--line);
     }
