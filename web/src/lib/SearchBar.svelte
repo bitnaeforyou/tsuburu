@@ -530,8 +530,12 @@
       font-size: var(--text-base);
     }
 
+    /* The tools and the filters share one line. Given a whole row of its
+       own, the word `Filters` sat alone under a row that was itself mostly
+       empty - three rows of chrome before a single result. */
     .fold {
-      flex-basis: 100%;
+      flex: 1 1 auto;
+      min-inline-size: 0;
     }
     /* The line that stands in for them names what is narrowed, so nothing is
        hidden without saying so. */
@@ -540,14 +544,29 @@
       cursor: pointer;
       color: var(--muted);
       font-size: var(--text-md);
-      padding: 0.15rem 0;
+      /* Tall enough to press, and it sits beside two icon buttons that are
+         forty pixels: a line of text between them would not look like one of
+         them. */
+      padding: 0.6rem 0;
       list-style-position: inside;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .fold[open] > summary {
       margin-bottom: 0.6rem;
     }
     .filters {
       gap: 0.75rem 0.9rem;
+    }
+
+    /* The box keeps a row to itself; everything else shares the next one. */
+    .toolbar {
+      gap: 0 0.7rem;
+      padding-block: 0.5rem;
+    }
+    .toolbar form {
+      flex: 1 1 100%;
     }
   }
 
@@ -557,13 +576,10 @@
     gap: 0.35rem;
   }
 
-  select {
-    font: inherit;
+  /* Shape comes from the one rule every dropdown here shares; this says only
+     that a filter reads as darker than the words beside it. */
+  .filters select {
     color: var(--text);
-    background: var(--bg);
-    border: 1px solid var(--edge);
-    border-radius: var(--radius);
-    padding: 0.25rem 0.4rem;
   }
 
   /* A phone fits two of the three filters on a line. They used to keep one
