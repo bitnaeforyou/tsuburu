@@ -756,12 +756,43 @@
     main {
       padding: 0.75rem;
     }
+    /* The cover is the thing being decided on, and beside a column of text
+       it was a hundred and forty pixels of it. It goes above, at the width
+       of the screen, the way it is on the shelf this came from. */
     .work {
+      flex-direction: column;
+      align-items: stretch;
       gap: 0.9rem;
     }
     .cover {
-      width: 38%;
-      max-width: 140px;
+      width: 100%;
+      max-width: none;
+      align-self: center;
+    }
+    .cover img {
+      /* Tall enough to read the drawing, short enough that what the work is
+         still starts on the first screen. */
+      max-block-size: 52vh;
+      inline-size: auto;
+      margin-inline: auto;
+      display: block;
+    }
+
+    /* One thing to press, across the screen, where a thumb is. Two buttons
+       left-aligned under a column left half the row empty. */
+    .start {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .start button {
+      inline-size: 100%;
+      padding-block: 0.7rem;
+    }
+
+    /* Nobody changes the language of the program from inside a work. */
+    header :global(.locale) {
+      display: none;
     }
     .title {
       font-size: var(--text-lg);

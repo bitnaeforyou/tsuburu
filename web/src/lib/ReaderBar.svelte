@@ -20,6 +20,24 @@
     tucked?: boolean
   } = $props()
 
+  /// How the pages should sit is set once and then read for an hour. On a
+  /// phone those controls were two of the four rows standing between opening
+  /// a work and seeing its first page, so they fold away behind the word for
+  /// them; on anything wider they are simply there.
+  let wide = $state(true)
+  let opened = $state(false)
+
+  $effect(() => {
+    // Not every place this is rendered has one; where there is none, the
+    // controls are simply there, which is what a wide screen does anyway.
+    if (typeof matchMedia !== 'function') return
+    const roomy = matchMedia('(min-width: 641px)')
+    const read = () => (wide = roomy.matches)
+    read()
+    roomy.addEventListener('change', read)
+    return () => roomy.removeEventListener('change', read)
+  })
+
   const settings = $derived(reader.settings)
   const rtl = $derived(settings.direction === 'rtl')
 
@@ -63,7 +81,9 @@
     </button>
   </div>
 
-  <div class="set">
+  <details class="tune" open={wide || opened} ontoggle={(e) => (opened = e.currentTarget.open)}>
+    <summary>{t('reader.surface')}</summary>
+    <div class="set">
     {#if onpages}
       <button class="wide" onclick={onpages}>{t('reader.pages')}</button>
     {/if}
@@ -112,7 +132,8 @@
         {t('reader.coverAlone')}
       </label>
     {/if}
-  </div>
+    </div>
+  </details>
 </div>
 
 <style>
@@ -167,6 +188,12 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 0.4rem;
+  }
+
+  /* On a desktop the fold is not a fold: the controls are simply in the bar,
+     and the word that would open them is not drawn. */
+  .tune > summary {
+    display: none;
   }
 
   .group {
@@ -229,6 +256,21 @@
     .turn {
       flex: 1 1 100%;
       max-width: none;
+    }
+
+    .tune {
+      flex: 1 1 100%;
+    }
+    .tune > summary {
+      display: list-item;
+      list-style-position: inside;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: var(--text-md);
+      padding: 0.5rem 0;
+    }
+    .tune[open] > summary {
+      margin-bottom: 0.4rem;
     }
     .turn button,
     .group button,
