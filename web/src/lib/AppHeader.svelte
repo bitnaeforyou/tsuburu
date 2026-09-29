@@ -55,7 +55,10 @@
   ] as const
 </script>
 
-<header>
+<!-- `bare` is a header with nothing left in it once the phone has taken the
+     tabs to the bottom and put the language in settings. It still renders,
+     because the way past it for a keyboard lives here. -->
+<header class:bare={!actions}>
   <!-- Not a link: the address bar holds the route, so jumping to the content
        has to move focus rather than change where we are. -->
   <button class="skip" onclick={toContent}>{t('nav.skip')}</button>
@@ -152,6 +155,19 @@
     header {
       padding: calc(0.6rem + var(--safe-top)) var(--gutter) 0.6rem;
       gap: 0.5rem;
+    }
+
+    /* The name of the program on every screen, and a language nobody sets
+       twice: a whole row of a phone before anything it came for. The name is
+       on the icon that opened it, and the language moved to settings. */
+    .brand,
+    header :global(.locale) {
+      display: none;
+    }
+
+    header.bare {
+      padding: var(--safe-top) 0 0;
+      border-block-end: 0;
     }
 
     nav {

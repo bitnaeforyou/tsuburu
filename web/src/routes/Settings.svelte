@@ -2,6 +2,7 @@
   import * as api from '../lib/api'
   import { t, type Key, number } from '../lib/i18n.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
+  import LocalePicker from '../lib/LocalePicker.svelte'
   import CorpusOffer from '../lib/CorpusOffer.svelte'
   import Card from '../lib/Card.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
@@ -340,6 +341,17 @@
 
 <main>
   <h1>{t('nav.settings')}</h1>
+
+  <!-- Its home. It used to live only in the bar at the top of every screen,
+       which on a phone is a row of chrome spent on something nobody changes
+       twice. -->
+  <section class="panel">
+    <label class="row tongue">
+      <h2>{t('nav.locale')}</h2>
+      <LocalePicker />
+    </label>
+  </section>
+
   <section class="panel version" class:offer={update?.state === 'found'}>
       <div class="row">
         <div>
@@ -794,6 +806,16 @@
 </main>
 
 <style>
+  .tongue {
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    cursor: pointer;
+  }
+  .tongue h2 {
+    margin: 0;
+  }
+
   .chips {
     list-style: none;
     padding: 0;
