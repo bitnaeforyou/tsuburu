@@ -746,9 +746,12 @@
   /* A phone spends a third of its screen on the things around the pages
      unless they are told to be smaller. */
   @media (max-width: 640px) {
+    /* The room the status bar takes is the whole of this bar's top padding:
+       saying `0` here took it away while the height above still counted it
+       in, so the buttons rose into the system's own icons. */
     header {
       gap: 0.5rem;
-      padding: 0 var(--gutter);
+      padding-inline: var(--gutter);
     }
     header h1 {
       font-size: var(--text-sm);
