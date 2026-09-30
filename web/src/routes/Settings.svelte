@@ -871,7 +871,7 @@
   main {
     max-width: var(--page-narrow);
     margin-inline: auto;
-    padding: 1rem;
+    padding: 1rem var(--gutter);
   }
 
   h1 {
@@ -987,7 +987,7 @@
      the two controls that qualify it go under it. */
   @media (max-width: 640px) {
     main {
-      padding: 0.9rem;
+      padding: 0.9rem var(--gutter);
     }
     .panel {
       padding: 0.8rem 0.9rem;

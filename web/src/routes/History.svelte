@@ -99,7 +99,7 @@
   main {
     max-width: var(--page);
     margin-inline: auto;
-    padding: 1rem;
+    padding: 1rem var(--gutter);
   }
   .count {
     color: var(--muted);

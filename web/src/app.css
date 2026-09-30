@@ -131,13 +131,19 @@
   /* Where the system draws over the page.
      `env()` is the browser's own answer and is right everywhere but one
      place: Android measures the bottom one as zero however the gesture bar
-     is drawn, so a bar pinned to the bottom ends up underneath it. The phone
-     app reads the real numbers where they are known and sets `--inset-*`;
+     is drawn, and the top one as zero once the phone is turned. The app
+     reads the real numbers where they are known and sets `--inset-*`;
      whichever is larger wins, so nothing has to know which way it was
-     opened. */
+     opened.
+
+     Each of these names `env()` itself. One of them was briefly written to
+     read its own value instead, which is a custom property that resolves to
+     nothing - and since `--gutter` is built from it, and `padding` is a
+     shorthand, every side of every container that read one collapsed to
+     zero at once. */
   --safe-top: max(env(safe-area-inset-top, 0px), var(--inset-top, 0px));
   --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--inset-bottom, 0px));
-  --safe-left: max(var(--safe-left), var(--inset-left, 0px));
+  --safe-left: max(env(safe-area-inset-left, 0px), var(--inset-left, 0px));
   --safe-right: max(env(safe-area-inset-right, 0px), var(--inset-right, 0px));
   /* How wide a page gets before it stops growing, and stands in the middle
      of what is left. A window can be three thousand pixels wide; a line of
@@ -146,7 +152,7 @@
   /* For pages that are mostly words rather than covers. */
   --page-narrow: 58rem;
   /* Bars run edge to edge, but what is in them lines up with the page. */
-  --gutter: max(1rem, var(--safe-left), calc((100vw - var(--page)) / 2));
+  --gutter: max(1rem, var(--safe-left), var(--safe-right), calc((100vw - var(--page)) / 2));
 }
 
 * { box-sizing: border-box; }
@@ -342,7 +348,7 @@ main:focus {
 @media (max-width: 640px) {
   :root {
     --chrome: 3.4rem;
-    --gutter: max(0.75rem, var(--safe-left));
+    --gutter: max(0.75rem, var(--safe-left), var(--safe-right));
   }
   body.has-tabs { padding-bottom: calc(3.4rem + var(--safe-bottom)); }
   button { padding: 0.55rem 0.9rem; }

@@ -7,9 +7,11 @@
 /// offers them on `window.tsuburuInsets`; this copies them into the
 /// variables the stylesheet reads, where the larger of the two wins.
 ///
-/// Asked for rather than pushed in: the app cannot know when this page
-/// exists, and anything it set before the page loaded would be thrown away
-/// with the document it was set on.
+/// Read here when the page loads, which covers the numbers arriving before
+/// it did; the app sets them itself whenever they change, which covers the
+/// ones that arrive after. Either half alone loses a race, and losing it at
+/// the top of the window puts the first row of the page under the status
+/// bar.
 
 type Native = {
   top(): number

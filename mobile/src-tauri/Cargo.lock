@@ -4566,7 +4566,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tsuburu-avif"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "avif-parse",
  "rav1d",
@@ -4575,7 +4575,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-dialogue"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "flate2",
  "lz4_flex",
@@ -4592,7 +4592,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-downloads"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "redb",
  "serde",
@@ -4603,7 +4603,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-embed"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "futures-util",
  "memmap2",
@@ -4617,7 +4617,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-fetch"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "quick_cache",
  "reqwest 0.12.28",
@@ -4628,7 +4628,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-hitomi"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "futures-util",
  "serde",
@@ -4639,7 +4639,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-keywords"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "lz4_flex",
  "redb",
@@ -4649,14 +4649,14 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-korean"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "tsuburu-meta"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "lz4_flex",
  "memchr",
@@ -4670,7 +4670,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-mobile"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "axum",
  "tauri",
@@ -4685,7 +4685,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-ocr"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "objc2",
  "objc2-core-foundation",
@@ -4701,7 +4701,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-server"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "axum",
  "quick_cache",
@@ -4727,7 +4727,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-store"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "directories",
  "redb",
@@ -4739,11 +4739,11 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-text"
-version = "0.4.3"
+version = "0.4.4"
 
 [[package]]
 name = "tsuburu-update"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "ed25519-dalek",
  "futures-util",
@@ -4758,7 +4758,7 @@ dependencies = [
 
 [[package]]
 name = "tsuburu-vocabulary"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "flate2",
 ]

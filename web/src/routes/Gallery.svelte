@@ -535,7 +535,7 @@
   main {
     max-width: var(--page);
     margin-inline: auto;
-    padding: 1rem;
+    padding: 1rem var(--gutter);
   }
   /* Pages are read edge to edge: a reader is not a page of a document. */
   main.reading {
@@ -754,7 +754,7 @@
       font-size: var(--text-sm);
     }
     main {
-      padding: 0.75rem;
+      padding: 0.75rem var(--gutter);
     }
     /* The cover is the thing being decided on, and beside a column of text
        it was a hundred and forty pixels of it. It goes above, at the width

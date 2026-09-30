@@ -69,7 +69,7 @@
   main {
     max-width: var(--page);
     margin-inline: auto;
-    padding: 1rem;
+    padding: 1rem var(--gutter);
   }
   h1 {
     margin: 0;

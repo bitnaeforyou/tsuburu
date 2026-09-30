@@ -92,6 +92,7 @@
     z-index: 2;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 1rem;
     /* The phone draws its clock and battery over the top of the page, so the
        first row has to start below them. Zero everywhere that has no such
@@ -165,8 +166,12 @@
       display: none;
     }
 
+    /* Nothing of its own left to draw, so it is only the room the system
+       takes at the top - plus a little, so that the first row of the page
+       does not sit hard against the edge of the screen wherever the inset
+       happens to be nothing. */
     header.bare {
-      padding: var(--safe-top) 0 0;
+      padding: calc(var(--safe-top) + 0.35rem) 0 0;
       border-block-end: 0;
     }
 
@@ -177,7 +182,10 @@
       z-index: 3;
       justify-content: space-around;
       gap: 0;
-      padding: 0.25rem 0 calc(0.25rem + var(--safe-bottom));
+      /* The cutout is on one side of the screen when the phone is turned,
+         and a tab under it cannot be pressed. */
+      padding: 0.25rem var(--safe-right) calc(0.25rem + var(--safe-bottom))
+        var(--safe-left);
       background: var(--bg);
       border-block-start: 1px solid var(--line);
     }
