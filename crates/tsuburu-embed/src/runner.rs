@@ -326,7 +326,9 @@ impl Runner {
 
     async fn start(self: &Arc<Self>, server: &Path) -> Result<(), RunError> {
         let port = free_port().ok_or_else(|| RunError::Start("no free port".into()))?;
-        let child = Command::new(server)
+        let mut command = Command::new(server);
+        alone(&mut command);
+        let child = command
             .arg("-m")
             .arg(self.model_path())
             .args(["--host", "127.0.0.1"])
@@ -436,6 +438,42 @@ fn make_runnable(path: &Path) {
 
 #[cfg(not(unix))]
 fn make_runnable(_path: &Path) {}
+
+/// Hands the model server nothing of this program's but the model.
+///
+/// A child keeps every descriptor open at the moment it is started, and the
+/// one that matters here is the port tsuburu answers on: switch the model on
+/// from the settings screen and the server is already listening, so the
+/// model server inherits that socket and holds it open. Kill tsuburu without
+/// giving it time to tidy up - which is what a crash, or a `kill -9`, or a
+/// phone reclaiming memory does - and the port stays taken by a process that
+/// never wanted it, and the next start cannot bind.
+///
+/// Measured: with tsuburu on 8450 at descriptor 14, the model server came up
+/// holding 8450 at descriptor 14 as well, and went on listening after
+/// tsuburu was gone.
+#[cfg(unix)]
+fn alone(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    // Runs in the child between fork and exec, so it may only call what is
+    // safe there; `close` is.
+    unsafe {
+        command.as_std_mut().pre_exec(|| {
+            let most = libc::sysconf(libc::_SC_OPEN_MAX);
+            let most = if most > 0 { (most as i64).min(4096) as i32 } else { 1024 };
+            // From the first one that is ours rather than the three every
+            // program is given.
+            for fd in 3..most {
+                libc::close(fd);
+            }
+            Ok(())
+        });
+    }
+}
+
+#[cfg(not(unix))]
+fn alone(_command: &mut Command) {}
 
 #[cfg(test)]
 mod tests {

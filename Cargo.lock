@@ -2446,6 +2446,7 @@ name = "tsuburu-embed"
 version = "0.4.5"
 dependencies = [
  "futures-util",
+ "libc",
  "memmap2",
  "reqwest",
  "serde",
