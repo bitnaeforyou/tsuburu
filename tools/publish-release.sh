@@ -87,5 +87,24 @@ openssl pkeyutl -sign -inkey "$keys/releases.key" -rawin -in SHA256SUMS -out SHA
 openssl pkeyutl -verify -pubin -inkey "$keys/releases.pub" -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig
 
 gh release upload "$tag" SHA256SUMS SHA256SUMS.sig --repo "$repo" --clobber
+
+# --- that the release still holds what was just signed ---
+#
+# v0.4.6 went out with an APK nobody had signed over: a second workflow, in
+# the repository this one mirrors from, finished after this script did and
+# copied its own package across. GitHub reports each asset's digest, so the
+# release can be asked what it is actually holding rather than trusted to
+# still be holding it.
+mismatch=
+while read -r digest name; do
+  held="$(gh api "repos/$repo/releases/tags/$tag" \
+    --jq ".assets[] | select(.name == \"$name\") | .digest" | sed 's/^sha256://')"
+  [ "$held" = "$digest" ] || { echo "$name on the release is $held, not $digest" >&2; mismatch=1; }
+done < SHA256SUMS
+[ -z "$mismatch" ] || {
+  echo "the release does not hold what was signed; run this again once nothing else is writing to it" >&2
+  exit 1
+}
+
 echo
 echo "published tsuburu-$version.apk, and signed what the release says its files are"
