@@ -456,16 +456,24 @@ fn named_locally(state: &AppState, typed: &str) -> Vec<(String, String)> {
 }
 
 /// Says the tags in the reader's language where the dictionary knows them.
+///
+/// Saying them can bring two together: `female:corruption` and
+/// `female:mind break` are both `female:타락`. Two of the same word is not
+/// something a reader can tell apart, so only the first is kept - and a list
+/// that repeats itself is one the page cannot draw at all, because the tags
+/// are what the chips are keyed by.
 fn said_in(lang: Option<&str>, tags: &mut Vec<String>) {
     if lang != Some("ko") {
         return;
     }
     let dictionary = tsuburu_korean::Dictionary::embedded();
-    for tag in tags {
+    let mut said = std::collections::HashSet::with_capacity(tags.len());
+    tags.retain_mut(|tag| {
         if let Some(korean) = dictionary.korean_for(tag) {
             *tag = korean;
         }
-    }
+        said.insert(tag.clone())
+    });
 }
 
 pub async fn cards(
@@ -645,6 +653,48 @@ fn card_from_work(w: tsuburu_meta::Work) -> Card {
         tags: w.tags.into_iter().take(8).collect(),
         thumbnail: w.thumbnail_hash.map(|h| format!("/tn/{h}.avif")),
         listed: None,
+    }
+}
+
+#[cfg(test)]
+mod said_tests {
+    use super::said_in;
+
+    /// Two tags hitomi keeps apart can be the same word in Korean. Gallery
+    /// 4224124 carries both `female:corruption` and `female:mind break`,
+    /// which are each `female:타락`, and a list with the same entry twice is
+    /// one the reader cannot tell apart and the page cannot draw.
+    #[test]
+    fn two_tags_that_become_one_word_are_said_once() {
+        let mut tags = vec![
+            "female:corruption".to_string(),
+            "female:big breasts".to_string(),
+            "female:mind break".to_string(),
+        ];
+        said_in(Some("ko"), &mut tags);
+        assert_eq!(tags.len(), 2, "said {tags:?}");
+        assert_eq!(tags[0], "female:타락");
+        assert_ne!(tags[1], "female:타락");
+    }
+
+    #[test]
+    fn the_first_of_the_two_keeps_its_place() {
+        let mut tags = vec![
+            "female:big breasts".to_string(),
+            "female:corruption".to_string(),
+            "female:mind break".to_string(),
+            "uncensored".to_string(),
+        ];
+        said_in(Some("ko"), &mut tags);
+        assert_eq!(tags.len(), 3);
+        assert_eq!(tags[1], "female:타락");
+    }
+
+    #[test]
+    fn a_language_without_a_dictionary_is_left_as_it_is() {
+        let mut tags = vec!["female:corruption".to_string(), "female:mind break".to_string()];
+        said_in(Some("en"), &mut tags);
+        assert_eq!(tags, vec!["female:corruption".to_string(), "female:mind break".to_string()]);
     }
 }
 

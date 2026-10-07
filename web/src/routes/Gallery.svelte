@@ -355,17 +355,22 @@
              screen of their own; hitomi keeps a list per name and the search
              reads it, which is where these go. -->
         {#if gallery.artists.length || gallery.groups.length || gallery.series.length || gallery.characters.length}
+          <!-- Not keyed by the name. These are said in the reader's language,
+               and two the server keeps apart can be one word here; a key that
+               repeats throws rather than drawing, which takes the whole work
+               off the screen. Nothing here holds state worth keeping in
+               place, so the position is key enough. -->
           <p class="credits">
-            {#each gallery.artists as name (name)}
+            {#each gallery.artists as name}
               <a href={toArtist(name)}>{name}</a>
             {/each}
-            {#each gallery.groups as name (name)}
+            {#each gallery.groups as name}
               <a href={toTerm('group', name)}>{name}</a>
             {/each}
-            {#each gallery.series as name (name)}
+            {#each gallery.series as name}
               <a class="series" href={toSeries(name)}>{name}</a>
             {/each}
-            {#each gallery.characters as name (name)}
+            {#each gallery.characters as name}
               <a class="series" href={toTerm('character', name)}>{name}</a>
             {/each}
           </p>
@@ -376,7 +381,7 @@
              half of scrolling away. -->
         {#if gallery.tags.length}
           <ul class="tags">
-            {#each gallery.tags as tag (tag)}
+            {#each gallery.tags as tag}
               {@const parsed = splitTag(tag)}
               <li class={parsed.who ?? 'plain'}>{parsed.word}</li>
             {/each}
