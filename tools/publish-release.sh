@@ -13,6 +13,12 @@
 # Run it after the build that makes everything else has finished, and after
 # `npx tauri android build --target aarch64 --apk` in mobile/.
 #
+# Push the tag to origin only. Pushing it to the mirror as well uploads the
+# commits as they are written here - name and address and all - into the public
+# repository; the mirror's workflow rewrites the tag afterwards, which unlinks
+# them without deleting them, and they stay readable to anyone holding a hash.
+# The workflow carries the tag across by itself.
+#
 # Run it again after *any* push of the tag, including a forced one. A tag push
 # starts the release build over, and that build writes its own SHA256SUMS over
 # this one - leaving a list that does not mention the Android package and a
@@ -70,6 +76,14 @@ grep -qa "$repo" "$work/lib.so" || {
   echo "rebuild it with TSUBURU_RELEASES=$repo set, then run this again." >&2
   exit 1
 }
+# Absolute source paths are written into the binary, so a package built
+# without `tools/build-apk.sh` carries the builder's home directory - account
+# name and all - to everyone who installs it. v0.4.7 shipped with 53 of them.
+if LC_ALL=C grep -qa -- "$HOME" "$work/lib.so"; then
+  echo "the package was built with this machine's paths in it." >&2
+  echo "build it with tools/build-apk.sh, then run this again." >&2
+  exit 1
+fi
 "$tools/apksigner" verify "$apk"
 gh release upload "$tag" "$apk" --repo "$repo" --clobber
 
