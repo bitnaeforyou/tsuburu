@@ -23,7 +23,15 @@ export type ReaderSettings = {
   /// A cover is a single page, so a spread that starts at page 0 would pair
   /// it with page 1 and put every later pair on the wrong side.
   coverAlone: boolean
+  /// Seconds between turns the reader did not ask for, or 0 for not turning
+  /// on its own. One number rather than a flag beside an interval, because
+  /// there is no such thing as on every zero seconds.
+  autoTurn: number
 }
+
+/// The intervals offered, not turning first. Not a free number: a stored
+/// 0.05 would run a work to its end before a hand reached the screen.
+export const TURNS = [0, 3, 5, 8, 12, 20] as const
 
 export const DEFAULTS: ReaderSettings = {
   layout: 'scroll',
@@ -31,6 +39,7 @@ export const DEFAULTS: ReaderSettings = {
   fit: 'width',
   pageFit: 'contain',
   coverAlone: true,
+  autoTurn: 0,
 }
 
 const STORED = 'tsuburu.reader'
@@ -58,6 +67,7 @@ export function sanitise(value: Partial<ReaderSettings>): ReaderSettings {
     fit: fit(value.fit, DEFAULTS.fit),
     pageFit: fit(value.pageFit, DEFAULTS.pageFit),
     coverAlone: value.coverAlone !== false,
+    autoTurn: TURNS.includes(value.autoTurn as (typeof TURNS)[number]) ? value.autoTurn! : 0,
   }
 }
 
@@ -144,6 +154,18 @@ export function step(
   const at = spreadOf(page, groups)
   const next = groups[clamp(at + (forward ? 1 : -1), groups.length)]
   return next?.[0] ?? page
+}
+
+/// Whether there is anywhere further into the work to go.
+///
+/// Not `step(...) !== page`: from the second page of a spread, stepping lands
+/// on that spread's first page, which is a different page and the same place.
+/// What has to be compared in that layout is the spread, not the page.
+export function hasNext(page: number, count: number, layout: Layout, coverAlone: boolean): boolean {
+  if (count <= 0) return false
+  if (layout !== 'spread') return page < count - 1
+  const groups = spreads(count, coverAlone)
+  return spreadOf(page, groups) < groups.length - 1
 }
 
 /// Whether a key means "further into the work".

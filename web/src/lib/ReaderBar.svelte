@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from './i18n.svelte'
-  import { fitKey, fitOf, reader, step, type Fit, type Layout } from './reader.svelte'
+  import { fitKey, fitOf, reader, step, TURNS, type Fit, type Layout } from './reader.svelte'
 
   /// Everything the reader can be told to do, in one row: where you are, where
   /// to go, and how the pages should sit while you get there.
@@ -121,6 +121,22 @@
         {/each}
       </select>
     </label>
+
+    {#if settings.layout !== 'scroll'}
+      <label class="pick">
+        <span class="sr-only">{t('reader.autoTurn')}</span>
+        <select
+          value={settings.autoTurn}
+          onchange={(event) => reader.set('autoTurn', Number(event.currentTarget.value))}
+        >
+          {#each TURNS as every (every)}
+            <option value={every}>
+              {every === 0 ? t('reader.autoTurnOff') : t('reader.autoTurnEvery', { n: every })}
+            </option>
+          {/each}
+        </select>
+      </label>
+    {/if}
 
     {#if settings.layout === 'spread'}
       <label class="check">

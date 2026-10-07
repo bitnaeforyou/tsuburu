@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import type { Page } from './api'
   import { t } from './i18n.svelte'
   import {
     fitOf,
     forwardFor,
     forwardForTap,
+    hasNext,
     reader,
     spreadOf,
     spreads,
@@ -280,9 +282,68 @@
     return () => removeEventListener('keydown', onKey)
   })
 
-  function move(forward: boolean) {
+  function advance(forward: boolean) {
     current = step(current, forward, pages.length, settings.layout, settings.coverAlone)
   }
+
+  /// A turn the reader asked for, as against one the clock produced.
+  function move(forward: boolean) {
+    advance(forward)
+    turned++
+  }
+
+  /// Bumped by every turn the reader asked for, so that turning by hand
+  /// starts the wait again rather than being followed half a second later by
+  /// a turn nobody asked for.
+  let turned = $state(0)
+
+  // Turning on its own.
+  //
+  // `current` is read untracked and the timer calls `advance` rather than
+  // `move`: either one would make this depend on its own work, tearing the
+  // interval down and building it again on every turn.
+  $effect(() => {
+    void turned
+    const every = settings.autoTurn
+    if (!every || !paged || !pages.length) return
+
+    const timer = setInterval(() => {
+      // A reader who switched tabs is not reading. Without this, coming back
+      // to the work finds it tens of pages further on than it was left.
+      if (document.hidden) return
+      const at = untrack(() => current)
+      if (!hasNext(at, pages.length, settings.layout, settings.coverAlone)) {
+        // The end of the work is where it stops. Leaving it on would be a
+        // timer waking up forever with nowhere to go, and nothing on the bar
+        // to say why the pages had stopped moving.
+        reader.set('autoTurn', 0)
+        return
+      }
+      advance(true)
+    }, every * 1000)
+    return () => clearInterval(timer)
+  })
+
+  // Nothing is being touched while it turns itself, so the phone locks after a
+  // minute or two and the feature is useless on the device that wants it most.
+  // Not every browser has this and refusing is normal - on battery saver, for
+  // one - so it is asked for and otherwise forgotten about.
+  $effect(() => {
+    if (!settings.autoTurn) return
+    let held: WakeLockSentinel | null = null
+    let dropped = false
+    void navigator.wakeLock
+      ?.request('screen')
+      .then((lock) => {
+        if (dropped) void lock.release().catch(() => {})
+        else held = lock
+      })
+      .catch(() => {})
+    return () => {
+      dropped = true
+      void held?.release().catch(() => {})
+    }
+  })
 
   /// The controls sitting on top of the page are not part of the page: a
   /// press that lands on one must not also turn it.

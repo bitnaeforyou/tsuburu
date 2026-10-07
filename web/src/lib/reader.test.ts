@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'vitest'
 import {
   DEFAULTS,
+  TURNS,
   thumbnailOf,
   fitKey,
   fitOf,
   forwardFor,
   forwardForTap,
+  hasNext,
   sanitise,
   spreadOf,
   spreads,
@@ -89,6 +91,25 @@ describe('step', () => {
   })
 })
 
+describe('hasNext', () => {
+  test('there is somewhere to go until the last page', () => {
+    expect(hasNext(0, 10, 'page', true)).toBe(true)
+    expect(hasNext(8, 10, 'page', true)).toBe(true)
+    expect(hasNext(9, 10, 'page', true)).toBe(false)
+  })
+
+  test('the last spread is the end, whichever of its pages is current', () => {
+    // [0] [1,2] [3,4] [5,6]
+    expect(hasNext(4, 7, 'spread', true)).toBe(true)
+    expect(hasNext(5, 7, 'spread', true)).toBe(false)
+    expect(hasNext(6, 7, 'spread', true)).toBe(false)
+  })
+
+  test('a work with no pages has nowhere to go', () => {
+    expect(hasNext(0, 0, 'page', true)).toBe(false)
+  })
+})
+
 describe('forwardFor', () => {
   test('the arrows swap with the reading direction', () => {
     expect(forwardFor('ArrowRight', 'ltr')).toBe(true)
@@ -157,6 +178,7 @@ describe('sanitise', () => {
       fit: 'height',
       pageFit: 'original',
       coverAlone: false,
+      autoTurn: 5,
     } as const
     expect(sanitise(settings)).toEqual(settings)
   })
@@ -170,6 +192,23 @@ describe('sanitise', () => {
 
   test('an empty object is the defaults', () => {
     expect(sanitise({})).toEqual(DEFAULTS)
+  })
+})
+
+describe('turning on its own', () => {
+  test('not turning is one of the choices, and is where it starts', () => {
+    expect(TURNS[0]).toBe(0)
+    expect(DEFAULTS.autoTurn).toBe(0)
+  })
+
+  test('an interval nobody offered is not turning', () => {
+    expect(sanitise({ autoTurn: 7 }).autoTurn).toBe(0)
+    expect(sanitise({ autoTurn: -5 }).autoTurn).toBe(0)
+    expect(sanitise({ autoTurn: 'fast' as never }).autoTurn).toBe(0)
+  })
+
+  test('one that was offered is kept', () => {
+    expect(sanitise({ autoTurn: 5 }).autoTurn).toBe(5)
   })
 })
 
