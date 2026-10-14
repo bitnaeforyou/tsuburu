@@ -42,6 +42,12 @@ pub struct AppState {
     pub cfg: Config,
     /// 라이브러리. 열지 못했으면 `None`이고, 그래도 검색은 동작한다.
     pub store: Option<tsuburu_store::Store>,
+    /// The dialogue index. `None` only if it could not be opened.
+    ///
+    /// Held apart from the sweep because searching it needs no recognition:
+    /// a phone can fetch the published corpus and read it, and simply never
+    /// adds to it from pictures of its own.
+    pub dialogue: Option<Arc<tsuburu_dialogue::DialogueStore>>,
     /// Dialogue indexing. `None` where the platform has no OCR.
     pub grinder: Option<Arc<crate::grinder::Grinder>>,
     /// Where exported dialogue shards are written.
@@ -95,6 +101,8 @@ impl AppState {
         Self::full(fetcher, cfg, store, None)
     }
 
+    /// A sweep carries the index it writes to, so one given here is the one
+    /// searched. Where there is no sweep, [`Self::with_dialogue`] supplies it.
     pub fn full(
         fetcher: Arc<HttpFetcher>,
         cfg: Config,
@@ -105,6 +113,7 @@ impl AppState {
             fetcher,
             cfg,
             store,
+            dialogue: grinder.as_ref().map(|g| g.store_handle()),
             grinder,
             shards_dir: None,
             meta: None,
@@ -124,6 +133,11 @@ impl AppState {
             cards: Cache::new(4096),
             hidden: RwLock::new(None),
         }
+    }
+
+    pub fn with_dialogue(mut self, dialogue: Arc<tsuburu_dialogue::DialogueStore>) -> Self {
+        self.dialogue = Some(dialogue);
+        self
     }
 
     pub fn with_shards_dir(mut self, dir: std::path::PathBuf) -> Self {

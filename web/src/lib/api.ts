@@ -275,7 +275,13 @@ export type Coverage = {
 }
 
 export type DialogueStatus = {
+  /** Whether dialogue can be searched at all. */
   supported: boolean
+  /**
+   * Whether this machine can add to the index from pictures. False on a
+   * phone, which can still fetch the published corpus and search it.
+   */
+  recognition: boolean
   // What the platform is missing, when installing it would help.
   note?: string
   settings?: GrinderSettings

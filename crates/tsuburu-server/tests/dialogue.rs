@@ -26,6 +26,15 @@ fn app(grinder: Option<Arc<Grinder>>) -> axum::Router {
     app_with_shards(grinder, None)
 }
 
+/// A phone: an index to read, and no way to add to it.
+fn app_without_ocr(store: Arc<DialogueStore>) -> axum::Router {
+    let fetcher = Arc::new(HttpFetcher::new(FetchConfig::default()).unwrap());
+    let cfg =
+        Config { scheme: "http".into(), ltn_domain: "127.0.0.1:9".into(), ..Config::default() };
+    let state = AppState::full(fetcher, cfg, None, None).with_dialogue(store);
+    router(Arc::new(state), Reach::ThisMachine)
+}
+
 fn app_with_shards(
     grinder: Option<Arc<Grinder>>,
     shards: Option<std::path::PathBuf>,
@@ -90,7 +99,7 @@ async fn a_gallery_whose_pages_all_fail_is_an_error_not_an_empty_success() {
 }
 
 #[tokio::test]
-async fn status_reports_unsupported_without_an_ocr() {
+async fn status_reports_unsupported_without_an_index() {
     let (status, body) = call(app(None), "GET", "/api/dialogue/status", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["supported"], false);
@@ -98,6 +107,53 @@ async fn status_reports_unsupported_without_an_ocr() {
     let (status, body) = call(app(None), "GET", "/api/dialogue/search?q=x", None).await;
     assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
     assert_eq!(body["error"], "unsupported");
+}
+
+/// What a phone is: no recognition, and the index still searchable.
+///
+/// The two used to be one switch, and a platform that could not read pictures
+/// was told it could not read text either - which is the whole of what the
+/// published corpus is for.
+#[tokio::test]
+async fn a_platform_without_recognition_still_searches_what_is_in_the_index() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(DialogueStore::open(dir.path().join("dialogue.redb")).unwrap());
+    store
+        .complete(
+            7,
+            &[tsuburu_dialogue::PageText {
+                page: 1,
+                lines: vec!["구급차라도 부르는 게 좋겠어요".into()],
+            }],
+        )
+        .unwrap();
+
+    let (status, body) =
+        call(app_without_ocr(Arc::clone(&store)), "GET", "/api/dialogue/status", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["supported"], true);
+    assert_eq!(body["recognition"], false);
+    // The sweep's panels have nothing to report, and the search screen reads
+    // the counts to know the scope is worth offering.
+    assert!(body["settings"].is_null());
+    assert_eq!(body["counts"]["done"], 1);
+
+    let (status, body) =
+        call(app_without_ocr(Arc::clone(&store)), "GET", "/api/dialogue/search?q=구급차", None)
+            .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["hits"][0]["gallery_id"], 7);
+
+    // Adding to it from pictures is the one thing it cannot do, and says so.
+    let (status, body) = call(
+        app_without_ocr(store),
+        "POST",
+        "/api/dialogue/enqueue",
+        Some(serde_json::json!({ "text": "7" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(body["code"], "no_recognition");
 }
 
 #[tokio::test]

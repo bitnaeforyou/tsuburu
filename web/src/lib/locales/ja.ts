@@ -213,14 +213,15 @@ export const ja: Messages = {
   'artist.empty': 'ローカルのスナップショットにその名前の作品はありません。',
 
   'dialogue.unsupported': 'このプラットフォームではセリフ検索を使えません。',
+  'dialogue.noRecognition': 'この端末はページからセリフを自分で読み取れません。',
   'dialogue.unsupportedNote':
     '{note} — macOS と Windows は OS の認識機能を使い、それ以外では tesseract を呼びます。hitomi が AVIF で配るため、その手前にデコーダがもう一つ要ります。',
   'dialogue.unsupportedPlain':
-    'ここでは認識を使えません。取り込んだコーパスはそのまま検索できます。',
+    'ここでは認識を使えないので、読んだ作品で索引が増えることはありません。下で公開コーパスを取ってくれば、そのまま検索できます。',
   'corpus.title':
     '10万8千作品のセリフ',
   'corpus.note':
-    'これだけを認識するには機械が数週間かかります。そうして得たテキストを公開してあり、このボタンが取ってきます — 約450 MB、一度だけ。自分で読んだ分はそのまま残ります。',
+    'これだけを認識するには機械が数週間かかります。そうして得たテキストを公開してあり、このボタンが取ってきます — 約500 MB、一度だけ。Wi-Fi で取ってください。自分で読んだ分はそのまま残ります。',
   'corpus.later': 'あとで',
   'corpus.background': '続ける',
   'corpus.get':

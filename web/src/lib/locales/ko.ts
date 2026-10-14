@@ -213,14 +213,15 @@ export const ko: Messages = {
   'artist.empty': '로컬 스냅샷에 그 이름의 작품이 없습니다.',
 
   'dialogue.unsupported': '이 플랫폼에서는 대사 검색을 쓸 수 없습니다.',
+  'dialogue.noRecognition': '이 기기는 페이지에서 대사를 직접 읽어내지 못합니다.',
   'dialogue.unsupportedNote':
     '{note} — macOS와 Windows는 운영체제의 인식기를 쓰고, 그 밖에서는 tesseract를 부릅니다. hitomi가 AVIF로 주기 때문에 그 앞에 디코더가 하나 더 필요합니다.',
   'dialogue.unsupportedPlain':
-    '여기서는 인식을 쓸 수 없습니다. 가져온 코퍼스는 그대로 검색됩니다.',
+    '여기서는 인식을 쓸 수 없어서, 읽은 작품으로 색인이 늘어나지는 않습니다. 아래에서 공개된 코퍼스를 받으면 그대로 검색됩니다.',
   'corpus.title':
     '10만 8천 편의 대사',
   'corpus.note':
-    '이만큼을 인식하려면 컴퓨터가 몇 주를 돌아야 합니다. 그렇게 나온 텍스트를 올려두었고, 이 버튼이 그걸 받아옵니다 — 약 450 MB, 한 번만. 직접 읽은 것은 그대로 남습니다.',
+    '이만큼을 인식하려면 컴퓨터가 몇 주를 돌아야 합니다. 그렇게 나온 텍스트를 올려두었고, 이 버튼이 그걸 받아옵니다 — 약 500 MB, 한 번만. Wi-Fi에서 받으세요. 직접 읽은 것은 그대로 남습니다.',
   'corpus.later': '나중에',
   'corpus.background': '계속 쓰기',
   'corpus.get':

@@ -406,16 +406,25 @@
   <!-- Everything below reads dialogue out of pictures, which not every
        platform can do. The notice replaces those panels alone: an update and
        a backup are no business of the dialogue's, and hiding them left a
-       phone with a settings screen that was one sentence long. -->
-  {#if status && !status.supported}
+       phone with a settings screen that was one sentence long.
+       The index itself is text, so what is already in it is still searchable
+       and the published corpus can still be fetched - which is why the offer
+       stands beside the notice rather than behind it. -->
+  {#if status && !status.recognition}
     <div class="panel">
-      <strong>{t('dialogue.unsupported')}</strong>
+      <strong>{status.supported ? t('dialogue.noRecognition') : t('dialogue.unsupported')}</strong>
       <p class="muted">
         {status.note
           ? t('dialogue.unsupportedNote', { note: status.note })
           : t('dialogue.unsupportedPlain')}
       </p>
+      {#if status.counts}
+        <p class="muted small">{t('dialogue.indexed', { n: number(status.counts.done) })}</p>
+      {/if}
     </div>
+    {#if status.supported}
+      <CorpusOffer />
+    {/if}
   {:else}
     <section class="panel switch">
         <div class="row">

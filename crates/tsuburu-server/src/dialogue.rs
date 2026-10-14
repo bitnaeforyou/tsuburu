@@ -12,7 +12,7 @@ use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tsuburu_dialogue::{Counts, Hit, ImportSummary, Priority, Shard};
+use tsuburu_dialogue::{Counts, DialogueStore, Hit, ImportSummary, Priority, Shard};
 use tsuburu_embed::runner::Progress;
 
 use crate::error::{ApiError, ErrorKind};
@@ -29,18 +29,37 @@ const MAX_RESULTS: usize = 100;
 /// queue the whole of hitomi.
 const MOST_TO_HUNT: usize = 5_000;
 
+/// The sweep that reads pictures. Only what adds to the index asks for this;
+/// a platform without recognition still searches what is already in.
 fn grinder(state: &AppState) -> Result<&Arc<Grinder>, ApiError> {
     state.grinder.as_ref().ok_or_else(|| ApiError {
         error: ErrorKind::Unsupported,
-        message: "dialogue search needs text recognition, which this platform does not provide"
+        message: "indexing dialogue needs text recognition, which this platform does not provide"
             .into(),
         code: Some("no_recognition"),
     })
 }
 
+/// The index itself, which is text.
+///
+/// Searching it, and taking in a corpus somebody else's machine recognised,
+/// is text work and needs no recognition of our own - which is the whole of
+/// what a phone can do here, and nearly the whole of what anyone wants.
+fn dialogue(state: &AppState) -> Result<&Arc<DialogueStore>, ApiError> {
+    state.dialogue.as_ref().ok_or_else(|| ApiError {
+        error: ErrorKind::Unsupported,
+        message: "the dialogue index could not be opened".into(),
+        code: Some("no_dialogue"),
+    })
+}
+
 #[derive(Debug, Serialize)]
 pub struct StatusResponse {
+    /// Whether dialogue can be searched at all.
     pub supported: bool,
+    /// Whether this machine can add to the index from pictures. False on a
+    /// phone, which can still fetch the published corpus and search it.
+    pub recognition: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub settings: Option<GrinderSettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,12 +76,29 @@ pub struct StatusResponse {
 }
 
 pub async fn status(State(state): State<Arc<AppState>>) -> Result<Json<StatusResponse>, ApiError> {
-    let Some(grinder) = state.grinder.as_ref() else {
+    let Some(store) = state.dialogue.as_ref() else {
         return Ok(Json(StatusResponse {
             supported: false,
+            recognition: false,
             settings: None,
             status: None,
             counts: None,
+            coverage: None,
+            import: None,
+            note: None,
+        }));
+    };
+    // Everything below the counts describes the sweep, and there is no sweep
+    // without recognition. The counts are the index itself, which is here
+    // either way - and they are what the search screen reads to know the
+    // scope is worth offering.
+    let Some(grinder) = state.grinder.as_ref() else {
+        return Ok(Json(StatusResponse {
+            supported: true,
+            recognition: false,
+            settings: None,
+            status: None,
+            counts: Some(store.counts()?),
             coverage: None,
             import: None,
             note: tsuburu_ocr::platform_note(),
@@ -73,9 +109,10 @@ pub async fn status(State(state): State<Arc<AppState>>) -> Result<Json<StatusRes
     let coverage = grinder.coverage().await.ok();
     Ok(Json(StatusResponse {
         supported: true,
+        recognition: true,
         settings: Some(grinder.settings().await),
         status: Some(grinder.status().await),
-        counts: Some(grinder.store().counts()?),
+        counts: Some(store.counts()?),
         coverage,
         import: grinder.import_progress(),
         note: None,
@@ -144,29 +181,27 @@ pub async fn search(
     State(state): State<Arc<AppState>>,
     Query(params): Query<SearchParams>,
 ) -> Result<Json<SearchResponse>, ApiError> {
-    let grinder = grinder(&state)?;
+    let store = dialogue(&state)?;
     if params.q.trim().is_empty() {
         return Err(ApiError::bad_request("give a phrase to look for"));
     }
     let limit = params.limit.clamp(1, MAX_RESULTS);
     let offset = params.offset;
     // The scan is CPU work over the whole store; keep it off the runtime.
-    let store_grinder = Arc::clone(grinder);
+    let scanning = Arc::clone(store);
     let query = params.q.clone();
-    let found = tokio::task::spawn_blocking(move || {
-        store_grinder.store().search_page(&query, offset, limit)
-    })
-    .await
-    .map_err(|e| ApiError {
-        error: ErrorKind::Storage,
-        message: e.to_string(),
-        code: None,
-    })??;
+    let found = tokio::task::spawn_blocking(move || scanning.search_page(&query, offset, limit))
+        .await
+        .map_err(|e| ApiError {
+            error: ErrorKind::Storage,
+            message: e.to_string(),
+            code: None,
+        })??;
     Ok(Json(SearchResponse {
         hits: found.hits,
         total: found.total,
         reachable: found.reachable,
-        counts: grinder.store().counts()?,
+        counts: store.counts()?,
     }))
 }
 
@@ -311,12 +346,12 @@ pub async fn export(
     State(state): State<Arc<AppState>>,
     Json(body): Json<ExportBody>,
 ) -> Result<Json<ExportResponse>, ApiError> {
-    let grinder = Arc::clone(grinder(&state)?);
+    let store = Arc::clone(dialogue(&state)?);
     let dir = shards_dir(&state)?.clone();
     std::fs::create_dir_all(&dir).map_err(|e| storage_error(&e))?;
 
     let shards = tokio::task::spawn_blocking(move || {
-        grinder.store().export_shards(tsuburu_dialogue::SHARD_RANGE, body.background_only)
+        store.export_shards(tsuburu_dialogue::SHARD_RANGE, body.background_only)
     })
     .await
     .map_err(|e| storage_error(&e))??;
@@ -373,13 +408,13 @@ pub async fn import(
     if !kind.starts_with("application/octet-stream") {
         return Err(ApiError::bad_request("a shard is application/octet-stream"));
     }
-    let grinder = Arc::clone(grinder(&state)?);
+    let store = Arc::clone(dialogue(&state)?);
     if !is_shard_name(&params.name) {
         return Err(ApiError::bad_request("not a shard file name"));
     }
     let shard = Shard::decode_named(&params.name, &body)
         .map_err(|e| ApiError::bad_request(format!("could not read the shard: {e}")))?;
-    let summary = tokio::task::spawn_blocking(move || grinder.store().import_shard(&shard))
+    let summary = tokio::task::spawn_blocking(move || store.import_shard(&shard))
         .await
         .map_err(|e| storage_error(&e))??;
     Ok(Json(summary))
@@ -415,9 +450,8 @@ impl Default for EmbedderSettings {
     }
 }
 
-fn stored_embedder(grinder: &Grinder) -> EmbedderSettings {
-    grinder
-        .store()
+fn stored_embedder(store: &DialogueStore) -> EmbedderSettings {
+    store
         .embedder()
         .ok()
         .flatten()
@@ -436,8 +470,11 @@ fn stored_embedder(grinder: &Grinder) -> EmbedderSettings {
 /// is no address to have - and falling back to whatever was saved before the
 /// switch existed meant blaming the network for a port nobody chose. Once the
 /// switch is on, the model is the answer or the reason there isn't one.
-fn embedder_settings(state: &AppState, grinder: &Grinder) -> Result<EmbedderSettings, ApiError> {
-    let mut settings = stored_embedder(grinder);
+fn embedder_settings(
+    state: &AppState,
+    store: &DialogueStore,
+) -> Result<EmbedderSettings, ApiError> {
+    let mut settings = stored_embedder(store);
     if let Some(url) = state.model.url() {
         settings.url = url;
         return Ok(settings);
@@ -467,19 +504,19 @@ fn embedder_settings(state: &AppState, grinder: &Grinder) -> Result<EmbedderSett
 pub async fn get_embedder(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<EmbedderSettings>, ApiError> {
-    Ok(Json(stored_embedder(grinder(&state)?)))
+    Ok(Json(stored_embedder(dialogue(&state)?)))
 }
 
 pub async fn set_embedder(
     State(state): State<Arc<AppState>>,
     Json(settings): Json<EmbedderSettings>,
 ) -> Result<Json<EmbedderSettings>, ApiError> {
-    let grinder = grinder(&state)?;
+    let store = dialogue(&state)?;
     if settings.url.trim().is_empty() {
         return Err(ApiError::bad_request("give the embedding server's URL"));
     }
     let json = serde_json::to_string(&settings).map_err(|e| storage_error(&e))?;
-    grinder.store().set_embedder(&json)?;
+    store.set_embedder(&json)?;
     Ok(Json(settings))
 }
 
@@ -512,8 +549,8 @@ async fn embed(
     })
 }
 
-fn similarity_dir(grinder: &Grinder) -> Result<PathBuf, ApiError> {
-    grinder.store().artifact_dir()?.ok_or_else(|| ApiError {
+fn similarity_dir(store: &DialogueStore) -> Result<PathBuf, ApiError> {
+    store.artifact_dir()?.ok_or_else(|| ApiError {
         error: ErrorKind::Unsupported,
         message: "no embeddings are available; import artifact's llm-search-index first".into(),
         code: None,
@@ -523,8 +560,8 @@ fn similarity_dir(grinder: &Grinder) -> Result<PathBuf, ApiError> {
 /// The imported corpus, if there is one. Searching by a phrase does not need
 /// it: the vectors for what this machine has read are searched the same way,
 /// and somebody who has never imported anything still has those.
-fn imported_index(grinder: &Grinder) -> Option<PathBuf> {
-    grinder.store().artifact_dir().ok().flatten()
+fn imported_index(store: &DialogueStore) -> Option<PathBuf> {
+    store.artifact_dir().ok().flatten()
 }
 
 /// What the published corpus is doing, if anything.
@@ -538,14 +575,18 @@ pub struct CorpusState {
 }
 
 pub async fn corpus_state(State(state): State<Arc<AppState>>) -> Json<CorpusState> {
-    Json(CorpusState { available: state.corpus.publishable(), progress: state.corpus.progress() })
+    // Nowhere to put it is as good a reason not to offer it as nowhere to
+    // fetch it from. Offering on either count is what had a phone being asked
+    // to download half a gigabyte it would then refuse.
+    let available = state.corpus.publishable() && state.dialogue.is_some();
+    Json(CorpusState { available, progress: state.corpus.progress() })
 }
 
 /// Fetches the published corpus, in the background.
 pub async fn fetch_corpus(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<CorpusState>, ApiError> {
-    let grinder = Arc::clone(grinder(&state)?);
+    let store = Arc::clone(dialogue(&state)?);
     if !state.corpus.publishable() {
         return Err(ApiError {
             error: ErrorKind::Unsupported,
@@ -553,7 +594,7 @@ pub async fn fetch_corpus(
             code: Some("unpublished"),
         });
     }
-    state.corpus.fetch(grinder, Arc::clone(&state.fetcher));
+    state.corpus.fetch(store, Arc::clone(&state.fetcher));
     Ok(Json(CorpusState { available: true, progress: state.corpus.progress() }))
 }
 
@@ -575,12 +616,12 @@ pub async fn phrase(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PhraseParams>,
 ) -> Result<Json<Vec<SimilarHit>>, ApiError> {
-    let grinder = Arc::clone(grinder(&state)?);
+    let store = Arc::clone(dialogue(&state)?);
     if params.q.trim().is_empty() {
         return Err(ApiError::bad_request("give a phrase to look for"));
     }
-    let dir = imported_index(&grinder);
-    let settings = embedder_settings(&state, &grinder)?;
+    let dir = imported_index(&store);
+    let settings = embedder_settings(&state, &store)?;
     let limit = params.limit.clamp(1, MAX_RESULTS);
 
     // Nothing to search at all is worth saying plainly: a reader who has just
@@ -589,8 +630,11 @@ pub async fn phrase(
     // But one whose pages cannot be recognised at all is, and that reader has
     // been opening works and watching nothing happen. The sweep already knows
     // why; it is said here, where the emptiness is noticed.
-    if dir.is_none() && grinder.store().vector_count().unwrap_or(0) == 0 {
-        let blocked = grinder.status().await.last_error;
+    if dir.is_none() && store.vector_count().unwrap_or(0) == 0 {
+        let blocked = match state.grinder.as_ref() {
+            Some(grinder) => grinder.status().await.last_error,
+            None => None,
+        };
         return Err(ApiError {
             error: ErrorKind::Unsupported,
             message: match blocked {
@@ -619,7 +663,7 @@ pub async fn phrase(
     let query = embed(&state, &settings, &params.q, dims).await?;
 
     let hits = tokio::task::spawn_blocking(move || -> Result<Vec<SimilarHit>, String> {
-        let store = grinder.store();
+        let store = store.as_ref();
         let passage = |work: i32, page: u16| -> Option<Vec<u8>> {
             let pages = store.text(work).ok().flatten()?;
             let text = pages.into_iter().find(|p| p.page == page)?.lines.concat();
@@ -715,10 +759,9 @@ pub async fn stored(
     State(state): State<Arc<AppState>>,
     Query(params): Query<StoredParams>,
 ) -> Result<Json<StoredResponse>, ApiError> {
-    let grinder = Arc::clone(grinder(&state)?);
+    let store = Arc::clone(dialogue(&state)?);
     let limit = params.limit.clamp(1, 500);
     let (all, vectors) = tokio::task::spawn_blocking(move || {
-        let store = grinder.store();
         Ok::<_, tsuburu_dialogue::DialogueError>((
             store.stored(params.reading_only, usize::MAX)?,
             store.vector_count()?,
@@ -737,8 +780,8 @@ pub async fn forget(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let grinder = Arc::clone(grinder(&state)?);
-    let removed = tokio::task::spawn_blocking(move || grinder.store().forget(id))
+    let store = Arc::clone(dialogue(&state)?);
+    let removed = tokio::task::spawn_blocking(move || store.forget(id))
         .await
         .map_err(|e| storage_error(&e))??;
     Ok(Json(serde_json::json!({ "removed": removed })))
@@ -748,8 +791,8 @@ pub async fn forget(
 pub async fn forget_read(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let grinder = Arc::clone(grinder(&state)?);
-    let removed = tokio::task::spawn_blocking(move || grinder.store().forget_read())
+    let store = Arc::clone(dialogue(&state)?);
+    let removed = tokio::task::spawn_blocking(move || store.forget_read())
         .await
         .map_err(|e| storage_error(&e))??;
     Ok(Json(serde_json::json!({ "removed": removed })))
@@ -789,17 +832,16 @@ pub async fn disable_model(State(state): State<Arc<AppState>>) -> Json<ModelStat
 }
 
 pub async fn check_pack(State(state): State<Arc<AppState>>) -> Result<Json<PackCheck>, ApiError> {
-    let grinder = Arc::clone(grinder(&state)?);
-    let dir = similarity_dir(&grinder)?;
-    let settings = embedder_settings(&state, &grinder)?;
+    let store = Arc::clone(dialogue(&state)?);
+    let dir = similarity_dir(&store)?;
+    let settings = embedder_settings(&state, &store)?;
 
     // Any indexed gallery will do; take the first one the corpus has.
-    let sample = grinder.store().done_ids()?.into_iter().min().ok_or_else(|| {
+    let sample = store.done_ids()?.into_iter().min().ok_or_else(|| {
         ApiError::bad_request("the corpus is empty, so there is nothing to check")
             .coded("corpus_empty")
     })?;
-    let pages = grinder
-        .store()
+    let pages = store
         .text(sample)?
         .ok_or_else(|| ApiError::bad_request("that gallery has no stored text"))?;
     let page = pages.first().cloned().ok_or_else(|| ApiError::bad_request("no pages"))?;

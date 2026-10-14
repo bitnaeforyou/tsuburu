@@ -65,12 +65,19 @@ pub async fn assemble(cfg: Config) -> Result<Arc<AppState>, BootError> {
             .map_err(|e| BootError::Fatal(format!("failed to build the HTTP client: {e}")))?,
     );
 
-    let grinder = open_grinder(&cfg)?;
+    let dialogue = open_dialogue();
+    let grinder = match &dialogue {
+        Some(dialogue) => open_grinder(&cfg, Arc::clone(dialogue))?,
+        None => None,
+    };
     if let Some(grinder) = &grinder {
         tokio::spawn(Arc::clone(grinder).run());
     }
 
     let mut state = AppState::full(fetcher, cfg, store, grinder);
+    if let Some(dialogue) = dialogue {
+        state = state.with_dialogue(dialogue);
+    }
     if let Ok(dir) = tsuburu_store::data_dir() {
         state = state.with_shards_dir(dir.join("shards"));
         match tsuburu_downloads::DownloadStore::open(&dir) {
@@ -112,24 +119,39 @@ pub async fn assemble(cfg: Config) -> Result<Arc<AppState>, BootError> {
     Ok(state)
 }
 
-/// Dialogue indexing needs the platform's OCR. Where there is none the feature
-/// is reported as unsupported rather than silently missing.
-fn open_grinder(cfg: &Config) -> Result<Option<Arc<crate::grinder::Grinder>>, BootError> {
-    let Some(ocr) = tsuburu_ocr::platform_ocr(tsuburu_ocr::OcrOptions::default()) else {
-        tracing::info!("no text recognition on this platform; dialogue search disabled");
-        return Ok(None);
-    };
+/// The dialogue index, which holds text and nothing else.
+///
+/// Opened on every platform. Searching what is in it, and taking in a corpus
+/// somebody else's machine recognised, is text work - only growing it from
+/// pictures needs recognition, and that is [`open_grinder`].
+fn open_dialogue() -> Option<Arc<tsuburu_dialogue::DialogueStore>> {
     let opened = tsuburu_store::data_dir().map_err(|e| e.to_string()).and_then(|dir| {
         tsuburu_dialogue::DialogueStore::open(dir.join("dialogue.redb")).map_err(|e| e.to_string())
     });
-    let dialogue = match opened {
-        Ok(dialogue) => dialogue,
+    match opened {
+        Ok(dialogue) => {
+            tracing::info!(path = %dialogue.path().display(), "opened the dialogue index");
+            Some(Arc::new(dialogue))
+        }
         Err(err) => {
             tracing::warn!(%err, "dialogue search is disabled");
-            return Ok(None);
+            None
         }
+    }
+}
+
+/// The sweep that turns pages into text, which needs the platform's OCR.
+///
+/// Where there is none the index is still searchable; it just cannot grow
+/// from pictures on this machine.
+fn open_grinder(
+    cfg: &Config,
+    dialogue: Arc<tsuburu_dialogue::DialogueStore>,
+) -> Result<Option<Arc<crate::grinder::Grinder>>, BootError> {
+    let Some(ocr) = tsuburu_ocr::platform_ocr(tsuburu_ocr::OcrOptions::default()) else {
+        tracing::info!("no text recognition on this platform; the index cannot grow here");
+        return Ok(None);
     };
-    tracing::info!(path = %dialogue.path().display(), "opened the dialogue index");
     // Its own connection pool: a page burst must not queue behind the index
     // warm-up, and must never slow down browsing.
     let fetcher = HttpFetcher::new(FetchConfig {
@@ -144,7 +166,7 @@ fn open_grinder(cfg: &Config) -> Result<Option<Arc<crate::grinder::Grinder>>, Bo
     Ok(Some(Arc::new(crate::grinder::Grinder::with_factory(
         Arc::new(fetcher),
         cfg.clone(),
-        Arc::new(dialogue),
+        dialogue,
         Arc::from(ocr),
         tsuburu_ocr::platform_ocr,
     ))))

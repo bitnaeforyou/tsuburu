@@ -12,10 +12,8 @@
 use std::sync::{Arc, RwLock};
 
 use serde::{Deserialize, Serialize};
-use tsuburu_dialogue::Shard;
+use tsuburu_dialogue::{DialogueStore, Shard};
 use tsuburu_fetch::HttpFetcher;
-
-use crate::grinder::Grinder;
 
 /// Which release carries the corpus. A tag of its own, so publishing a new
 /// program does not mean publishing four hundred megabytes with it.
@@ -81,14 +79,14 @@ impl Corpus {
     /// Each shard is imported as it arrives rather than after all of them
     /// have: four hundred megabytes held in memory to be written at the end
     /// is four hundred megabytes that a closed lid loses.
-    pub fn fetch(self: &Arc<Self>, grinder: Arc<Grinder>, fetcher: Arc<HttpFetcher>) {
+    pub fn fetch(self: &Arc<Self>, store: Arc<DialogueStore>, fetcher: Arc<HttpFetcher>) {
         if matches!(self.progress(), Progress::Fetching { .. }) {
             return;
         }
         self.set(Progress::Fetching { done: 0, total: 0, works: 0 });
         let me = Arc::clone(self);
         tokio::spawn(async move {
-            match me.run(grinder, fetcher).await {
+            match me.run(store, fetcher).await {
                 Ok(works) => me.set(Progress::Ready { works }),
                 Err(error) => {
                     tracing::warn!(%error, "the corpus could not be fetched");
@@ -98,7 +96,11 @@ impl Corpus {
         });
     }
 
-    async fn run(&self, grinder: Arc<Grinder>, fetcher: Arc<HttpFetcher>) -> Result<usize, String> {
+    async fn run(
+        &self,
+        store: Arc<DialogueStore>,
+        fetcher: Arc<HttpFetcher>,
+    ) -> Result<usize, String> {
         let repo = RELEASES.ok_or("this build does not say where it was published from")?;
         let url = format!("https://api.github.com/repos/{repo}/releases/tags/{TAG}");
         let body = fetcher
@@ -119,7 +121,7 @@ impl Corpus {
         // A name carries the hash of the bytes under it, so one already taken
         // in names a file already on the disk. Coming back for a corpus that
         // has grown costs the part that is new and not the rest of it again.
-        let taken = grinder.store().taken_shards().unwrap_or_default();
+        let taken = store.taken_shards().unwrap_or_default();
         let published = shards.len();
         shards.retain(|a| !taken.contains(&a.name));
         let total = shards.len();
@@ -147,15 +149,15 @@ impl Corpus {
             // the shard that was published.
             let shard = Shard::decode_named(&asset.name, &bytes)
                 .map_err(|e| format!("{}: {e}", asset.name))?;
-            let store = grinder.store_handle();
-            let summary = tokio::task::spawn_blocking(move || store.import_shard(&shard))
+            let merging = Arc::clone(&store);
+            let summary = tokio::task::spawn_blocking(move || merging.import_shard(&shard))
                 .await
                 .map_err(|e| e.to_string())?
                 .map_err(|e| format!("{}: {e}", asset.name))?;
             works += summary.added;
             // Noted after it is in, never before: a shard that failed to
             // merge has to be fetched again.
-            if let Err(err) = grinder.store().note_shard(&asset.name) {
+            if let Err(err) = store.note_shard(&asset.name) {
                 tracing::debug!(%err, "could not note a shard as taken");
             }
             self.set(Progress::Fetching { done: done + 1, total, works });

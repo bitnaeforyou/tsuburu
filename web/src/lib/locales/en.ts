@@ -215,14 +215,15 @@ export const en = {
   'artist.empty': 'Nothing by that name in the local snapshot.',
 
   'dialogue.unsupported': 'Dialogue search is not available on this platform.',
+  'dialogue.noRecognition': 'This device cannot read dialogue off pages itself.',
   'dialogue.unsupportedNote':
     '{note} — macOS and Windows read pages with their own recognition; elsewhere tsuburu calls tesseract, and a decoder in front of it because hitomi serves AVIF.',
   'dialogue.unsupportedPlain':
-    'Recognition is unavailable here. An imported corpus is still searchable.',
+    'Recognition is unavailable here, so the index cannot grow from pages you read. Fetch the published corpus below and it is searchable as it is.',
   'corpus.title':
     'Dialogue of 108,000 works',
   'corpus.note':
-    'Recognising this many works takes weeks of a machine. The text it produced is published, and this fetches it — about 450 MB, once. What you have read yourself is kept.',
+    'Recognising this many works takes weeks of a machine. The text it produced is published, and this fetches it — about 500 MB, once, so do it on Wi-Fi. What you have read yourself is kept.',
   'corpus.later': 'Not now',
   'corpus.background': 'Carry on',
   'corpus.get':
