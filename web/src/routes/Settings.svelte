@@ -403,13 +403,14 @@
       {/if}
     </section>
 
-  <!-- Everything below reads dialogue out of pictures, which not every
-       platform can do. The notice replaces those panels alone: an update and
-       a backup are no business of the dialogue's, and hiding them left a
-       phone with a settings screen that was one sentence long.
-       The index itself is text, so what is already in it is still searchable
-       and the published corpus can still be fetched - which is why the offer
-       stands beside the notice rather than behind it. -->
+  <!-- Reading dialogue out of pictures is not something every platform can
+       do, and the notice stands in for the panels that need it - not for an
+       update or a backup, which are no business of the dialogue's, and hiding
+       them left a phone with a settings screen one sentence long.
+       The index itself is text. What is in it is searchable, the published
+       corpus can still be fetched, and its size can still be seen and
+       dropped - so the offer stands beside the notice rather than behind
+       it, and so do the two panels further down. -->
   {#if status && !status.recognition}
     <div class="panel">
       <strong>{status.supported ? t('dialogue.noRecognition') : t('dialogue.unsupported')}</strong>
@@ -425,7 +426,12 @@
     {#if status.supported}
       <CorpusOffer />
     {/if}
-  {:else}
+  {/if}
+
+  <!-- The sweep, and the three things that feed it. Drawn while the status is
+       still on its way, because these panels fill themselves in and a screen
+       that fills in beats one that jumps into place. -->
+  {#if !status || status.recognition}
     <section class="panel switch">
         <div class="row">
           <div>
@@ -625,7 +631,12 @@
         {#if huntResult}<p class="muted small">{huntResult}</p>{/if}
       </form>
     </section>
+  {/if}
 
+  <!-- What is kept and how it is passed around. Both are the index rather
+       than the sweep, and a phone holding half a gigabyte of corpus is the
+       reader most in need of seeing its size and being able to drop it. -->
+  {#if !status || status.supported}
     <section class="panel">
       <div class="exchange">
         <h2>{t('dialogue.cache')}</h2>
@@ -704,7 +715,9 @@
         {/if}
       </div>
     </section>
+  {/if}
 
+  {#if !status || status.recognition}
     <details class="advanced">
       <summary>{t('settings.advanced')}</summary>
       <p class="muted small">{t('settings.advancedNote')}</p>
