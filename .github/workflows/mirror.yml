@@ -105,4 +105,20 @@ jobs:
         run: |
           git push --force \
             "https://x-access-token:$MIRROR_TOKEN@github.com/$MIRROR_REPO.git" \
-            HEAD:main --tags
+            HEAD:main
+
+      # Only on a tag push, and only that tag. The rewrite above gives a tag
+      # object that differs between a branch run and a tag run - the tag run
+      # re-annotates it, the branch run pushes whatever filter-repo emitted -
+      # so sending tags on every run had each push to main replace the tag on
+      # the mirror. A replaced tag is a tag push, which starts Release again,
+      # which overwrites the SHA256SUMS somebody had already signed.
+      - name: Push the tag
+        if: steps.configured.outputs.yes == 'true' && startsWith(github.ref, 'refs/tags/')
+        env:
+          MIRROR_REPO: ${{ secrets.MIRROR_REPO }}
+          MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+        run: |
+          git push --force \
+            "https://x-access-token:$MIRROR_TOKEN@github.com/$MIRROR_REPO.git" \
+            "refs/tags/$GITHUB_REF_NAME"
