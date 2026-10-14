@@ -30,8 +30,11 @@ tag="${1:?usage: publish-release.sh <tag> <owner/repo>}"
 repo="${2:?usage: publish-release.sh <tag> <owner/repo>}"
 version="${tag#v}"
 keys="${TSUBURU_SIGNING_DIR:-$HOME/.tsuburu-signing}"
-sdk="${ANDROID_HOME:?ANDROID_HOME is not set}"
-tools="$(ls -d "$sdk"/build-tools/* | sort -V | tail -1)"
+# apksigner and aapt2 are Java programs, so this needs the JDK as much as the
+# build does.
+# shellcheck source=tools/android-sdk.sh
+. "$(cd "$(dirname "$0")" && pwd)/android-sdk.sh"
+tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
 umask 077
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
