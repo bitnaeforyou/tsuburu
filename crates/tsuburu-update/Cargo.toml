@@ -25,3 +25,4 @@ tempfile = "3"
 # an intent is a Java call.
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
+tsuburu-host = { path = "../tsuburu-host" }

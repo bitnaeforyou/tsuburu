@@ -12,8 +12,6 @@
 
 #[cfg(target_os = "android")]
 mod android;
-#[cfg(target_os = "android")]
-pub use android::note_machine;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -461,8 +459,7 @@ impl Updater {
 /// derive one from, and only the framework knows the path.
 #[cfg(target_os = "android")]
 fn cache_dir() -> Result<PathBuf, UpdateError> {
-    std::env::var_os("TSUBURU_CACHE_DIR")
-        .map(PathBuf::from)
+    tsuburu_host::cache_dir()
         .ok_or_else(|| UpdateError::Replace("nowhere to keep the package".into()))
 }
 

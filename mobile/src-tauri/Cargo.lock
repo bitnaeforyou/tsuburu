@@ -4639,6 +4639,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsuburu-host"
+version = "0.5.0"
+dependencies = [
+ "jni",
+ "serde",
+ "tracing",
+]
+
+[[package]]
 name = "tsuburu-keywords"
 version = "0.5.0"
 dependencies = [
@@ -4680,6 +4689,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tsuburu-hitomi",
+ "tsuburu-host",
  "tsuburu-server",
  "tsuburu-update",
 ]
@@ -4717,6 +4727,7 @@ dependencies = [
  "tsuburu-embed",
  "tsuburu-fetch",
  "tsuburu-hitomi",
+ "tsuburu-host",
  "tsuburu-keywords",
  "tsuburu-korean",
  "tsuburu-meta",
@@ -4755,6 +4766,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "tsuburu-host",
 ]
 
 [[package]]
