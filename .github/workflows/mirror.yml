@@ -47,12 +47,22 @@ jobs:
           # refused by the other account.
           persist-credentials: false
 
-      # Kept before the rewrite, which turns annotated tags into plain ones
-      # and drops what they said. The mirror is the copy people download, so
-      # its release notes are the ones a reader is offered on an update.
+      # Kept before the rewrite, in case it drops what the tag said. The
+      # mirror is the copy people download, so its release notes are the ones
+      # a reader is offered on an update.
+      #
+      # Only from a tag that has something to say. A checkout does not always
+      # bring a tag's annotation with it, and `%(contents)` on a plain tag
+      # answers with the commit's message instead - so v0.6.0 was published
+      # with a commit message where its release notes should have been. Saying
+      # nothing leaves the rewrite's own tag alone, which is the one that was
+      # right all along.
       - name: Keep what the tag says
         if: steps.configured.outputs.yes == 'true' && startsWith(github.ref, 'refs/tags/')
-        run: git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/tag.txt"
+        run: |
+          git fetch --force --tags --depth=1 origin "refs/tags/$GITHUB_REF_NAME" || true
+          [ "$(git cat-file -t "$GITHUB_REF_NAME")" = tag ] || exit 0
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/tag.txt"
 
       - name: Rewrite the authorship
         if: steps.configured.outputs.yes == 'true'
