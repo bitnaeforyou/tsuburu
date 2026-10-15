@@ -10,6 +10,7 @@ pub mod downloads;
 pub mod error;
 pub mod grinder;
 pub mod guard;
+pub mod handoff;
 pub mod keywords;
 pub mod library;
 pub mod listed;
@@ -82,7 +83,10 @@ pub fn router(state: Arc<AppState>, reach: guard::Reach) -> Router {
         .route("/api/dialogue/hunt", post(dialogue::hunt))
         .route("/api/dialogue/import-artifact", post(dialogue::import_artifact))
         .route("/api/dialogue/export", post(dialogue::export))
+        .route("/api/dialogue/shards", get(dialogue::stored_shards))
         .route("/api/dialogue/shards/{name}", get(dialogue::download_shard))
+        .route("/api/dialogue/shards/hand-over", post(dialogue::hand_over_shards))
+        .route("/api/handoff", get(handoff::state).post(handoff::take))
         .route(
             "/api/dialogue/import",
             post(dialogue::import).layer(axum::extract::DefaultBodyLimit::max(SHARD_UPLOAD_LIMIT)),

@@ -366,6 +366,67 @@ pub async fn export(
     Ok(Json(ExportResponse { directory: dir.display().to_string(), files }))
 }
 
+/// What is already in the shard directory.
+///
+/// The export says what it just wrote, but a reader who restarts tsuburu
+/// still has the files and had no way to see them: the list only existed in
+/// the page that made it.
+pub async fn stored_shards(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ExportResponse>, ApiError> {
+    let dir = shards_dir(&state)?.clone();
+    let mut files = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !is_shard_name(&name) {
+                continue;
+            }
+            let bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            // Not read: how many works are in one is in the file, and
+            // decoding every shard to draw a list is a second of waiting for
+            // a number beside a name.
+            files.push(ShardFile { name, bytes, galleries: 0 });
+        }
+    }
+    files.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(Json(ExportResponse { directory: dir.display().to_string(), files }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HandOverBody {
+    /// Which of the exported shards to hand over. Several at once because an
+    /// export makes several, and sending them one at a time is the same
+    /// share sheet eleven times.
+    pub names: Vec<String>,
+}
+
+/// Hands exported shards to the platform: a share sheet on a phone, the file
+/// manager on a computer.
+///
+/// Beside the download link rather than instead of it. The link is right in a
+/// browser - including a browser on another machine, which is the whole point
+/// of serving on a port - and does nothing at all in the webview a phone
+/// shows, where this is the only thing that works.
+pub async fn hand_over_shards(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<HandOverBody>,
+) -> Result<Json<crate::handoff::HandoffState>, ApiError> {
+    if body.names.is_empty() {
+        return Err(ApiError::bad_request("no shard was named"));
+    }
+    let dir = shards_dir(&state)?;
+    let mut paths = Vec::with_capacity(body.names.len());
+    for name in &body.names {
+        if !is_shard_name(name) {
+            return Err(ApiError::bad_request("not a shard file name"));
+        }
+        paths.push(dir.join(name));
+    }
+    crate::handoff::hand_over(&paths)?;
+    Ok(Json(crate::handoff::HandoffState { handoff: tsuburu_host::handoff() }))
+}
+
 pub async fn download_shard(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,

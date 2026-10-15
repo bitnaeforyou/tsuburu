@@ -79,7 +79,7 @@ pub async fn assemble(cfg: Config) -> Result<Arc<AppState>, BootError> {
         state = state.with_dialogue(dialogue);
     }
     if let Ok(dir) = tsuburu_store::data_dir() {
-        state = state.with_shards_dir(dir.join("shards"));
+        state = state.with_shards_dir(shards_dir(&dir));
         match tsuburu_downloads::DownloadStore::open(&dir) {
             Ok(downloads) => {
                 tracing::info!(path = %downloads.images_dir().display(), "opened downloads");
@@ -117,6 +117,24 @@ pub async fn assemble(cfg: Config) -> Result<Arc<AppState>, BootError> {
         grinder.use_model(Arc::clone(&state.model));
     }
     Ok(state)
+}
+
+/// Where an exported dialogue shard is written.
+///
+/// On a computer, beside everything else tsuburu keeps: the reader can open
+/// the folder, and the file stays there until they move it.
+///
+/// On a phone there is no folder a reader can open - an app's own storage is
+/// reachable by nothing else on the device - so the file leaves through the
+/// share sheet, and the one directory the file provider may serve out of is
+/// the cache. Staging it there also means a phone short of space reclaims
+/// copies of files that have already been sent somewhere, which costs an
+/// export rather than any data.
+fn shards_dir(data: &std::path::Path) -> std::path::PathBuf {
+    match tsuburu_host::cache_dir() {
+        Some(cache) => cache.join("shards"),
+        None => data.join("shards"),
+    }
 }
 
 /// The dialogue index, which holds text and nothing else.
