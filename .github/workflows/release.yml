@@ -355,7 +355,16 @@ jobs:
           # paragraph is worse than one that repeats a line. Fetched again
           # because a checkout does not always bring the annotation with it.
           git fetch --force --tags --depth=1 origin "refs/tags/$GITHUB_REF_NAME" || true
-          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.md
+          # Only from a tag that has notes. `%(contents)` on a plain tag
+          # answers with the commit's message, which is how v0.6.1 came to be
+          # published as "chore: 0.6.1" - an empty body is better than a wrong
+          # one, and the table below still gets written either way.
+          if [ "$(git cat-file -t "$GITHUB_REF_NAME")" = tag ]; then
+            git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.md
+          else
+            echo "::warning::$GITHUB_REF_NAME carries no notes"
+            : > notes.md
+          fi
           cat >> notes.md <<'TAIL'
 
           ---

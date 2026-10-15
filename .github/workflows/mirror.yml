@@ -41,28 +41,37 @@ jobs:
         with:
           # The whole history, or the rewrite below would produce a stump.
           fetch-depth: 0
+          # Annotated tags as tag objects rather than as bare refs at the
+          # commit. Without this the rewrite is handed a plain tag and emits
+          # one, and the release built from it has no notes to read.
+          fetch-tags: true
           # checkout otherwise leaves its own credentials in the git config,
           # as a header for github.com, and that header wins over the token
           # in the push URL: the push would go out as the Actions bot and be
           # refused by the other account.
           persist-credentials: false
 
-      # Kept before the rewrite, in case it drops what the tag said. The
-      # mirror is the copy people download, so its release notes are the ones
-      # a reader is offered on an update.
+      # The mirror is the copy people download, so its release notes are the
+      # ones a reader is offered on an update - and they live in the tag.
       #
-      # Only from a tag that has something to say. A checkout does not always
-      # bring a tag's annotation with it, and `%(contents)` on a plain tag
-      # answers with the commit's message instead - so v0.6.0 was published
-      # with a commit message where its release notes should have been. Saying
-      # nothing leaves the rewrite's own tag alone, which is the one that was
-      # right all along.
+      # Asked of the API rather than of git. `%(contents)` on a plain tag
+      # answers with the commit's message, and twice now the tag reaching this
+      # runner has been a plain one: v0.6.0 was published describing an iOS
+      # linker problem, v0.6.1 saying "chore: 0.6.1". The API is asked about
+      # the tag itself, so there is nothing left to be wrong about.
       - name: Keep what the tag says
         if: steps.configured.outputs.yes == 'true' && startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch --force --tags --depth=1 origin "refs/tags/$GITHUB_REF_NAME" || true
-          [ "$(git cat-file -t "$GITHUB_REF_NAME")" = tag ] || exit 0
-          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/tag.txt"
+          object="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" \
+            --jq 'select(.object.type == "tag") | .object.sha')"
+          # A tag nobody annotated has no notes, and the commit message is not
+          # a stand-in for them. Better an empty release body than a wrong one.
+          [ -n "$object" ] || { echo "::warning::$GITHUB_REF_NAME is not annotated"; exit 0; }
+          gh api "repos/$GITHUB_REPOSITORY/git/tags/$object" --jq '.message' \
+            > "$RUNNER_TEMP/tag.txt"
+          echo "carrying $(wc -c < "$RUNNER_TEMP/tag.txt") characters of notes across"
 
       - name: Rewrite the authorship
         if: steps.configured.outputs.yes == 'true'
