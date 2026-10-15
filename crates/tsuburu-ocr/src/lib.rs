@@ -178,11 +178,12 @@ pub fn platform_ocr(options: OcrOptions) -> Option<Box<dyn Ocr>> {
 /// Why this platform has no recognition, when something can be done about it.
 ///
 /// macOS and Windows always have one, so the answer is only ever about the
-/// tools a Unix system has not been given yet. Android is a unix that cannot
-/// be given them - there is no command to install - so it is told nothing
-/// rather than told to install a program it has nowhere to put.
+/// tools a Unix system has not been given yet - and only a Unix somebody can
+/// install things on. A phone is a unix that cannot be given them: there is
+/// no command to run and nowhere to put a program, so it is told nothing
+/// rather than told to go and install one.
 pub fn platform_note() -> Option<String> {
-    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "android", target_os = "ios"))))]
     {
         let missing = tesseract::missing();
         if missing.is_empty() {
@@ -191,7 +192,10 @@ pub fn platform_note() -> Option<String> {
             Some(format!("install {} to index dialogue on this platform", missing.join(" and ")))
         }
     }
-    #[cfg(not(all(unix, not(target_os = "macos"), not(target_os = "android"))))]
+    #[cfg(not(all(
+        unix,
+        not(any(target_os = "macos", target_os = "android", target_os = "ios"))
+    )))]
     {
         None
     }
