@@ -175,8 +175,11 @@ export const ko: Messages = {
   'backup.what':
     '즐겨찾기, 팔로우한 작가, 어디까지 읽었는지를 파일 하나에 담습니다. 불러오면 지금 있는 것에 더해집니다.',
   'backup.save': '내보내기',
+  'backup.send': '보내기',
   'backup.load': '가져오기',
   'backup.saved': '즐겨찾기 {works}개, 작가 {artists}명, 기록 {read}개를 담았습니다.',
+  'backup.sent':
+    '즐겨찾기 {works}개, 작가 {artists}명, 기록 {read}개를 넘겼습니다. 어디에 둘지 고르세요.',
   'backup.putting': '되돌리는 중… {done} / {total}',
   'backup.restored': '{n}개를 되돌렸습니다.',
   'backup.restoredSome': '{n}개를 되돌렸습니다. {failed}개는 읽을 수 없어 넘어갔고, 나머지는 모두 들어왔습니다.',
@@ -307,7 +310,13 @@ export const ko: Messages = {
   'dialogue.importQueued': '{found}개를 찾아 {added}개를 맨 앞에 담았습니다.',
   'dialogue.huntQueued': '{found}편이 걸려 {added}편을 담았습니다.',
   'dialogue.artifactStarted': '{directory}에서 청크 {chunks}개를 가져오는 중',
+  'handoff.share': '공유',
+  'handoff.reveal': '폴더에서 보기',
+  'handoff.shareAll': '{n}개 전부 공유',
+  'handoff.revealAll': '{n}개 전부 폴더에서 보기',
   'dialogue.exported': '{directory}에 파일 {files}개를 썼습니다',
+  'dialogue.exportedHere':
+    '파일 {files}개가 준비됐습니다. 공유해서 기기 밖으로 꺼내세요 — 이 기기의 다른 앱은 여기에 닿지 못합니다.',
   'dialogue.shardImported': '{file}: {added}편 추가, {skipped}편은 이미 있었습니다',
   'dialogue.queue': '대기열에 담기',
   'dialogue.hunt': '골라 담기',

@@ -177,8 +177,11 @@ export const en = {
   'backup.what':
     'Favorites, artists you follow and how far you have read, in one file. Loading one adds to what is here rather than replacing it.',
   'backup.save': 'Save a copy',
+  'backup.send': 'Send a copy',
   'backup.load': 'Load a copy',
   'backup.saved': 'Saved {works} favorites, {artists} artists, {read} read.',
+  'backup.sent':
+    '{works} favorites, {artists} artists and {read} read, handed over. Choose where to keep it.',
   'backup.putting': 'Putting it back… {done} / {total}',
   'backup.restored': 'Put {n} things back.',
   'backup.restoredSome': 'Put {n} things back. {failed} were refused for being unreadable, and the rest of the file was taken in.',
@@ -309,7 +312,13 @@ export const en = {
   'dialogue.importQueued': '{found} ids found, {added} queued ahead of everything else.',
   'dialogue.huntQueued': '{found} galleries matched, {added} queued.',
   'dialogue.artifactStarted': 'Importing {chunks} chunks from {directory}',
+  'handoff.share': 'Share',
+  'handoff.reveal': 'Show in folder',
+  'handoff.shareAll': 'Share all {n}',
+  'handoff.revealAll': 'Show all {n} in folder',
   'dialogue.exported': '{files} files written to {directory}',
+  'dialogue.exportedHere':
+    '{files} files are ready. Share them to get them off this device — nothing else here can reach them.',
   'dialogue.shardImported': '{file}: {added} added, {skipped} already here',
   'dialogue.queue': 'Queue',
   'dialogue.hunt': 'Hunt',

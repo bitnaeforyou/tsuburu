@@ -10,6 +10,17 @@
   let failure = $state<string | null>(null)
   let progress = $state<{ done: number; total: number } | null>(null)
   let file = $state<HTMLInputElement | null>(null)
+  /// Whether a saved file can be reached here at all. A phone cannot: the
+  /// webview drops a download without saying so, which had this report a
+  /// backup saved when nothing had been written anywhere.
+  let handoff = $state<api.HandoffMode | null>(null)
+
+  $effect(() => {
+    void api
+      .handoffState()
+      .then((state) => (handoff = state.handoff))
+      .catch(() => (handoff = 'none'))
+  })
 
   async function save() {
     busy = true
@@ -26,12 +37,22 @@
         artists.map((a) => a.name),
         history.items,
       )
-      offer(JSON.stringify(backup, null, 2), nameFor())
-      note = t('backup.saved', {
+      const name = nameFor()
+      const text = JSON.stringify(backup, null, 2)
+      const counted = {
         works: backup.favorites.length,
         artists: backup.artists.length,
         read: backup.history.length,
-      })
+      }
+      if (handoff === 'share') {
+        // The server writes it and hands it to the operating system, which
+        // asks where it should go. Nothing a page can do reaches that.
+        await api.handOverFile(name, text)
+        note = t('backup.sent', counted)
+      } else {
+        offer(text, name)
+        note = t('backup.saved', counted)
+      }
     } catch (cause) {
       failure = cause instanceof Error ? cause.message : String(cause)
     } finally {
@@ -94,7 +115,11 @@
 <section class="backup">
   <p class="what">{t('backup.what')}</p>
   <div class="row">
-    <button onclick={save} disabled={busy}>{t('backup.save')}</button>
+    {#if handoff !== 'none'}
+      <button onclick={save} disabled={busy}>
+        {handoff === 'share' ? t('backup.send') : t('backup.save')}
+      </button>
+    {/if}
     <button onclick={() => file?.click()} disabled={busy}>{t('backup.load')}</button>
     <input
       bind:this={file}

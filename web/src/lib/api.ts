@@ -377,11 +377,50 @@ export function shardUrl(name: string): string {
   return `/api/dialogue/shards/${encodeURIComponent(name)}`
 }
 
+/// What is already in the shard directory, so a restart does not lose sight
+/// of files that are still there.
+export function storedShards(): Promise<ShardListing> {
+  return request('/api/dialogue/shards')
+}
+
+export function handOverShards(names: string[]): Promise<HandoffState> {
+  return send('POST', '/api/dialogue/shards/hand-over', { names })
+}
+
 export async function importShard(file: File): Promise<ImportSummary> {
   return request(`/api/dialogue/import?name=${encodeURIComponent(file.name)}`, {
     method: 'POST',
     headers: { 'content-type': 'application/octet-stream' },
     body: file,
+  })
+}
+
+// --- getting a file off this machine ---
+
+/// What this machine does with a file tsuburu has just written.
+///
+/// `reveal` is a computer: the file is on a disk the reader can reach, so it
+/// is shown where it is. `share` is a phone, where an app's own storage is
+/// reachable by nothing else and the file has to be handed to the operating
+/// system to go anywhere. A link with `download` on it is right for `reveal`
+/// and silently does nothing for `share`, which is what this is here to say
+/// before anything is offered.
+export type HandoffMode = 'share' | 'reveal' | 'none'
+export type HandoffState = { handoff: HandoffMode }
+
+export function handoffState(): Promise<HandoffState> {
+  return request('/api/handoff')
+}
+
+/// Hands bytes the page is holding to the operating system, under `name`.
+///
+/// For what the interface made rather than the server - a library backup is
+/// packed here - so the server writes it and hands it over in one request.
+export function handOverFile(name: string, body: BlobPart): Promise<HandoffState> {
+  return request(`/api/handoff?name=${encodeURIComponent(name)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/octet-stream' },
+    body: new Blob([body]),
   })
 }
 

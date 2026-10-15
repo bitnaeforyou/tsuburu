@@ -49,6 +49,12 @@
   let shards = $state<api.ShardListing | null>(null)
   let exchangeResult = $state<string | null>(null)
   let exchanging = $state(false)
+  // What this machine can do with an exported file: shown where it is on a
+  // computer, handed to the operating system on a phone. Null until asked -
+  // offering the wrong one is how a phone came to list files it could not
+  // reach.
+  let handoff = $state<api.HandoffMode | null>(null)
+  let handoffError = $state<string | null>(null)
 
   // Fetching several gigabytes takes long enough that the switch has to keep
   // saying so. Asked unconditionally: turning it on answers before the first
@@ -245,16 +251,46 @@
     exchangeResult = null
     try {
       shards = await api.exportShards(backgroundOnly)
-      exchangeResult = t('dialogue.exported', {
-        files: shards.files.length,
-        directory: shards.directory,
-      })
+      // The directory is only worth naming where the reader can open it. On
+      // a phone it is inside the app, reachable by nothing on the device.
+      exchangeResult =
+        handoff === 'share'
+          ? t('dialogue.exportedHere', { files: shards.files.length })
+          : t('dialogue.exported', {
+              files: shards.files.length,
+              directory: shards.directory,
+            })
     } catch (cause) {
       exchangeResult = cause instanceof Error ? cause.message : String(cause)
     } finally {
       exchanging = false
     }
   }
+
+  async function handOver(names: string[]) {
+    handoffError = null
+    try {
+      await api.handOverShards(names)
+    } catch (cause) {
+      handoffError = cause instanceof Error ? cause.message : String(cause)
+    }
+  }
+
+  // Both asked once: what this machine does with a file, and which files are
+  // already written. Without the second, restarting tsuburu left shards on
+  // the disk that the interface no longer mentioned.
+  $effect(() => {
+    void api
+      .handoffState()
+      .then((state) => (handoff = state.handoff))
+      .catch(() => (handoff = 'none'))
+    void api
+      .storedShards()
+      .then((listing) => {
+        if (!shards && listing.files.length) shards = listing
+      })
+      .catch(() => {})
+  })
 
   async function importFiles(event: Event) {
     const input = event.currentTarget as HTMLInputElement
@@ -700,18 +736,40 @@
         </div>
         {#if exchangeResult}<p class="muted small">{exchangeResult}</p>{/if}
         {#if shards && shards.files.length}
+          {@const names = shards.files.map((f) => f.name)}
           <ul class="files">
             {#each shards.files as file (file.name)}
               <li>
-                <a href={api.shardUrl(file.name)} download={file.name}>{file.name}</a>
+                <!-- A link that saves the file is right in a browser, here or
+                     on another machine, and does nothing at all in the webview
+                     a phone shows. So the name is only a link where pressing
+                     it would do something. -->
+                {#if handoff === 'share'}
+                  <span>{file.name}</span>
+                {:else}
+                  <a href={api.shardUrl(file.name)} download={file.name}>{file.name}</a>
+                {/if}
                 <span class="muted small">
                   {formatBytes(file.bytes)}{file.galleries
                     ? ` · ${t('common.galleries', { n: file.galleries })}`
                     : ''}
                 </span>
+                {#if handoff === 'share' || handoff === 'reveal'}
+                  <button onclick={() => void handOver([file.name])}>
+                    {handoff === 'share' ? t('handoff.share') : t('handoff.reveal')}
+                  </button>
+                {/if}
               </li>
             {/each}
           </ul>
+          {#if (handoff === 'share' || handoff === 'reveal') && names.length > 1}
+            <button onclick={() => void handOver(names)}>
+              {handoff === 'share'
+                ? t('handoff.shareAll', { n: names.length })
+                : t('handoff.revealAll', { n: names.length })}
+            </button>
+          {/if}
+          {#if handoffError}<p class="muted small">{handoffError}</p>{/if}
         {/if}
       </div>
     </section>
@@ -1001,8 +1059,17 @@
     display: grid;
     gap: 0.25rem;
   }
-  .files a {
-    margin-inline-end: 0.5rem;
+  .files li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+  /* Beside a file name rather than in a row of its own, so eleven shards do
+     not become eleven full-width buttons. */
+  .files button {
+    padding: 0.1rem 0.45rem;
+    font-size: var(--text-sm);
   }
 
   /* On a phone the line you are trying to remember needs the whole width;

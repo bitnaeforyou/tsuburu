@@ -175,8 +175,11 @@ export const ja: Messages = {
   'backup.what':
     'お気に入り、フォロー中の作家、どこまで読んだかをファイル一つにまとめます。読み込むと今あるものに加わります。',
   'backup.save': '書き出す',
+  'backup.send': '送る',
   'backup.load': '読み込む',
   'backup.saved': 'お気に入り {works}件、作家 {artists}人、履歴 {read}件を保存しました。',
+  'backup.sent':
+    'お気に入り {works}件、作家 {artists}人、履歴 {read}件を渡しました。どこに置くか選んでください。',
   'backup.putting': '戻しています… {done} / {total}',
   'backup.restored': '{n}件を戻しました。',
   'backup.restoredSome': '{n}件を戻しました。{failed}件は読めずに飛ばし、残りはすべて取り込みました。',
@@ -307,7 +310,13 @@ export const ja: Messages = {
   'dialogue.importQueued': '{found}件を見つけ、{added}件を先頭に入れました。',
   'dialogue.huntQueued': '{found}件が該当し、{added}件を入れました。',
   'dialogue.artifactStarted': '{directory} からチャンク{chunks}個を取り込み中',
+  'handoff.share': '共有',
+  'handoff.reveal': 'フォルダで表示',
+  'handoff.shareAll': '{n}個すべて共有',
+  'handoff.revealAll': '{n}個すべてフォルダで表示',
   'dialogue.exported': '{directory} にファイル{files}個を書きました',
+  'dialogue.exportedHere':
+    'ファイル{files}個を用意しました。共有して端末の外に出してください — この端末の他のアプリはここに届きません。',
   'dialogue.shardImported': '{file}: {added}件追加、{skipped}件はすでにありました',
   'dialogue.queue': '待ち行列に入れる',
   'dialogue.hunt': '絞って取り込む',
