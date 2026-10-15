@@ -2485,6 +2485,7 @@ dependencies = [
 name = "tsuburu-host"
 version = "0.6.0"
 dependencies = [
+ "cc",
  "jni",
  "serde",
  "tracing",

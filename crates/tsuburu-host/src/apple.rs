@@ -9,7 +9,8 @@ use std::ffi::{CString, c_char, c_int};
 use std::path::PathBuf;
 
 unsafe extern "C" {
-    /// Defined in `gen/apple/Sources/tsuburu-mobile/share.mm`. Returns zero
+    /// Defined in `src/apple/share.mm`, compiled into this library by its
+    /// own build script rather than by Xcode. Returns zero
     /// once the sheet has been asked for, and a negative number if there was
     /// no window to present it over.
     fn tsuburu_share_files(paths: *const *const c_char, count: c_int) -> c_int;

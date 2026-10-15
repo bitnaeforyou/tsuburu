@@ -9,7 +9,15 @@ license.workspace = true
 tracing = { workspace = true }
 serde = { workspace = true }
 
+# The iOS half is UIKit, which Rust cannot reach, so it is a small
+# Objective-C++ file compiled into this library; see build.rs for why Xcode
+# is not left to do it. Not under a target key: a build script runs on the
+# machine doing the building, and that is what such a key is read against.
+[build-dependencies]
+cc = "1"
+
 # Handing a file to another application is the one thing on a phone that the
 # standard library cannot do: it is an intent, and an intent is a Java call.
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
+
