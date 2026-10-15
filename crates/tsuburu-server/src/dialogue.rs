@@ -868,6 +868,9 @@ pub struct ModelState {
     pub progress: tsuburu_embed::runner::Progress,
     pub kept: bool,
     pub bytes: u64,
+    /// Whether there is a model server published for this computer. False on
+    /// a phone, where the switch was offered and then failed on being used.
+    pub supported: bool,
 }
 
 fn model_state(state: &AppState) -> ModelState {
@@ -875,6 +878,7 @@ fn model_state(state: &AppState) -> ModelState {
         progress: state.model.progress(),
         kept: state.model.kept(),
         bytes: state.model.bytes_kept(),
+        supported: tsuburu_embed::runner::supported(),
     }
 }
 

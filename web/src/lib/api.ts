@@ -593,6 +593,9 @@ export type ModelState = {
   error?: string
   kept: boolean
   bytes: number
+  /// Whether anybody publishes a model server for this machine. False on a
+  /// phone, where the switch used to be offered and then fail on being used.
+  supported: boolean
 }
 
 export function modelState(): Promise<ModelState> {

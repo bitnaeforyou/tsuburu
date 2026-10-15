@@ -426,6 +426,16 @@ fn asset_name() -> Option<String> {
     asset_for(std::env::consts::OS, std::env::consts::ARCH)
 }
 
+/// Whether a model server is published for this computer at all.
+///
+/// Nobody builds llama.cpp for a phone, so there is nothing to fetch and
+/// nothing that would run if there were. Asked before the switch is drawn: a
+/// switch that can only fail is worse than no switch, and this one failed
+/// after the reader had decided they wanted it.
+pub fn supported() -> bool {
+    asset_name().is_some()
+}
+
 fn free_port() -> Option<u16> {
     std::net::TcpListener::bind("127.0.0.1:0").ok()?.local_addr().ok().map(|a| a.port())
 }
@@ -506,6 +516,15 @@ mod tests {
     fn a_computer_nobody_publishes_for_is_said_so_rather_than_guessed_at() {
         assert!(asset_for("freebsd", "x86_64").is_none());
         assert!(asset_for("linux", "mips").is_none());
+    }
+
+    /// A phone is the case this is actually for: neither Android nor iOS has a
+    /// build, and the switch has to know before it is drawn.
+    #[test]
+    fn a_phone_has_no_model_server() {
+        assert!(asset_for("android", "aarch64").is_none());
+        assert!(asset_for("ios", "aarch64").is_none());
+        assert_eq!(supported(), asset_name().is_some());
     }
 
     #[test]

@@ -464,10 +464,12 @@
     {/if}
   {/if}
 
-  <!-- The sweep, and the three things that feed it. Drawn while the status is
-       still on its way, because these panels fill themselves in and a screen
-       that fills in beats one that jumps into place. -->
-  {#if !status || status.recognition}
+  <!-- Its own gate rather than the sweep's. Meaning search is a way of
+       reading the index, not a way of adding to it, so what decides it is
+       whether anybody builds a model server for this machine - nobody does
+       for a phone. Hiding it with the sweep gave the right answer for the
+       wrong reason, and would go on hiding it if a phone build appeared. -->
+  {#if !model || model.supported}
     <section class="panel switch">
         <div class="row">
           <div>
@@ -506,7 +508,12 @@
         {/if}
         {#if modelError}<p class="muted small">{modelError}</p>{/if}
     </section>
+  {/if}
 
+  <!-- The sweep, and the three things that feed it. Drawn while the status is
+       still on its way, because these panels fill themselves in and a screen
+       that fills in beats one that jumps into place. -->
+  {#if !status || status.recognition}
     <!-- The text somebody else's machine already spent weeks recognising.
          The same offer the search screen makes, said by the same component:
          two of them drifted apart on what the buttons were. -->
