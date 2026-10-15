@@ -526,15 +526,55 @@ fn runnable(path: &Path) {
 fn runnable(_path: &Path) {}
 
 fn first_lines(body: &str) -> String {
-    body.lines()
+    let said = body
+        .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty() && !line.starts_with('|') && !line.starts_with('<'))
         .take(3)
+        .map(plain)
         .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(240)
-        .collect()
+        .join(" ");
+    // Counted after the markup is gone, so the limit is characters a reader
+    // sees rather than characters the notes happened to be written with.
+    said.chars().take(240).collect()
+}
+
+/// A line of release notes as a sentence rather than as markdown.
+///
+/// The notes are written for a release page, which renders them; this ends up
+/// in a line of the settings screen, which does not. So a reader being offered
+/// v0.6.0 was told `**Exporting a file works on a phone.**`, asterisks and
+/// all. Only the few things the notes actually use are undone - guessing at
+/// single asterisks and underscores would eat them out of ordinary prose.
+fn plain(line: &str) -> String {
+    inline(line.trim_start_matches(['#', '>', ' ']))
+}
+
+/// The markup that can appear anywhere in a line, as opposed to the markers
+/// that only mean anything at the start of one.
+fn inline(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut rest = line;
+    while !rest.is_empty() {
+        if let Some(after) = rest.strip_prefix("**").or_else(|| rest.strip_prefix('`')) {
+            rest = after;
+            continue;
+        }
+        // A link reads as its label; the address is no use in a line nobody
+        // can click. An unclosed bracket is prose and is left alone.
+        if let Some(after) = rest.strip_prefix('[')
+            && let Some((label, tail)) = after.split_once("](")
+            && let Some((_, left)) = tail.split_once(')')
+        {
+            out.push_str(&inline(label));
+            rest = left;
+            continue;
+        }
+        let c = rest.chars().next().expect("not empty");
+        out.push(c);
+        rest = &rest[c.len_utf8()..];
+    }
+    out
 }
 
 #[cfg(test)]
@@ -647,5 +687,28 @@ bbbb  tsuburu-aarch64-apple-darwin.zip
         assert!(notes.starts_with("First line."), "{notes}");
         assert!(!notes.contains("Fourth"));
         assert!(notes.len() <= 240);
+    }
+
+    /// The settings screen draws these as text, so markup written for the
+    /// release page has to be gone by the time it gets there.
+    #[test]
+    fn release_notes_arrive_as_a_sentence_not_as_markdown() {
+        let body = "## **Exporting a file works on a phone.** The `download` \
+                    attribute did nothing. See [the notes](https://example.com/x).";
+        let notes = first_lines(body);
+        assert!(!notes.contains('*'), "{notes}");
+        assert!(!notes.contains('`'), "{notes}");
+        assert!(!notes.contains("https://"), "{notes}");
+        assert!(notes.starts_with("Exporting a file works on a phone."), "{notes}");
+        assert!(notes.contains("The download attribute"), "{notes}");
+        assert!(notes.contains("See the notes."), "{notes}");
+    }
+
+    /// Prose is left alone: a stray bracket or asterisk in a sentence is not
+    /// markup, and eating it would be a worse bug than showing it.
+    #[test]
+    fn ordinary_prose_is_left_as_it_was() {
+        assert_eq!(plain("2 * 3 is 6, and a_b_c is a name"), "2 * 3 is 6, and a_b_c is a name");
+        assert_eq!(plain("an unclosed [bracket stays"), "an unclosed [bracket stays");
     }
 }
