@@ -28,5 +28,14 @@ export TSUBURU_RELEASES="$repo"
 # here, so this file names nobody.
 export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$HOME/.cargo=/cargo --remap-path-prefix=$HOME/.rustup=/rustup --remap-path-prefix=$here=/tsuburu"
 
+# The interface is embedded into the binary from `web/dist` as it compiles,
+# and nothing in the Android build produces it. Every other platform is built
+# by the workflow, which builds the frontend as its own step; this one is
+# built by hand, where whatever `web/dist` happened to hold is what ships.
+# v0.4.9 through v0.6.2 each went out carrying the interface from v0.4.8.
+cd "$here/web"
+npm ci
+npm run build
+
 cd "$here/mobile"
 npx tauri android build --target aarch64 --apk

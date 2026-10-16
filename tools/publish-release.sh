@@ -87,6 +87,19 @@ if LC_ALL=C grep -qa -- "$HOME" "$work/lib.so"; then
   echo "build it with tools/build-apk.sh, then run this again." >&2
   exit 1
 fi
+# The interface is embedded as the binary compiles, from whatever `web/dist`
+# held at the time, and a package carrying a months-old one is indistinguishable
+# from a current one by its version: v0.4.9 through v0.6.2 all shipped the
+# interface from v0.4.8, and the export button the readers were told about did
+# nothing on a phone. The embedded names are the built file names, so they are
+# in `web/dist` if and only if this package was built from it.
+for asset in $(LC_ALL=C grep -Eao 'assets/index-[A-Za-z0-9_-]+\.(js|css)' "$work/lib.so" | sort -u); do
+  [ -e "web/dist/$asset" ] || {
+    echo "the package carries an interface that is not the built one ($asset)." >&2
+    echo "build it with tools/build-apk.sh, then run this again." >&2
+    exit 1
+  }
+done
 "$tools/apksigner" verify "$apk"
 gh release upload "$tag" "$apk" --repo "$repo" --clobber
 
