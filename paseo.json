@@ -1,0 +1,12 @@
+{
+  "worktree": {
+    "setup": [
+      "for env_file in \"$PASEO_SOURCE_CHECKOUT_PATH\"/.env*; do [ -f \"$env_file\" ] && cp -n \"$env_file\" . ; done; true"
+    ]
+  },
+  "scripts": {
+    "cargo-test": {
+      "command": "cargo test"
+    }
+  }
+}
