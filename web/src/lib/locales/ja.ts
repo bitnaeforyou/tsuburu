@@ -20,6 +20,8 @@ export const ja: Messages = {
   'update.ready': '{version} を用意しました。tsuburu を起動し直すと適用されます。',
   'update.readyPhone': '{version} を取得しました。Android が開いたインストール画面で完了してください。保存したものはそのまま残ります。',
   'update.resign': 'リリースから新しい .ipa を取得し、今のものと同じ方法で署名し直してください。',
+  'update.blocked': '{version} をインストールするには、Android の設定で tsuburu のアプリインストールを許可してください。許可して戻ると、また取得できます。',
+  'update.allow': '許可の画面を開く',
   'update.failed': '取得できませんでした: {error}',
   'update.unpublished': 'ダウンロードしたものではなく自分でビルドした複製なので、更新元がありません。',
 

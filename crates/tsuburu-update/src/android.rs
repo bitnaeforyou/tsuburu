@@ -22,19 +22,48 @@ const PACKAGE: &str = "application/vnd.android.package-archive";
 
 /// Opens the installer on `apk`.
 ///
-/// Returns once the intent has been handed over; whether the reader goes
-/// through with it is between them and the operating system.
-pub fn install(apk: &Path) -> Result<(), String> {
+/// Says whether the installer was opened. A reader who has not allowed this
+/// app to install applications gets no installer and no refusal either, so
+/// the caller has to be told the difference rather than left to assume the
+/// screen came up.
+pub fn install(apk: &Path) -> Result<bool, String> {
     attached(|env| ask(env, apk))
 }
 
-fn ask(env: &mut JNIEnv, apk: &Path) -> Result<(), String> {
-    let context = application(env)?;
+/// Whether the reader has allowed this app to install applications.
+///
+/// Worth asking before fetching eighty megabytes, which do not help.
+pub fn allowed() -> Result<bool, String> {
+    attached(|env| {
+        let context = application(env)?;
+        may_install(env, &context)
+    })
+}
 
-    // The reader has to have allowed this app to install applications, and
-    // the only thing that can ask them is the settings screen for it.
+/// Opens the one settings screen that can grant it, since an app cannot ask
+/// for this permission in a dialogue the way it asks for the camera.
+pub fn ask_to_allow() -> Result<(), String> {
+    attached(|env| {
+        let context = application(env)?;
+        let intent = intent(env, "android.settings.MANAGE_UNKNOWN_APP_SOURCES")?;
+        let name = package_name(env, &context)?;
+        let uri = uri(env, &format!("package:{name}"))?;
+        env.call_method(
+            &intent,
+            "setData",
+            "(Landroid/net/Uri;)Landroid/content/Intent;",
+            &[JValue::Object(&uri)],
+        )
+        .map_err(|e| e.to_string())?;
+        add_flags(env, &intent, NEW_TASK)?;
+        start(env, &context, &intent)
+    })
+}
+
+fn ask(env: &mut JNIEnv, apk: &Path) -> Result<bool, String> {
+    let context = application(env)?;
     if !may_install(env, &context)? {
-        return ask_to_allow(env, &context);
+        return Ok(false);
     }
 
     let uri = uri_for_file(env, &context, apk)?;
@@ -49,7 +78,8 @@ fn ask(env: &mut JNIEnv, apk: &Path) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     add_flags(env, &intent, GRANT_READ | NEW_TASK)?;
 
-    start(env, &context, &intent)
+    start(env, &context, &intent)?;
+    Ok(true)
 }
 
 fn may_install(env: &mut JNIEnv, context: &JObject) -> Result<bool, String> {
@@ -66,23 +96,4 @@ fn may_install(env: &mut JNIEnv, context: &JObject) -> Result<bool, String> {
             Ok(true)
         }
     }
-}
-
-/// Opens the one settings screen that can grant it, since an app cannot ask
-/// for this permission in a dialogue the way it asks for the camera.
-fn ask_to_allow(env: &mut JNIEnv, context: &JObject) -> Result<(), String> {
-    let intent = intent(env, "android.settings.MANAGE_UNKNOWN_APP_SOURCES")?;
-    let name = package_name(env, context)?;
-    let uri = uri(env, &format!("package:{name}"))?;
-    env.call_method(
-        &intent,
-        "setData",
-        "(Landroid/net/Uri;)Landroid/content/Intent;",
-        &[JValue::Object(&uri)],
-    )
-    .map_err(|e| e.to_string())?;
-    add_flags(env, &intent, NEW_TASK)?;
-    start(env, context, &intent)?;
-    Err("allow tsuburu to install applications on the screen that just opened, then ask again"
-        .into())
 }

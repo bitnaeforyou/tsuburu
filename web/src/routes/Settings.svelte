@@ -388,7 +388,7 @@
     </label>
   </section>
 
-  <section class="panel version" class:offer={update?.state === 'found'}>
+  <section class="panel version" class:offer={update?.state === 'found' || update?.state === 'blocked'}>
       <div class="row">
         <div>
           <h2>{t('update.title')}</h2>
@@ -405,6 +405,8 @@
               {update.platform === 'android'
                 ? t('update.readyPhone', { version: update.version ?? '' })
                 : t('update.ready', { version: update.version ?? '' })}
+            {:else if update?.state === 'blocked'}
+              {t('update.blocked', { version: update.version ?? '' })}
             {:else if update?.state === 'failed'}
               {t('update.failed', { error: update.error ?? '' })}
             {:else if update && !update.published}
@@ -424,6 +426,17 @@
         {:else if update?.state === 'found'}
           <button class="primary" onclick={() => void api.applyUpdate().then((u) => (update = u))}>
             {t('update.get', { version: update.version ?? '' })}
+          </button>
+        {:else if update?.state === 'blocked'}
+          <!-- Android gives this permission no dialogue to ask in, so the
+               only thing the app can do is open the screen that has it. The
+               panel goes back to offering the update by itself once it is
+               granted. -->
+          <button
+            class="primary"
+            onclick={() => void api.allowInstalling().then((u) => (update = u))}
+          >
+            {t('update.allow')}
           </button>
         {:else if update?.published && update.state !== 'fetching' && update.state !== 'ready'}
           <button onclick={() => void api.checkUpdate().then((u) => (update = u))}>

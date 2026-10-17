@@ -33,6 +33,9 @@ fn state_of(state: &AppState) -> UpdateState {
 }
 
 pub async fn state(State(state): State<Arc<AppState>>) -> Json<UpdateState> {
+    // The permission a phone update can be stuck on is granted elsewhere, so
+    // the screen asking is what notices it was.
+    state.updater.reconsider();
     Json(state_of(&state))
 }
 
@@ -43,5 +46,15 @@ pub async fn check(State(state): State<Arc<AppState>>) -> Json<UpdateState> {
 
 pub async fn apply(State(state): State<Arc<AppState>>) -> Json<UpdateState> {
     state.updater.apply();
+    Json(state_of(&state))
+}
+
+/// Opens the phone's screen for allowing this app to install applications.
+///
+/// It is a screen rather than a dialogue because Android gives this one no
+/// other way to be granted, so the reader leaves tsuburu, flips it and comes
+/// back to ask for the update again.
+pub async fn allow(State(state): State<Arc<AppState>>) -> Json<UpdateState> {
+    state.updater.allow();
     Json(state_of(&state))
 }

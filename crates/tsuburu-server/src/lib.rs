@@ -74,6 +74,7 @@ pub fn router(state: Arc<AppState>, reach: guard::Reach) -> Router {
         .route("/api/update", get(update::state))
         .route("/api/update/check", post(update::check))
         .route("/api/update/apply", post(update::apply))
+        .route("/api/update/allow", post(update::allow))
         .route("/api/model", get(dialogue::get_model))
         .route("/api/model/enable", post(dialogue::enable_model))
         .route("/api/model/disable", post(dialogue::disable_model))

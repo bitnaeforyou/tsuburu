@@ -558,7 +558,7 @@ export function unfollowArtist(name: string): Promise<{ following: boolean }> {
 /// Whether a newer tsuburu has been published, and how far along becoming it
 /// has got.
 export type UpdateState = {
-  state: 'idle' | 'checking' | 'found' | 'fetching' | 'ready' | 'failed'
+  state: 'idle' | 'checking' | 'found' | 'fetching' | 'ready' | 'failed' | 'blocked'
   version?: string
   notes?: string
   done?: number
@@ -581,6 +581,12 @@ export function checkUpdate(): Promise<UpdateState> {
 
 export function applyUpdate(): Promise<UpdateState> {
   return send('POST', '/api/update/apply')
+}
+
+/// Opens the phone's screen for allowing tsuburu to install applications,
+/// which is where an update stops until the reader grants it.
+export function allowInstalling(): Promise<UpdateState> {
+  return send('POST', '/api/update/allow')
 }
 
 /// The model that turns a phrase into a vector: what it is doing, and whether

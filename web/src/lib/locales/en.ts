@@ -20,6 +20,8 @@ export const en = {
   'update.ready': '{version} is in place. Start tsuburu again to use it.',
   'update.readyPhone': '{version} has been fetched. Finish in the installer Android has opened; what you have kept stays where it is.',
   'update.resign': 'Fetch the new .ipa from the release and sign it again the way you signed this one.',
+  'update.blocked': 'Android has not allowed tsuburu to install applications, which {version} needs. Allow it and come back, and the update will be here.',
+  'update.allow': 'Open the setting',
   'update.failed': 'It could not be fetched: {error}',
   'update.unpublished': 'This copy was built rather than downloaded, so there is nowhere to update from.',
 

@@ -44,6 +44,14 @@ pub enum Progress {
     Ready {
         version: String,
     },
+    /// Only a phone: the reader has not allowed this app to install
+    /// applications, which is a permission no dialogue may ask for. Not a
+    /// failure - nothing has gone wrong and nothing has been fetched yet -
+    /// so the screen says what the one remaining step is instead.
+    Blocked {
+        version: String,
+        notes: String,
+    },
     Failed {
         error: String,
     },
@@ -193,6 +201,23 @@ pub fn asset_for(os: &str, arch: &str) -> Option<&'static str> {
     })
 }
 
+/// What applying an update came to.
+///
+/// A phone can end up neither finished nor broken: the package installer is
+/// behind a permission, and until the reader grants it there is nothing to
+/// hand the package to.
+enum Applied {
+    Done(String),
+    /// Nowhere but a phone has a permission like this to be without. It
+    /// carries what the offer said, so granting the permission puts the
+    /// offer back rather than sending the reader to look for it again.
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    NotAllowed {
+        version: String,
+        notes: String,
+    },
+}
+
 pub struct Updater {
     progress: Mutex<Progress>,
     client: reqwest::Client,
@@ -212,6 +237,20 @@ impl Updater {
     /// Whether this copy knows where it was published from at all.
     pub fn publishable(&self) -> bool {
         RELEASES.is_some()
+    }
+
+    /// Puts the offer back once the permission that stopped it is given.
+    ///
+    /// The reader grants it in the system settings, outside this app and
+    /// without telling it, so looking again whenever the screen refreshes is
+    /// the only way the panel ever stops saying it is stuck.
+    pub fn reconsider(&self) {
+        #[cfg(target_os = "android")]
+        if let Progress::Blocked { version, notes } = self.progress()
+            && android::allowed().unwrap_or(false)
+        {
+            self.set(Progress::Found { version, notes });
+        }
     }
 
     pub fn progress(&self) -> Progress {
@@ -277,7 +316,10 @@ impl Updater {
         let me = Arc::clone(self);
         tokio::spawn(async move {
             match me.become_newer().await {
-                Ok(version) => me.set(Progress::Ready { version }),
+                Ok(Applied::Done(version)) => me.set(Progress::Ready { version }),
+                Ok(Applied::NotAllowed { version, notes }) => {
+                    me.set(Progress::Blocked { version, notes })
+                }
                 Err(error) => {
                     tracing::warn!(%error, "the update could not be applied");
                     me.set(Progress::Failed { error: error.to_string() })
@@ -286,11 +328,23 @@ impl Updater {
         });
     }
 
+    /// Opens the settings screen that allows this app to install
+    /// applications, which is the only place that permission can be given.
+    ///
+    /// Does nothing anywhere but a phone, where nothing else is gated on it.
+    pub fn allow(&self) {
+        #[cfg(target_os = "android")]
+        if let Err(error) = android::ask_to_allow() {
+            tracing::warn!(%error, "could not open the screen that allows installing");
+            self.set(Progress::Failed { error });
+        }
+    }
+
     /// Whatever this platform means by becoming the newer version.
     ///
     /// A computer writes the new program over the old one and is restarted; a
     /// phone cannot, and hands the package to the system installer instead.
-    async fn become_newer(self: &Arc<Self>) -> Result<String, UpdateError> {
+    async fn become_newer(self: &Arc<Self>) -> Result<Applied, UpdateError> {
         #[cfg(target_os = "android")]
         return self.hand_to_installer().await;
         #[cfg(not(target_os = "android"))]
@@ -303,8 +357,20 @@ impl Updater {
     /// `FileProvider` in the Android project is already told it may share
     /// from, and because a package that has been installed is rubbish.
     #[cfg(target_os = "android")]
-    async fn hand_to_installer(self: &Arc<Self>) -> Result<String, UpdateError> {
+    async fn hand_to_installer(self: &Arc<Self>) -> Result<Applied, UpdateError> {
         let release = self.latest().await?.ok_or(UpdateError::Unpublished)?;
+        let version = release.tag_name.trim_start_matches('v').to_string();
+        let blocked =
+            || Applied::NotAllowed { version: version.clone(), notes: first_lines(&release.body) };
+
+        // Before the download rather than after it: the permission is not
+        // something eighty megabytes can change, and a reader who sits
+        // through the fetch only to be sent to a settings screen waited for
+        // nothing.
+        if !android::allowed().map_err(UpdateError::Install)? {
+            return Ok(blocked());
+        }
+
         let asset = release
             .assets
             .iter()
@@ -318,12 +384,16 @@ impl Updater {
         let apk = work.join(&asset.name);
         self.fetch_as_published(&release, &asset, &apk).await?;
 
-        android::install(&apk).map_err(UpdateError::Install)?;
-        Ok(release.tag_name.trim_start_matches('v').to_string())
+        // Asked again rather than assumed: the reader may have taken it
+        // away while the package was coming down.
+        if !android::install(&apk).map_err(UpdateError::Install)? {
+            return Ok(blocked());
+        }
+        Ok(Applied::Done(version))
     }
 
     #[cfg_attr(target_os = "android", allow(dead_code))]
-    async fn replace_self(self: &Arc<Self>) -> Result<String, UpdateError> {
+    async fn replace_self(self: &Arc<Self>) -> Result<Applied, UpdateError> {
         let release = self.latest().await?.ok_or(UpdateError::Unpublished)?;
         let want = asset_for(std::env::consts::OS, std::env::consts::ARCH)
             .ok_or_else(|| UpdateError::NoAsset(release.tag_name.clone()))?;
@@ -360,7 +430,7 @@ impl Updater {
             find_binary(&work).ok_or_else(|| UpdateError::Unpack("no tsuburu inside".into()))?;
         swap(&here, &fresh)?;
         let _ = std::fs::remove_dir_all(&work);
-        Ok(release.tag_name.trim_start_matches('v').to_string())
+        Ok(Applied::Done(release.tag_name.trim_start_matches('v').to_string()))
     }
 
     /// Fetches one of a release's files, having checked it is the file the
@@ -611,6 +681,22 @@ mod tests {
         // And nothing at all where a signature should be.
         assert!(signed_by_publisher(SIGNED_LISTING, &[]).is_err());
         assert!(signed_by_publisher(SIGNED_LISTING, &[0u8; 63]).is_err());
+    }
+
+    /// The screen branches on `state`, so this is the one place the two
+    /// halves agree on what a stopped phone update is called. They have gone
+    /// out of step before, and a package whose core and interface disagree
+    /// looks exactly like one that works.
+    #[test]
+    fn a_blocked_update_says_so_by_name_and_keeps_the_offer() {
+        let said = serde_json::to_value(Progress::Blocked {
+            version: "0.6.4".into(),
+            notes: "what is in it".into(),
+        })
+        .unwrap();
+        assert_eq!(said["state"], "blocked");
+        assert_eq!(said["version"], "0.6.4");
+        assert_eq!(said["notes"], "what is in it");
     }
 
     #[test]

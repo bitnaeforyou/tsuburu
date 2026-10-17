@@ -19,6 +19,7 @@ ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 tempfile = "3"
+serde_json = { workspace = true }
 
 # Handing an APK to the system installer is the one thing on a phone that
 # cannot be done through the standard library: it is an Android intent, and
