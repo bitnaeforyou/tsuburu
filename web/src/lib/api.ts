@@ -53,7 +53,13 @@ export type Term = {
   excluded: boolean
 }
 
-export type SearchResponse = { total: number; ids: number[]; terms: Term[] }
+export type SearchResponse = {
+  total: number
+  ids: number[]
+  terms: Term[]
+  /** Whether the first-screen tags narrowed this browse. */
+  narrowed: boolean
+}
 
 export type Card = {
   id: number
@@ -215,6 +221,16 @@ export function hiddenTags(): Promise<HiddenTags> {
 
 export function setHiddenTags(tags: string[]): Promise<HiddenTags> {
   return send('PUT', '/api/hidden', { tags })
+}
+
+/// Tags the first screen keeps to: a work needs only one of them to be shown
+/// when nothing has been searched for.
+export function homeTags(): Promise<HiddenTags> {
+  return request('/api/home')
+}
+
+export function setHomeTags(tags: string[]): Promise<HiddenTags> {
+  return send('PUT', '/api/home', { tags })
 }
 
 export type KeptCards = { cards: number }

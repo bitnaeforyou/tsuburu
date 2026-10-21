@@ -26,6 +26,8 @@ export type Remembered = Place & {
   /// How far into a dialogue search paging can go, which is what decides
   /// whether there is a "load more" to offer.
   reachable: number
+  /// Whether the first screen's tags narrowed what was found.
+  narrowed: boolean
 }
 
 /// How many searches back it remembers. Enough to wander between a few
@@ -45,7 +47,8 @@ const STORED = 'tsuburu.results'
 /// and asking again is answered from the store's own cache.
 type Stored = Omit<Remembered, 'hits' | 'terms'>
 
-type Written = Omit<Stored, 'reachable'> & Partial<Pick<Stored, 'reachable'>>
+type Written = Omit<Stored, 'reachable' | 'narrowed'> &
+  Partial<Pick<Stored, 'reachable' | 'narrowed'>>
 
 function load(): Map<string, Remembered> {
   try {
@@ -59,6 +62,7 @@ function load(): Map<string, Remembered> {
         {
           ...row,
           reachable: row.reachable ?? 0,
+          narrowed: row.narrowed ?? false,
           terms: [],
           hits: [],
         },
@@ -74,9 +78,9 @@ const seen = load()
 function save() {
   try {
     const rows: [string, Stored][] = [...seen].map(
-      ([key, { ids, total, offset, reachable, scrollY, anchor }]) => [
+      ([key, { ids, total, offset, reachable, narrowed, scrollY, anchor }]) => [
         key,
-        { ids, total, offset, reachable, scrollY, anchor },
+        { ids, total, offset, reachable, narrowed, scrollY, anchor },
       ],
     )
     localStorage.setItem(STORED, JSON.stringify(rows))

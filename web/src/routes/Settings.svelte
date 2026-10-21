@@ -8,6 +8,7 @@
   import ErrorNote from '../lib/ErrorNote.svelte'
   import Backup from '../lib/Backup.svelte'
   import { toDialogue } from '../lib/router'
+  import { forget as forgetResults } from '../lib/results.svelte'
 
   const LANGUAGES = ['all', 'korean', 'japanese', 'english']
   const KINDS = ['all', 'doujinshi', 'manga']
@@ -344,6 +345,35 @@
     if (!tag) return
     hiddenDraft = ''
     await saveHidden([...hidden, tag])
+  }
+
+  let home = $state<string[]>([])
+  let homeDraft = $state('')
+  let homeBusy = $state(false)
+
+  $effect(() => {
+    void api.homeTags().then((h) => (home = h.tags)).catch(() => {})
+  })
+
+  async function saveHome(next: string[]) {
+    homeBusy = true
+    try {
+      home = (await api.setHomeTags(next)).tags
+      // A first screen remembered from before would be put back as it was.
+      forgetResults()
+    } catch {
+      // A library that cannot be written to is already reported elsewhere.
+    } finally {
+      homeBusy = false
+    }
+  }
+
+  async function addHome(event: SubmitEvent) {
+    event.preventDefault()
+    const tag = homeDraft.trim()
+    if (!tag) return
+    homeDraft = ''
+    await saveHome([...home, tag])
   }
 
   let kept = $state<api.KeptCards | null>(null)
@@ -858,10 +888,39 @@
     </details>
   {/if}
 
-  <!-- Neither of the two below is the dialogue's, so neither sits behind its
-       notice: one is what a reader never wants to see, the other is what
-       makes the program open quickly on a platform that cannot read dialogue
-       at all. -->
+  <!-- None of the three below is the dialogue's, so none sits behind its
+       notice: what the first screen is for, what a reader never wants to
+       see, and what makes the program open quickly on a platform that cannot
+       read dialogue at all. -->
+  <section class="panel">
+    <h2>{t('home.title')}</h2>
+    <p class="muted small">{t('home.note')}</p>
+    <form class="row" onsubmit={addHome}>
+      <input bind:value={homeDraft} placeholder="female:glasses" aria-label={t('home.add')} />
+      <button type="submit" disabled={homeBusy || !homeDraft.trim()}>
+        {t('home.addButton')}
+      </button>
+    </form>
+    {#if home.length}
+      <ul class="chips">
+        {#each home as tag (tag)}
+          <li>
+            <span>{tag}</span>
+            <button
+              class="drop"
+              disabled={homeBusy}
+              onclick={() => saveHome(home.filter((t) => t !== tag))}
+              aria-label={t('home.remove', { tag })}
+              title={t('home.remove', { tag })}
+            >&times;</button>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <p class="muted small">{t('home.empty')}</p>
+    {/if}
+  </section>
+
   <section class="panel">
     <h2>{t('hidden.title')}</h2>
     <p class="muted small">{t('hidden.note')}</p>

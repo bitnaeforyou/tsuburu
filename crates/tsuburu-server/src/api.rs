@@ -50,6 +50,9 @@ pub struct SearchResponse {
     /// 치환하면 작가 검색이 빈손으로 돌아올 때 "안 되는 기능"이 아니라
     /// "고장난 앱"으로 보인다(스펙 4.2절).
     pub terms: Vec<tsuburu_korean::Term>,
+    /// Whether the first screen's tags narrowed this, so the screen can say
+    /// why it is not showing everything.
+    pub narrowed: bool,
 }
 
 /// Forgets what has already been read from hitomi.
@@ -103,6 +106,9 @@ pub async fn search(
     let limit = params.limit.clamp(1, MAX_LIMIT);
     let version = state.version().await?;
     let hidden = state.hidden().await;
+    // Only browsing is narrowed, and asking for the set costs every tag's
+    // list the first time - not something a search should wait for.
+    let home = if query.include.is_empty() { state.home().await } else { None };
     let page = tsuburu_hitomi::search_page(
         state.fetcher.as_ref(),
         &state.cfg,
@@ -114,11 +120,13 @@ pub async fn search(
             offset: params.offset,
             limit,
             hidden: &hidden,
+            within: home.as_deref(),
         },
     )
     .await?;
 
-    Ok(Json(SearchResponse { total: page.total, ids: page.ids, terms }))
+    let narrowed = home.is_some();
+    Ok(Json(SearchResponse { total: page.total, ids: page.ids, terms, narrowed }))
 }
 
 /// 결과 그리드에 그릴 최소 정보.

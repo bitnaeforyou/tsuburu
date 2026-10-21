@@ -289,6 +289,7 @@ pub async fn hunt(
             // Not the reader's hidden tags: this is naming outright what to
             // read, and what was named is what is meant.
             hidden: &Default::default(),
+            within: None,
         },
     )
     .await?;

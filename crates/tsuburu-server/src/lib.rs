@@ -54,6 +54,7 @@ pub fn router(state: Arc<AppState>, reach: guard::Reach) -> Router {
         .route("/api/history", get(library::list_history).delete(library::clear_history))
         .route("/api/kept", get(library::kept_cards).delete(library::forget_kept_cards))
         .route("/api/hidden", get(library::hidden_tags).put(library::set_hidden_tags))
+        .route("/api/home", get(library::home_tags).put(library::set_home_tags))
         .route("/api/history/{id}", put(library::record_progress))
         .route("/api/artists/following", get(artists::following))
         .route("/api/artists/{name}", get(artists::works))

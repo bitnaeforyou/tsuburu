@@ -38,6 +38,8 @@
   let hits = $state<api.DialogueHit[]>([])
   /// How far into the dialogue's total a reader can actually page.
   let reachable = $state(0)
+  /// Whether the first screen's tags narrowed what is shown.
+  let narrowed = $state(false)
   let controller: AbortController | null = null
   let localAvailable = $state(false)
   let dialogueAvailable = $state(false)
@@ -100,6 +102,7 @@
     hits = []
     total = 0
     reachable = 0
+    narrowed = false
     offset = 0
     error = null
     if (sectioned) return
@@ -115,6 +118,7 @@
       total = before.total
       offset = before.offset
       reachable = before.reachable
+      narrowed = before.narrowed
       stopRestore = restoreScroll(before)
       return
     }
@@ -213,7 +217,7 @@
   $effect(() => {
     const asked = key
     if (sectioned || (ids.length === 0 && hits.length === 0)) return
-    remember(asked, { ids, terms, hits, total, offset, reachable, scrollY: 0 })
+    remember(asked, { ids, terms, hits, total, offset, reachable, narrowed, scrollY: 0 })
   })
 
   // Where the page is, written down as it moves. Never read on the way out:
@@ -301,6 +305,7 @@
       )
       total = page.total
       terms = page.terms
+      narrowed = page.narrowed
       ids = from === 0 ? page.ids : joined(ids, page.ids)
       offset = from + page.ids.length
     } catch (cause) {
@@ -378,7 +383,8 @@
     if (total > 0) {
       const said = [t('search.results', { n: number(total) })]
       if (params.scope === 'local') said.push(t('search.fromSnapshot'))
-      if (!params.query && !filtering) said.push(t('search.browsingAll'))
+      if (narrowed) said.push(t('search.narrowed'))
+      else if (!params.query && !filtering) said.push(t('search.browsingAll'))
       return said.join(' · ')
     }
     if (loading || error) return ''

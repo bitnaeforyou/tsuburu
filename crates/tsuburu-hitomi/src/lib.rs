@@ -217,6 +217,10 @@ pub struct SearchRequest<'a> {
     /// for. Empty for everyone who has said nothing, which is the path that
     /// reads only the bytes for the page.
     pub hidden: &'a HashSet<i32>,
+    /// The only works browsing may show, when the reader has said what their
+    /// first screen is for. A search ignores it: typing something is asking
+    /// for that, not for the usual.
+    pub within: Option<&'a HashSet<i32>>,
 }
 
 /// 페이지 단위 검색. 정렬과 필터를 함께 받는다.
@@ -233,10 +237,13 @@ pub async fn search_page(
     version: &str,
     request: &SearchRequest<'_>,
 ) -> Result<SearchPage, SearchError> {
-    let SearchRequest { query, filters, sort, offset, limit, hidden } = *request;
+    let SearchRequest { query, filters, sort, offset, limit, hidden, within } = *request;
     let language = filters.language_or_all();
 
     if query.include.is_empty() {
+        if let Some(within) = within {
+            return browse_within(fetcher, cfg, filters, sort, offset, limit, hidden, within).await;
+        }
         return browse(fetcher, cfg, filters, sort, offset, limit, hidden).await;
     }
 
@@ -329,6 +336,40 @@ async fn browse(
     let allowed = nozomi::id_set(fetcher, &type_url).await?;
     let sort_url = cfg.sort_list_url(sort, language);
     let ids = nozomi::reorder(fetcher, &sort_url, &allowed, hidden, offset, limit).await?;
+    Ok(SearchPage { total, ids })
+}
+
+/// Browsing kept to a set of works the reader chose beforehand.
+///
+/// The set is the union of several tags' lists, and a union of lists has no
+/// order of its own - so the sort list is walked for the ones in it, the way
+/// a search sorted by popularity is.
+#[allow(clippy::too_many_arguments)]
+async fn browse_within(
+    fetcher: &dyn Fetcher,
+    cfg: &Config,
+    filters: &Filters,
+    sort: Sort,
+    offset: usize,
+    limit: usize,
+    hidden: &HashSet<i32>,
+    within: &HashSet<i32>,
+) -> Result<SearchPage, SearchError> {
+    let language = filters.language_or_all();
+    let mut allowed: HashSet<i32> = within.difference(hidden).copied().collect();
+    // Counted against the language and the kind before it is walked, or the
+    // total would include works the pages can never reach.
+    if filters.language.is_some() {
+        let listed = nozomi::id_set(fetcher, &cfg.sort_list_url(Sort::Date, language)).await?;
+        allowed.retain(|id| listed.contains(id));
+    }
+    if let Some(kind) = &filters.kind {
+        let listed = nozomi::id_set(fetcher, &cfg.type_list_url(kind, language)).await?;
+        allowed.retain(|id| listed.contains(id));
+    }
+    let total = allowed.len();
+    let url = cfg.sort_list_url(sort, language);
+    let ids = nozomi::reorder(fetcher, &url, &allowed, hidden, offset, limit).await?;
     Ok(SearchPage { total, ids })
 }
 
@@ -425,6 +466,56 @@ mod tests {
             cfg.gallery_info_url(42),
             "https://ltn.gold-usergeneratedcontent.net/galleries/42.js"
         );
+    }
+
+    fn nozomi(ids: &[i32]) -> Vec<u8> {
+        ids.iter().flat_map(|id| id.to_be_bytes()).collect()
+    }
+
+    /// The chosen works come from several tags' lists at once, so their order
+    /// has to be the sort list's and not whichever tag was asked first.
+    #[tokio::test]
+    async fn browsing_within_chosen_works_keeps_the_sort_lists_order() {
+        let cfg = Config::default();
+        let fetcher = fetcher::mock::MockFetcher::with(
+            &cfg.sort_list_url(Sort::Date, "all"),
+            nozomi(&[9, 8, 7, 6, 5, 4]),
+        )
+        .insert(&cfg.type_list_url("manga", "all"), nozomi(&[8, 6, 4]));
+        let within: HashSet<i32> = [4, 6, 7, 9].into();
+        let hidden: HashSet<i32> = [7].into();
+        let ask = |filters: &Filters| {
+            let filters = filters.clone();
+            let (within, hidden) = (&within, &hidden);
+            let fetcher = &fetcher;
+            let cfg = &cfg;
+            async move {
+                search_page(
+                    fetcher,
+                    cfg,
+                    "1",
+                    &SearchRequest {
+                        query: &Query::default(),
+                        filters: &filters,
+                        sort: Sort::Date,
+                        offset: 0,
+                        limit: 10,
+                        hidden,
+                        within: Some(within),
+                    },
+                )
+                .await
+                .unwrap()
+            }
+        };
+
+        let every = ask(&Filters::default()).await;
+        assert_eq!(every.ids, vec![9, 6, 4]);
+        assert_eq!(every.total, 3);
+
+        let manga = ask(&Filters { kind: Some("manga".into()), ..Filters::default() }).await;
+        assert_eq!(manga.ids, vec![6, 4]);
+        assert_eq!(manga.total, 2);
     }
 
     #[test]

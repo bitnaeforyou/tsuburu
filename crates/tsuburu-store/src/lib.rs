@@ -485,15 +485,36 @@ impl Store {
     /// one kind of work had to read past it every time. Kept here rather than
     /// in the address because it is a standing answer, not one search.
     pub fn hidden_tags(&self) -> Result<Vec<String>, StoreError> {
+        self.tags("hidden_tags")
+    }
+
+    pub fn set_hidden_tags(&self, tags: &[String]) -> Result<Vec<String>, StoreError> {
+        self.set_tags("hidden_tags", tags)
+    }
+
+    /// Tags the first screen keeps to, any one of them being enough.
+    ///
+    /// What a reader with a standing taste opens the program to, instead of
+    /// every work hitomi has. Only browsing is narrowed by it: a search is the
+    /// reader asking for something in particular.
+    pub fn home_tags(&self) -> Result<Vec<String>, StoreError> {
+        self.tags("home_tags")
+    }
+
+    pub fn set_home_tags(&self, tags: &[String]) -> Result<Vec<String>, StoreError> {
+        self.set_tags("home_tags", tags)
+    }
+
+    fn tags(&self, key: &str) -> Result<Vec<String>, StoreError> {
         let tx = self.db.begin_read().map_err(db_err)?;
         let Ok(t) = tx.open_table(META) else { return Ok(Vec::new()) };
-        match t.get("hidden_tags").map_err(db_err)? {
+        match t.get(key).map_err(db_err)? {
             Some(v) => Ok(serde_json::from_str(v.value())?),
             None => Ok(Vec::new()),
         }
     }
 
-    pub fn set_hidden_tags(&self, tags: &[String]) -> Result<Vec<String>, StoreError> {
+    fn set_tags(&self, key: &str, tags: &[String]) -> Result<Vec<String>, StoreError> {
         // Lower case and deduplicated, because that is how they are looked up
         // and a list with `Yaoi` and `yaoi` in it hides one thing twice.
         let mut cleaned: Vec<String> = Vec::new();
@@ -507,7 +528,7 @@ impl Store {
         let tx = begin_write(&self.db)?;
         {
             let mut t = tx.open_table(META).map_err(db_err)?;
-            t.insert("hidden_tags", json.as_str()).map_err(db_err)?;
+            t.insert(key, json.as_str()).map_err(db_err)?;
         }
         tx.commit().map_err(db_err)?;
         Ok(cleaned)
@@ -1127,6 +1148,19 @@ mod tests {
         );
         assert!(store.set_hidden_tags(&[]).unwrap().is_empty());
         assert!(store.hidden_tags().unwrap().is_empty());
+    }
+
+    /// The two lists sit side by side and mean opposite things, so writing
+    /// one must not touch the other.
+    #[test]
+    fn home_tags_are_kept_apart_from_hidden_ones() {
+        let (store, _dir) = store();
+        store.set_hidden_tags(&["yaoi".into()]).unwrap();
+        let saved =
+            store.set_home_tags(&["Female:Glasses".into(), "female:glasses".into()]).unwrap();
+        assert_eq!(saved, vec!["female:glasses".to_string()]);
+        assert_eq!(store.hidden_tags().unwrap(), vec!["yaoi".to_string()]);
+        assert_eq!(store.home_tags().unwrap(), vec!["female:glasses".to_string()]);
     }
 
     #[test]

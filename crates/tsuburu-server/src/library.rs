@@ -139,28 +139,44 @@ pub async fn forget_kept_cards(
     Ok(Json(KeptCards { cards }))
 }
 
-/// Tags the reader never wants to see.
+/// A list of tags the reader keeps: the ones never to see, and the ones the
+/// first screen is for.
 ///
 /// A standing answer rather than one search, so it lives here beside the
-/// favorites and applies to every screen that asks hitomi.
+/// favorites rather than in an address.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct HiddenTags {
+pub struct TagList {
     pub tags: Vec<String>,
 }
 
-pub async fn hidden_tags(State(state): State<Arc<AppState>>) -> Result<Json<HiddenTags>, ApiError> {
-    Ok(Json(HiddenTags { tags: store(&state)?.hidden_tags()? }))
+/// Tags the reader never wants to see, on every screen that asks hitomi.
+pub async fn hidden_tags(State(state): State<Arc<AppState>>) -> Result<Json<TagList>, ApiError> {
+    Ok(Json(TagList { tags: store(&state)?.hidden_tags()? }))
 }
 
 pub async fn set_hidden_tags(
     State(state): State<Arc<AppState>>,
-    Json(body): Json<HiddenTags>,
-) -> Result<Json<HiddenTags>, ApiError> {
+    Json(body): Json<TagList>,
+) -> Result<Json<TagList>, ApiError> {
     let tags = store(&state)?.set_hidden_tags(&body.tags)?;
     // The set of works behind them is resolved once and held; a new list is a
     // different set.
     state.forget_hidden().await;
-    Ok(Json(HiddenTags { tags }))
+    Ok(Json(TagList { tags }))
+}
+
+/// Tags the first screen keeps to, any one of them being enough.
+pub async fn home_tags(State(state): State<Arc<AppState>>) -> Result<Json<TagList>, ApiError> {
+    Ok(Json(TagList { tags: store(&state)?.home_tags()? }))
+}
+
+pub async fn set_home_tags(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<TagList>,
+) -> Result<Json<TagList>, ApiError> {
+    let tags = store(&state)?.set_home_tags(&body.tags)?;
+    state.forget_home().await;
+    Ok(Json(TagList { tags }))
 }
 
 // --- folders ---

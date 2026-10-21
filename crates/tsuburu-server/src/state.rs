@@ -86,6 +86,8 @@ pub struct AppState {
     /// Each tag costs the whole of its id list, which is why it is not
     /// resolved per request. Emptied when the list is changed.
     hidden: RwLock<Option<Cached<Arc<HashSet<i32>>>>>,
+    /// The works behind the reader's first-screen tags, resolved the same way.
+    home: RwLock<Option<Cached<Arc<HashSet<i32>>>>>,
 }
 
 impl AppState {
@@ -132,6 +134,7 @@ impl AppState {
             gg: RwLock::new(None),
             cards: Cache::new(4096),
             hidden: RwLock::new(None),
+            home: RwLock::new(None),
         }
     }
 
@@ -194,6 +197,9 @@ impl AppState {
         *self.version.write().await = None;
         *self.gg.write().await = None;
         self.cards.clear();
+        // Works posted since under one of the first screen's tags are what
+        // the reload is for.
+        *self.home.write().await = None;
     }
 
     pub async fn version(&self) -> Result<String, tsuburu_hitomi::SearchError> {
@@ -220,36 +226,58 @@ impl AppState {
             return Arc::clone(&cached.value);
         }
         let tags = self.store.as_ref().and_then(|s| s.hidden_tags().ok()).unwrap_or_default();
-        let mut ids = HashSet::new();
-        if !tags.is_empty()
-            && let Ok(version) = self.version().await
-        {
-            for tag in &tags {
-                match tsuburu_hitomi::search_term(
-                    self.fetcher.as_ref(),
-                    &self.cfg,
-                    &version,
-                    tag,
-                    None,
-                )
-                .await
-                {
-                    Ok(found) => ids.extend(found),
-                    // A tag hitomi does not know hides nothing, which is not
-                    // a reason to fail the search it was asked of.
-                    Err(err) => tracing::debug!(%err, tag, "could not resolve a hidden tag"),
-                }
-            }
-        }
-        let fresh = Arc::new(ids);
+        let fresh = Arc::new(self.works_under(&tags).await);
         *self.hidden.write().await =
             Some(Cached { value: Arc::clone(&fresh), fetched_at: Instant::now() });
         fresh
     }
 
+    /// The works the first screen keeps to, or `None` when the reader has
+    /// not chosen any and browsing shows everything.
+    pub async fn home(&self) -> Option<Arc<HashSet<i32>>> {
+        if let Some(cached) = self.home.read().await.as_ref()
+            && cached.is_fresh()
+        {
+            return Some(Arc::clone(&cached.value));
+        }
+        let tags = self.store.as_ref().and_then(|s| s.home_tags().ok()).unwrap_or_default();
+        if tags.is_empty() {
+            return None;
+        }
+        let fresh = Arc::new(self.works_under(&tags).await);
+        *self.home.write().await =
+            Some(Cached { value: Arc::clone(&fresh), fetched_at: Instant::now() });
+        Some(fresh)
+    }
+
+    /// Every work that carries at least one of `tags`.
+    async fn works_under(&self, tags: &[String]) -> HashSet<i32> {
+        let mut ids = HashSet::new();
+        if tags.is_empty() {
+            return ids;
+        }
+        let Ok(version) = self.version().await else { return ids };
+        for tag in tags {
+            match tsuburu_hitomi::search_term(self.fetcher.as_ref(), &self.cfg, &version, tag, None)
+                .await
+            {
+                Ok(found) => ids.extend(found),
+                // A tag hitomi does not know finds nothing, which is not a
+                // reason to fail the search it was asked for.
+                Err(err) => tracing::debug!(%err, tag, "could not resolve a tag"),
+            }
+        }
+        ids
+    }
+
     /// Said when the list changes, so the next search resolves it again.
     pub async fn forget_hidden(&self) {
         *self.hidden.write().await = None;
+    }
+
+    /// Said when the first screen's tags change.
+    pub async fn forget_home(&self) {
+        *self.home.write().await = None;
     }
 
     /// 인덱스 상위 노드를 미리 받아 캐시에 얹는다.

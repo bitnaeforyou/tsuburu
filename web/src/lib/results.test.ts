@@ -10,6 +10,7 @@ const found = (n: number) => ({
   total: n,
   offset: n,
   reachable: 0,
+  narrowed: false,
   scrollY: 0,
 })
 
