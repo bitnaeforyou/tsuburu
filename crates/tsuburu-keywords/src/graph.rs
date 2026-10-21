@@ -93,7 +93,7 @@ fn write_batch(
     if pending.is_empty() {
         return Ok(totals);
     }
-    let tx = store.db.begin_write().map_err(crate::db_err)?;
+    let tx = crate::begin_write(&store.db)?;
     for (id, words) in pending.iter() {
         store.put_within(&tx, *id, words)?;
         totals.works += 1;

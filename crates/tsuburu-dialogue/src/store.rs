@@ -315,7 +315,7 @@ impl DialogueStore {
     }
 
     fn init_schema(&self) -> Result<(), DialogueError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             tx.open_table(JOBS).map_err(db_err)?;
             tx.open_table(QUEUE).map_err(db_err)?;
@@ -462,7 +462,7 @@ impl DialogueStore {
     }
 
     pub fn set_setting(&self, key: &str, value: &str) -> Result<(), DialogueError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut meta = tx.open_table(META).map_err(db_err)?;
             meta.insert(key, value).map_err(db_err)?;
@@ -509,7 +509,7 @@ impl DialogueStore {
         force: bool,
     ) -> Result<usize, DialogueError> {
         let now = now_millis();
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         let mut added = 0usize;
         {
             let mut jobs = tx.open_table(JOBS).map_err(db_err)?;
@@ -606,7 +606,7 @@ impl DialogueStore {
     }
 
     fn finish(&self, id: i32, outcome: Outcome<'_>) -> Result<(), DialogueError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut jobs = tx.open_table(JOBS).map_err(db_err)?;
             let mut queue = tx.open_table(QUEUE).map_err(db_err)?;
@@ -741,7 +741,7 @@ impl DialogueStore {
         pages: &[PageText],
         from_reading: bool,
     ) -> Result<usize, DialogueError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         let added = {
             let mut jobs = tx.open_table(JOBS).map_err(db_err)?;
             let mut queue = tx.open_table(QUEUE).map_err(db_err)?;
@@ -813,7 +813,7 @@ impl DialogueStore {
         for value in vector {
             raw.extend_from_slice(&value.to_le_bytes());
         }
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut table = tx.open_table(VECTORS).map_err(db_err)?;
             table.insert((id, page), raw.as_slice()).map_err(db_err)?;
@@ -854,7 +854,7 @@ impl DialogueStore {
 
     /// Removes everything stored for one gallery.
     pub fn forget(&self, id: i32) -> Result<bool, DialogueError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         let existed = {
             let mut jobs = tx.open_table(JOBS).map_err(db_err)?;
             let mut queue = tx.open_table(QUEUE).map_err(db_err)?;
@@ -967,7 +967,7 @@ impl DialogueStore {
             if pending.is_empty() {
                 return Ok(());
             }
-            let tx = self.db.begin_write().map_err(db_err)?;
+            let tx = begin_write(&self.db)?;
             {
                 let mut jobs = tx.open_table(JOBS).map_err(db_err)?;
                 let mut queue = tx.open_table(QUEUE).map_err(db_err)?;
@@ -1475,6 +1475,18 @@ fn decompress_into(encoded: &[u8], out: &mut Vec<u8>) -> Result<(), DialogueErro
     Ok(())
 }
 
+/// Starts a write whose commit leaves enough behind to reopen at once.
+///
+/// A phone never closes this database: Android ends the process instead,
+/// and redb then walks the whole file on the next open to work out what is
+/// in use. For a dialogue index of two gigabytes that was minutes before the
+/// first screen. Each commit costs a few milliseconds more for it.
+fn begin_write(db: &Database) -> Result<redb::WriteTransaction, DialogueError> {
+    let mut tx = db.begin_write().map_err(db_err)?;
+    tx.set_quick_repair(true);
+    Ok(tx)
+}
+
 fn db_err(err: impl std::fmt::Display) -> DialogueError {
     DialogueError::Database(err.to_string())
 }
@@ -1499,6 +1511,43 @@ mod tests {
         assert!(older_schema("4"));
         assert!(!older_schema(SCHEMA_VERSION));
         assert!(!older_schema("nonsense"));
+    }
+
+    /// Android ends an app by ending its process, so this database is never
+    /// closed on a phone. Whatever was last written has to be enough to open
+    /// it again without walking the whole file, which for a corpus took
+    /// minutes before the first screen appeared.
+    #[test]
+    fn a_process_that_is_killed_leaves_nothing_to_repair() {
+        const KILL_AFTER_WRITING: &str = "TSUBURU_TEST_KILL_AFTER_WRITING";
+        if let Some(path) = std::env::var_os(KILL_AFTER_WRITING) {
+            let store = DialogueStore::open(&path).unwrap();
+            store.complete(7, &[page(0, "죽기 전에 쓴 줄")]).unwrap();
+            std::process::exit(0);
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("d.redb");
+        let this = module_path!().split_once("::").unwrap().1;
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                &format!("{this}::a_process_that_is_killed_leaves_nothing_to_repair"),
+                "--exact",
+            ])
+            .env(KILL_AFTER_WRITING, &path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let repaired = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let noticed = Arc::clone(&repaired);
+        let reopened = Database::builder()
+            .set_repair_callback(move |_| noticed.store(true, Ordering::Relaxed))
+            .create(&path)
+            .unwrap();
+        assert!(!repaired.load(Ordering::Relaxed), "reopening walked the whole file");
+        drop(reopened);
+        assert!(DialogueStore::open(&path).unwrap().text(7).unwrap().is_some());
     }
 
     /// A work being read hands its pages over one at a time and several
@@ -1970,7 +2019,7 @@ mod tests {
         let path = dir.path().join("d.redb");
         {
             let store = DialogueStore::open(&path).unwrap();
-            let tx = store.db.begin_write().unwrap();
+            let tx = begin_write(&store.db).unwrap();
             tx.open_table(META).unwrap().insert("schema", "99").unwrap();
             tx.commit().unwrap();
         }

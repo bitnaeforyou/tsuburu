@@ -99,7 +99,7 @@ impl DownloadStore {
     }
 
     fn init_schema(&self) -> Result<(), DownloadError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             tx.open_table(GALLERIES).map_err(db_err)?;
             let mut meta = tx.open_table(META).map_err(db_err)?;
@@ -166,7 +166,7 @@ impl DownloadStore {
     }
 
     pub fn put(&self, download: &Download) -> Result<(), DownloadError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut galleries = tx.open_table(GALLERIES).map_err(db_err)?;
             galleries
@@ -200,7 +200,7 @@ impl DownloadStore {
             }
         }
 
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut galleries = tx.open_table(GALLERIES).map_err(db_err)?;
             galleries.remove(id).map_err(db_err)?;
@@ -264,6 +264,18 @@ impl DownloadStore {
             added_at: download.added_at,
         }
     }
+}
+
+/// Starts a write whose commit leaves enough behind to reopen at once.
+///
+/// A phone never closes this database: Android ends the process instead,
+/// and redb then walks the whole file on the next open to work out what is
+/// in use. For a dialogue index of two gigabytes that was minutes before the
+/// first screen. Each commit costs a few milliseconds more for it.
+fn begin_write(db: &Database) -> Result<redb::WriteTransaction, DownloadError> {
+    let mut tx = db.begin_write().map_err(db_err)?;
+    tx.set_quick_repair(true);
+    Ok(tx)
 }
 
 fn db_err(err: impl std::fmt::Display) -> DownloadError {

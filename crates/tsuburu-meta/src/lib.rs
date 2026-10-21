@@ -199,7 +199,7 @@ impl MetaStore {
     }
 
     fn init_schema(&self) -> Result<(), MetaError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             tx.open_table(WORKS).map_err(db_err)?;
             tx.open_table(TITLES).map_err(db_err)?;
@@ -245,7 +245,7 @@ impl MetaStore {
             if pending.is_empty() {
                 return Ok(());
             }
-            let tx = self.db.begin_write().map_err(db_err)?;
+            let tx = begin_write(&self.db)?;
             {
                 let mut table = tx.open_table(WORKS).map_err(db_err)?;
                 let mut titles = tx.open_table(TITLES).map_err(db_err)?;
@@ -303,7 +303,7 @@ impl MetaStore {
     /// stale until the next full import.
     pub fn upsert(&self, work: &Work) -> Result<(), MetaError> {
         let previous = self.work(work.id)?;
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut works = tx.open_table(WORKS).map_err(db_err)?;
             let mut titles = tx.open_table(TITLES).map_err(db_err)?;
@@ -561,6 +561,18 @@ fn decode_work(bytes: &[u8]) -> Result<Work, MetaError> {
     let raw = lz4_flex::decompress_size_prepended(bytes)
         .map_err(|e| MetaError::Corrupt(e.to_string()))?;
     Ok(serde_json::from_slice(&raw)?)
+}
+
+/// Starts a write whose commit leaves enough behind to reopen at once.
+///
+/// A phone never closes this database: Android ends the process instead,
+/// and redb then walks the whole file on the next open to work out what is
+/// in use. For a dialogue index of two gigabytes that was minutes before the
+/// first screen. Each commit costs a few milliseconds more for it.
+fn begin_write(db: &Database) -> Result<redb::WriteTransaction, MetaError> {
+    let mut tx = db.begin_write().map_err(db_err)?;
+    tx.set_quick_repair(true);
+    Ok(tx)
 }
 
 fn db_err(err: impl std::fmt::Display) -> MetaError {

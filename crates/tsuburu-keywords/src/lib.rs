@@ -75,6 +75,18 @@ pub enum KeywordError {
     NotGraphCsv(String, String),
 }
 
+/// Starts a write whose commit leaves enough behind to reopen at once.
+///
+/// A phone never closes this database: Android ends the process instead,
+/// and redb then walks the whole file on the next open to work out what is
+/// in use. For a dialogue index of two gigabytes that was minutes before the
+/// first screen. Each commit costs a few milliseconds more for it.
+pub(crate) fn begin_write(db: &Database) -> Result<redb::WriteTransaction, KeywordError> {
+    let mut tx = db.begin_write().map_err(db_err)?;
+    tx.set_quick_repair(true);
+    Ok(tx)
+}
+
 fn db_err(err: impl std::fmt::Display) -> KeywordError {
     KeywordError::Database(err.to_string())
 }
@@ -110,7 +122,7 @@ impl KeywordStore {
     }
 
     fn init_schema(&self) -> Result<(), KeywordError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             tx.open_table(WORKS).map_err(db_err)?;
             tx.open_multimap_table(WORDS).map_err(db_err)?;
@@ -143,7 +155,7 @@ impl KeywordStore {
 
     /// Replaces one work's words. Ids arriving twice keep the last set.
     pub fn put(&self, id: i32, words: &[Scored]) -> Result<(), KeywordError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         self.put_within(&tx, id, words)?;
         tx.commit().map_err(db_err)?;
         Ok(())
@@ -181,7 +193,7 @@ impl KeywordStore {
 
     /// Records a word left out for being in too many works.
     pub fn note_common(&self, word: &str, works: u32) -> Result<(), KeywordError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut table = tx.open_table(COMMON).map_err(db_err)?;
             table.insert(word, works).map_err(db_err)?;

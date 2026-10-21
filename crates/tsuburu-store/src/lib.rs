@@ -147,7 +147,7 @@ impl Store {
             }
         }
         let stale: Vec<Favorite> = self.list(FAVORITES)?;
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut folders = tx.open_table(FOLDERS).map_err(db_err)?;
             for favorite in &stale {
@@ -173,7 +173,7 @@ impl Store {
     /// 더 새로운 버전이 쓴 파일을 만나면 열지 않는다. 모르는 형식을 덮어써서
     /// 사용자의 즐겨찾기를 날리는 것보다 열지 못하는 편이 낫다.
     fn init_schema(&self) -> Result<(), StoreError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             tx.open_table(FAVORITES).map_err(db_err)?;
             tx.open_table(HISTORY).map_err(db_err)?;
@@ -236,7 +236,7 @@ impl Store {
     pub fn set_folder(&self, id: i32, folder: Option<&str>) -> Result<Option<String>, StoreError> {
         let folder = folder.and_then(tidy_shelf);
         let folder = folder.as_deref();
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut meta = tx.open_table(META).map_err(db_err)?;
             let mut t = tx.open_table(FOLDERS).map_err(db_err)?;
@@ -319,7 +319,7 @@ impl Store {
     pub fn add_folder(&self, name: &str) -> Result<bool, StoreError> {
         let Some(name) = tidy_shelf(name) else { return Ok(false) };
         let name = name.as_str();
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         let made = {
             let mut meta = tx.open_table(META).map_err(db_err)?;
             declare_within(&mut meta, |names| {
@@ -340,7 +340,7 @@ impl Store {
     /// together, or a failure halfway leaves a shelf that is gone from the
     /// list and still named by its works - which brings it back.
     pub fn remove_folder(&self, name: &str) -> Result<(), StoreError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut meta = tx.open_table(META).map_err(db_err)?;
             declare_within(&mut meta, |names| {
@@ -366,7 +366,7 @@ impl Store {
             Some(rest) if rest.starts_with('/') => Some(format!("{to}{rest}")),
             _ => None,
         };
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut meta = tx.open_table(META).map_err(db_err)?;
             declare_within(&mut meta, |names| {
@@ -400,7 +400,7 @@ impl Store {
         if key.is_empty() {
             return Ok(false);
         }
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut artists = tx.open_table(ARTISTS).map_err(db_err)?;
             if artists.get(key.as_str()).map_err(db_err)?.is_none() {
@@ -413,7 +413,7 @@ impl Store {
 
     pub fn unfollow_artist(&self, name: &str) -> Result<bool, StoreError> {
         let key = name.trim().to_lowercase();
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         let existed;
         {
             let mut artists = tx.open_table(ARTISTS).map_err(db_err)?;
@@ -468,7 +468,7 @@ impl Store {
     }
 
     pub fn clear_history(&self) -> Result<(), StoreError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut table = tx.open_table(HISTORY).map_err(db_err)?;
             table.retain(|_, _| false).map_err(db_err)?;
@@ -504,7 +504,7 @@ impl Store {
             }
         }
         let json = serde_json::to_string(&cleaned)?;
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut t = tx.open_table(META).map_err(db_err)?;
             t.insert("hidden_tags", json.as_str()).map_err(db_err)?;
@@ -544,7 +544,7 @@ impl Store {
         &self,
         cards: impl IntoIterator<Item = (i32, &'a str)>,
     ) -> Result<(), StoreError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut t = tx.open_table(CARDS).map_err(db_err)?;
             for (id, json) in cards {
@@ -579,7 +579,7 @@ impl Store {
         &self,
         words: impl IntoIterator<Item = (&'a str, &'a str)>,
     ) -> Result<(), StoreError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut t = tx.open_table(WORDS).map_err(db_err)?;
             for (word, found) in words {
@@ -615,7 +615,7 @@ impl Store {
 
     pub fn forget_cards(&self) -> Result<usize, StoreError> {
         let held = self.remembered_cards()?;
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut t = tx.open_table(CARDS).map_err(db_err)?;
             t.retain(|_, _| false).map_err(db_err)?;
@@ -633,7 +633,7 @@ impl Store {
         value: &T,
     ) -> Result<(), StoreError> {
         let json = serde_json::to_string(value)?;
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         {
             let mut t = tx.open_table(table).map_err(db_err)?;
             t.insert(id, json.as_str()).map_err(db_err)?;
@@ -660,7 +660,7 @@ impl Store {
         table: TableDefinition<i32, &'static str>,
         id: i32,
     ) -> Result<bool, StoreError> {
-        let tx = self.db.begin_write().map_err(db_err)?;
+        let tx = begin_write(&self.db)?;
         let existed;
         {
             let mut t = tx.open_table(table).map_err(db_err)?;
@@ -768,6 +768,18 @@ fn on_shelf(
         }
     }
     Ok(out)
+}
+
+/// Starts a write whose commit leaves enough behind to reopen at once.
+///
+/// A phone never closes this database: Android ends the process instead,
+/// and redb then walks the whole file on the next open to work out what is
+/// in use. For a dialogue index of two gigabytes that was minutes before the
+/// first screen. Each commit costs a few milliseconds more for it.
+fn begin_write(db: &Database) -> Result<redb::WriteTransaction, StoreError> {
+    let mut tx = db.begin_write().map_err(db_err)?;
+    tx.set_quick_repair(true);
+    Ok(tx)
 }
 
 fn db_err(err: impl std::fmt::Display) -> StoreError {
@@ -1084,7 +1096,7 @@ mod tests {
             store.put(FAVORITES, 4, &favorite).unwrap();
             // That version left no note saying the shelves had been moved,
             // because there was nowhere to move them to.
-            let tx = store.db.begin_write().unwrap();
+            let tx = begin_write(&store.db).unwrap();
             {
                 let mut meta = tx.open_table(META).unwrap();
                 meta.remove("folders_moved").unwrap();
@@ -1147,7 +1159,7 @@ mod tests {
         let path = dir.path().join("test.redb");
         {
             let store = Store::open(&path).unwrap();
-            let tx = store.db.begin_write().unwrap();
+            let tx = begin_write(&store.db).unwrap();
             {
                 let mut meta = tx.open_table(META).unwrap();
                 meta.insert("schema", "99").unwrap();
