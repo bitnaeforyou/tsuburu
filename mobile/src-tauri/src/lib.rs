@@ -105,8 +105,20 @@ async fn serve(listener: tokio::net::TcpListener) {
         }
     });
 
-    let cfg = tsuburu_hitomi::Config::default();
-    match tsuburu_server::boot::assemble(cfg).await {
+    // On a thread of its own, because opening a store is reading a file, not
+    // waiting on one. Run here it held this worker for as long as it took,
+    // and the server spawned just above was queued on the same worker where
+    // no other could take it: the address answered nothing at all until the
+    // stores were open, which is what the page was there to cover.
+    let assembled = tauri::async_runtime::spawn_blocking(|| {
+        tauri::async_runtime::block_on(tsuburu_server::boot::assemble(
+            tsuburu_hitomi::Config::default(),
+        ))
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|assembled| assembled.map_err(|e| e.to_string()));
+    match assembled {
         Ok(state) => {
             // The phone binds loopback and nothing else can reach it.
             let router = tsuburu_server::router(
@@ -120,7 +132,7 @@ async fn serve(listener: tokio::net::TcpListener) {
         }
         Err(err) => {
             tracing::error!(%err, "tsuburu could not start");
-            opened.set(Err(err.to_string())).ok();
+            opened.set(Err(err)).ok();
         }
     }
 }
