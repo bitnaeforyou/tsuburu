@@ -4687,6 +4687,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tokio",
+ "tower",
  "tracing",
  "tracing-subscriber",
  "tsuburu-hitomi",

@@ -6,9 +6,14 @@
 //! already knows how to be held in one hand, is the one that ships. Nothing
 //! is talking to a machine somewhere else; the phone is the machine.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
+use axum::extract::Request;
+use axum::http::StatusCode;
+use axum::response::{Html, IntoResponse};
+use axum::Router;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tower::ServiceExt;
 
 /// Android hands the Java machine to a library as it loads it, and never
 /// offers it again. Anything that reaches another application needs it -
@@ -51,7 +56,9 @@ pub fn run() {
                 // SAFETY: as above - nothing else is running yet.
                 unsafe { std::env::set_var("TSUBURU_CACHE_DIR", &dir) };
             }
-            let address = tauri::async_runtime::block_on(start())?;
+            let listener = tauri::async_runtime::block_on(bind())?;
+            let address = listener.local_addr()?;
+            tauri::async_runtime::spawn(serve(listener));
             let url = format!("http://{address}/");
             tracing::info!(%url, "serving");
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse()?))
@@ -63,27 +70,59 @@ pub fn run() {
         .expect("tsuburu could not start");
 }
 
-/// Opens the stores, binds a loopback port and serves on it, returning the
-/// address it settled on.
-async fn start() -> Result<std::net::SocketAddr, Box<dyn std::error::Error>> {
-    let cfg = tsuburu_hitomi::Config::default();
-    let state = tsuburu_server::boot::assemble(cfg).await.map_err(|e| e.to_string())?;
-    // The phone binds loopback and nothing else can reach it.
-    let router =
-        tsuburu_server::router(Arc::clone(&state), tsuburu_server::guard::Reach::ThisMachine);
+/// What the address answers while the stores are still being opened.
+const OPENING: &str = include_str!("opening.html");
 
-    let listener = bind().await?;
-    let address = listener.local_addr()?;
-
+/// Serves the window straight away, and the interface once there is one.
+///
+/// Opening the stores is not always quick: a database the phone closed by
+/// ending the process is checked through before it opens, and after an
+/// update that is all of a two-gigabyte dialogue index. Waiting for it before
+/// the window existed showed nothing for minutes, on the thread Android
+/// expects to answer it.
+async fn serve(listener: tokio::net::TcpListener) {
+    let opened: Arc<OnceLock<Result<Router, String>>> = Arc::new(OnceLock::new());
+    let front = Router::new().fallback({
+        let opened = Arc::clone(&opened);
+        move |request: Request| {
+            let opened = Arc::clone(&opened);
+            async move {
+                match opened.get() {
+                    Some(Ok(router)) => router.clone().oneshot(request).await.into_response(),
+                    Some(Err(error)) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("tsuburu could not start: {error}"),
+                    )
+                        .into_response(),
+                    None => (StatusCode::SERVICE_UNAVAILABLE, Html(OPENING)).into_response(),
+                }
+            }
+        }
+    });
     tauri::async_runtime::spawn(async move {
-        if let Err(err) = axum::serve(listener, router).await {
+        if let Err(err) = axum::serve(listener, front).await {
             tracing::error!(%err, "the server stopped");
         }
     });
 
-    // The top of the index is worth having before the first screen is drawn.
-    tauri::async_runtime::spawn(async move { state.warm(2).await });
-    Ok(address)
+    let cfg = tsuburu_hitomi::Config::default();
+    match tsuburu_server::boot::assemble(cfg).await {
+        Ok(state) => {
+            // The phone binds loopback and nothing else can reach it.
+            let router = tsuburu_server::router(
+                Arc::clone(&state),
+                tsuburu_server::guard::Reach::ThisMachine,
+            );
+            opened.set(Ok(router)).ok();
+            tracing::info!("opened");
+            // The top of the index is worth having before the first screen is drawn.
+            state.warm(2).await;
+        }
+        Err(err) => {
+            tracing::error!(%err, "tsuburu could not start");
+            opened.set(Err(err.to_string())).ok();
+        }
+    }
 }
 
 /// Loopback only, on the same port as last time if it can be had.
