@@ -9,6 +9,7 @@ const found = (n: number) => ({
   hits: [],
   total: n,
   offset: n,
+  reachable: 0,
   scrollY: 0,
 })
 
@@ -27,12 +28,28 @@ describe('a search that has been run', () => {
 
   test('remembers how far down the page was', () => {
     remember('korean', found(3))
-    markScroll('korean', 1200)
+    markScroll('korean', { scrollY: 1200, anchor: { href: '#/g/7', top: 40 } })
     expect(recall('korean')?.scrollY).toBe(1200)
+    expect(recall('korean')?.anchor).toEqual({ href: '#/g/7', top: 40 })
+  })
+
+  test('loading another page keeps where the page was', () => {
+    remember('korean', found(3))
+    markScroll('korean', { scrollY: 1200, anchor: { href: '#/g/7', top: 40 } })
+    remember('korean', found(4))
+    expect(recall('korean')?.scrollY).toBe(1200)
+    expect(recall('korean')?.anchor?.href).toBe('#/g/7')
+  })
+
+  /// The "load more" under a dialogue search is offered only while there is
+  /// more within reach, so coming back without it took the button away.
+  test('keeps how far a dialogue search can page', () => {
+    remember('대사', { ...found(30), reachable: 100 })
+    expect(recall('대사')?.reachable).toBe(100)
   })
 
   test('marking a search nobody ran is not an error', () => {
-    markScroll('nothing', 500)
+    markScroll('nothing', { scrollY: 500 })
     expect(recall('nothing')).toBeNull()
   })
 })

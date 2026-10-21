@@ -4,7 +4,14 @@
   import { defaultSearch, galleryNamed, toGallery, toSearch, type SearchState } from '../lib/router'
   import { remember as rememberSearch } from '../lib/preferences'
   import { library } from '../lib/library.svelte'
-  import { forget as forgetResults, markScroll, recall, remember } from '../lib/results.svelte'
+  import {
+    forget as forgetResults,
+    markScroll,
+    recall,
+    remember,
+    type Anchor,
+    type Place,
+  } from '../lib/results.svelte'
   import { forget as forgetCards } from '../lib/cards.svelte'
   import { keepThisVisit } from '../lib/kept'
   import ErrorNote from '../lib/ErrorNote.svelte'
@@ -107,14 +114,15 @@
       hits = before.hits
       total = before.total
       offset = before.offset
-      stopRestore = restoreScroll(before.scrollY)
+      reachable = before.reachable
+      stopRestore = restoreScroll(before)
       return
     }
     // What was written down carries the ids but not the passages a dialogue
     // search found: those are asked for again, and the store answers from its
     // own cache.
     if (before && params.scope === 'dialogue' && before.offset > 0) {
-      void reload(before.offset, before.scrollY)
+      void reload(before.offset, before)
       return
     }
 
@@ -139,8 +147,8 @@
   /// are drawn, and their covers arrive later still, so an early attempt runs
   /// out of page before it gets there. It keeps asking for a second while the
   /// page settles, and stops as soon as the reader takes over.
-  function restoreScroll(want: number): (() => void) | undefined {
-    if (want <= 0) return
+  function restoreScroll(want: Place): (() => void) | undefined {
+    if (want.scrollY <= 0) return
     let settled = false
     const give = () => (settled = true)
     // Anything the reader does with the page is them saying where they want
@@ -152,8 +160,7 @@
     const at = [0, 50, 150, 300, 500, 800, 1200]
     const timers = at.map((after) =>
       setTimeout(() => {
-        if (settled || Math.abs(window.scrollY - want) <= 8) return
-        scrollTo(0, want)
+        if (!settled) settle(want)
       }, after),
     )
     const stop = () => {
@@ -172,37 +179,79 @@
     }
   }
 
-  // Kept as it changes, and the place on the page kept as it is left.
+  /// One step back toward where the page was.
+  ///
+  /// The result that was at the top of the screen is put back where it sat,
+  /// and the bare offset is only for when it cannot be found.
+  function settle(want: Place) {
+    const link = want.anchor && resultNamed(want.anchor.href)
+    if (want.anchor && link) {
+      const off = link.getBoundingClientRect().top - want.anchor.top
+      if (Math.abs(off) > 8) scrollBy(0, off)
+      return
+    }
+    if (Math.abs(window.scrollY - want.scrollY) > 8) scrollTo(0, want.scrollY)
+  }
+
+  const RESULT = 'main a[href^="#/g/"]'
+
+  function resultNamed(href: string): HTMLElement | undefined {
+    return [...document.querySelectorAll<HTMLElement>(RESULT)].find(
+      (link) => link.getAttribute('href') === href,
+    )
+  }
+
+  /// The first result still on screen, and where on it.
+  function onScreen(): Anchor | undefined {
+    for (const link of document.querySelectorAll<HTMLElement>(RESULT)) {
+      const { top, bottom } = link.getBoundingClientRect()
+      if (bottom > 0) return { href: link.getAttribute('href') ?? '', top }
+    }
+  }
+
+  // Kept as it changes.
   $effect(() => {
     const asked = key
     if (sectioned || (ids.length === 0 && hits.length === 0)) return
-    remember(asked, { ids, terms, hits, total, offset, scrollY: 0 })
-    return () => markScroll(asked, window.scrollY)
+    remember(asked, { ids, terms, hits, total, offset, reachable, scrollY: 0 })
   })
 
-  // Written down as it moves, not only on the way out: a window the phone
-  // takes away is never on its way out.
+  // Where the page is, written down as it moves. Never read on the way out:
+  // by the time this screen is torn down its list has left the page, and the
+  // browser answers with a position clamped to whatever replaced it - the
+  // top, nearly every time, which put a reader coming back from a work
+  // somewhere they had never been.
   $effect(() => {
     const asked = key
     if (sectioned) return
+    let place: Place | undefined
+    let frame = 0
     let timer: ReturnType<typeof setTimeout> | undefined
     const onScroll = () => {
+      frame ||= requestAnimationFrame(() => {
+        frame = 0
+        place = { scrollY: window.scrollY, anchor: onScreen() }
+      })
       clearTimeout(timer)
-      timer = setTimeout(() => markScroll(asked, window.scrollY), 300)
+      // On the disk as well, now rather than on the way out: a window the
+      // phone takes away is never on its way out.
+      timer = setTimeout(() => place && markScroll(asked, place), 300)
     }
     addEventListener('scroll', onScroll, { passive: true })
     return () => {
+      cancelAnimationFrame(frame)
       clearTimeout(timer)
       removeEventListener('scroll', onScroll)
+      if (place) markScroll(asked, place)
     }
   })
 
   /// Asks again for everything that had been loaded, in one go, and puts the
   /// page back where it was. For coming back to a list that was written down
   /// without the passages in it.
-  async function reload(upTo: number, scrollY: number) {
+  async function reload(upTo: number, place: Place) {
     await load(0, Math.max(PAGE, upTo))
-    stopRestore = restoreScroll(scrollY)
+    stopRestore = restoreScroll(place)
   }
 
   async function load(from: number, want = PAGE) {
@@ -235,7 +284,7 @@
         )
         total = page.total
         terms = []
-        ids = from === 0 ? page.ids : [...ids, ...page.ids]
+        ids = from === 0 ? page.ids : joined(ids, page.ids)
         offset = from + page.ids.length
         return
       }
@@ -252,13 +301,23 @@
       )
       total = page.total
       terms = page.terms
-      ids = from === 0 ? page.ids : [...ids, ...page.ids]
+      ids = from === 0 ? page.ids : joined(ids, page.ids)
       offset = from + page.ids.length
     } catch (cause) {
       if ((cause as Error).name !== 'AbortError') error = cause
     } finally {
       loading = false
     }
+  }
+
+  /// A page added to what is shown, without what is already there.
+  ///
+  /// The list can move between pages - hitomi is posted to all the time, and
+  /// a program started again reads it afresh - and a work listed twice is
+  /// not a repeat in a keyed list but an error that stops it drawing.
+  function joined(shown: number[], more: number[]): number[] {
+    const already = new Set(shown)
+    return [...shown, ...more.filter((id) => !already.has(id))]
   }
 
   /// Asks hitomi the same question over again.

@@ -7,13 +7,25 @@
 
 import type { DialogueHit, Term } from './api'
 
-export type Remembered = {
+/// The result at the top of the screen, and how far down the screen it sat.
+///
+/// A pixel offset alone does not find the place again: cards that have not
+/// been drawn since the list came back are given a guessed height, so the
+/// same offset lands some rows away from where it was.
+export type Anchor = { href: string; top: number }
+
+/// Where the page was left.
+export type Place = { scrollY: number; anchor?: Anchor }
+
+export type Remembered = Place & {
   ids: number[]
   terms: Term[]
   hits: DialogueHit[]
   total: number
   offset: number
-  scrollY: number
+  /// How far into a dialogue search paging can go, which is what decides
+  /// whether there is a "load more" to offer.
+  reachable: number
 }
 
 /// How many searches back it remembers. Enough to wander between a few
@@ -33,12 +45,25 @@ const STORED = 'tsuburu.results'
 /// and asking again is answered from the store's own cache.
 type Stored = Omit<Remembered, 'hits' | 'terms'>
 
+type Written = Omit<Stored, 'reachable'> & Partial<Pick<Stored, 'reachable'>>
+
 function load(): Map<string, Remembered> {
   try {
     const raw = localStorage.getItem(STORED)
     if (!raw) return new Map()
-    const rows = JSON.parse(raw) as [string, Stored][]
-    return new Map(rows.map(([key, row]) => [key, { ...row, terms: [], hits: [] }]))
+    // Rows written before a field existed come back without it.
+    const rows = JSON.parse(raw) as [string, Written][]
+    return new Map(
+      rows.map(([key, row]) => [
+        key,
+        {
+          ...row,
+          reachable: row.reachable ?? 0,
+          terms: [],
+          hits: [],
+        },
+      ]),
+    )
   } catch {
     return new Map()
   }
@@ -48,10 +73,12 @@ const seen = load()
 
 function save() {
   try {
-    const rows: [string, Stored][] = [...seen].map(([key, { ids, total, offset, scrollY }]) => [
-      key,
-      { ids, total, offset, scrollY },
-    ])
+    const rows: [string, Stored][] = [...seen].map(
+      ([key, { ids, total, offset, reachable, scrollY, anchor }]) => [
+        key,
+        { ids, total, offset, reachable, scrollY, anchor },
+      ],
+    )
     localStorage.setItem(STORED, JSON.stringify(rows))
   } catch {
     // A browser with storage switched off still gets to search.
@@ -61,9 +88,11 @@ function save() {
 export function remember(key: string, found: Remembered) {
   // Where it was left belongs to the search, not to this particular set of
   // results: loading another page must not send it back to the top.
-  const scrollY = found.scrollY || (seen.get(key)?.scrollY ?? 0)
+  const before = seen.get(key)
+  const scrollY = found.scrollY || (before?.scrollY ?? 0)
+  const anchor = found.anchor ?? before?.anchor
   seen.delete(key)
-  seen.set(key, { ...found, scrollY })
+  seen.set(key, { ...found, scrollY, anchor })
   // A Map keeps insertion order, so the oldest is the first one out.
   while (seen.size > KEEP) {
     const oldest = seen.keys().next().value
@@ -88,9 +117,10 @@ export function forget() {
 }
 
 /// Where the page was left, for the one that is on screen now.
-export function markScroll(key: string, scrollY: number) {
+export function markScroll(key: string, place: Place) {
   const found = seen.get(key)
-  if (!found || found.scrollY === scrollY) return
-  found.scrollY = scrollY
+  if (!found) return
+  found.scrollY = place.scrollY
+  found.anchor = place.anchor
   save()
 }
