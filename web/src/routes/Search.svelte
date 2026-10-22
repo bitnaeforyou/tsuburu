@@ -277,6 +277,7 @@
         hits = from === 0 ? found.hits : [...hits, ...found.hits]
         total = found.total
         reachable = found.reachable
+        narrowed = found.narrowed
         offset = from + found.hits.length
         return
       }

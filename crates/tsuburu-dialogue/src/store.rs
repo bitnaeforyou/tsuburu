@@ -265,7 +265,49 @@ fn weight(hit: &Hit) -> usize {
 
 /// One remembered answer: the generation it was taken at, what was asked, how
 /// many matched in all, and as many of them as the budget had room for.
-type Answer = (u64, String, usize, Vec<Hit>);
+/// Generation, phrase, which works it was asked of, total, and the hits.
+type Answer = (u64, String, u64, usize, Vec<Hit>);
+
+/// Which works a search may answer with.
+///
+/// The reader keeps two lists of tags: the ones whose works they never want
+/// to see, and the ones they read. Both are a promise about every list, and
+/// the dialogue is a list like any other - so the server resolves them into
+/// works and the scan skips the rest before it reads them.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Among<'a> {
+    /// Only these, when the reader has said what they read.
+    pub within: Option<&'a std::collections::HashSet<i32>>,
+    /// Never these.
+    pub hidden: Option<&'a std::collections::HashSet<i32>>,
+}
+
+impl Among<'_> {
+    pub fn admits(&self, gallery_id: i32) -> bool {
+        self.within.is_none_or(|within| within.contains(&gallery_id))
+            && !self.hidden.is_some_and(|hidden| hidden.contains(&gallery_id))
+    }
+
+    /// Tells one set of works from another, so an answer held for one is not
+    /// handed back for the other.
+    ///
+    /// The sets run to a hundred thousand ids and arrive in no order, so it
+    /// is a sum of each id mixed on its own rather than a hash of the whole.
+    fn key(&self) -> u64 {
+        fn mix(mut x: u64) -> u64 {
+            x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            x ^ (x >> 31)
+        }
+        let of = |set: Option<&std::collections::HashSet<i32>>, salt: u64| match set {
+            None => mix(salt),
+            Some(set) => set
+                .iter()
+                .fold(mix(salt ^ set.len() as u64), |sum, &id| sum.wrapping_add(mix(id as u64))),
+        };
+        of(self.within, 1) ^ of(self.hidden, 2).rotate_left(17)
+    }
+}
 
 pub struct DialogueStore {
     db: Database,
@@ -394,26 +436,28 @@ impl DialogueStore {
     /// Only the page is copied. Copying the whole answer to hand back twenty
     /// rows cost 7 ms a page on an answer of forty-six thousand hits, and
     /// paging through it is the one thing holding the answer was for.
-    fn remembered(&self, query: &str, offset: usize, limit: usize) -> Option<Found> {
+    fn remembered(&self, query: &str, among: u64, offset: usize, limit: usize) -> Option<Found> {
         let now = self.generation();
         let mut answers = self.answers.lock().ok()?;
-        let at = answers.iter().position(|(at, q, _, _)| *at == now && q == query)?;
+        let at = answers
+            .iter()
+            .position(|(at, q, of, _, _)| *at == now && q == query && *of == among)?;
         // Asked again, so it is the most recent thing anyone wanted.
         let found = answers.remove(at);
         let page = Found {
-            total: found.2,
-            reachable: found.3.len(),
-            hits: found.3.iter().skip(offset).take(limit).cloned().collect(),
+            total: found.3,
+            reachable: found.4.len(),
+            hits: found.4.iter().skip(offset).take(limit).cloned().collect(),
         };
         answers.insert(0, found);
         Some(page)
     }
 
-    fn remember(&self, query: &str, total: usize, hits: Vec<Hit>) {
+    fn remember(&self, query: &str, among: u64, total: usize, hits: Vec<Hit>) {
         let now = self.generation();
         let Ok(mut answers) = self.answers.lock() else { return };
-        answers.retain(|(at, q, _, _)| *at == now && q != query);
-        answers.insert(0, (now, query.to_string(), total, hits));
+        answers.retain(|(at, q, of, _, _)| *at == now && (q != query || *of != among));
+        answers.insert(0, (now, query.to_string(), among, total, hits));
         answers.truncate(REMEMBERED);
 
         // Oldest first, until what is left fits. The newest answer is the one
@@ -421,7 +465,7 @@ impl DialogueStore {
         let mut held = 0usize;
         let mut keep = answers.len();
         for (at, answer) in answers.iter().enumerate() {
-            held += answer.3.iter().map(weight).sum::<usize>();
+            held += answer.4.iter().map(weight).sum::<usize>();
             if held > BUDGET {
                 keep = (at + 1).max(1);
                 break;
@@ -1124,7 +1168,7 @@ impl DialogueStore {
     /// Scans every stored gallery across all cores. Returns the best page
     /// per gallery, best galleries first, at most `limit`.
     pub fn search(&self, asked: &str, limit: usize) -> Result<Vec<Hit>, DialogueError> {
-        Ok(self.search_page(asked, 0, limit)?.hits)
+        Ok(self.search_page(asked, 0, limit, Among::default())?.hits)
     }
 
     /// One page of what a phrase matches, and how many it matches in all.
@@ -1141,12 +1185,14 @@ impl DialogueStore {
         asked: &str,
         offset: usize,
         limit: usize,
+        among: Among,
     ) -> Result<Found, DialogueError> {
         let query = Query::new(asked);
         if query.is_empty() || limit == 0 {
             return Ok(Found::default());
         }
-        if let Some(page) = self.remembered(asked, offset, limit) {
+        let among_key = among.key();
+        if let Some(page) = self.remembered(asked, among_key, offset, limit) {
             return Ok(page);
         }
 
@@ -1166,7 +1212,7 @@ impl DialogueStore {
                 let mut handles = Vec::with_capacity(ranges.len());
                 for &(lo, hi) in &ranges {
                     let query = &query;
-                    handles.push(scope.spawn(move || self.scan_range(lo, hi, query, fuzzy)));
+                    handles.push(scope.spawn(move || self.scan_range(lo, hi, query, fuzzy, among)));
                 }
                 let mut all = Vec::new();
                 for handle in handles {
@@ -1213,7 +1259,7 @@ impl DialogueStore {
             reachable: hits.len(),
             hits: hits.iter().skip(offset).take(limit).cloned().collect(),
         };
-        self.remember(asked, total, hits);
+        self.remember(asked, among_key, total, hits);
         Ok(page)
     }
 
@@ -1223,6 +1269,7 @@ impl DialogueStore {
         hi: i32,
         query: &Query,
         fuzzy: bool,
+        among: Among,
     ) -> Result<Vec<Hit>, DialogueError> {
         let tx = self.db.begin_read().map_err(db_err)?;
         let codes = tx.open_table(CODES).map_err(db_err)?;
@@ -1233,6 +1280,10 @@ impl DialogueStore {
         for row in codes.range(lo..=hi).map_err(db_err)? {
             let (key, value) = row.map_err(db_err)?;
             let gallery_id = key.value();
+            // Before the decompression, which is most of what a row costs.
+            if !among.admits(gallery_id) {
+                continue;
+            }
             raw.clear();
             if decompress_into(value.value(), &mut raw).is_err() {
                 // Damaged record: skip rather than fail the whole search.
@@ -1839,8 +1890,8 @@ mod tests {
         assert_eq!(again[0].snippet, first[0].snippet);
         // Kept by the phrase, not by the page size: a second page of the same
         // question is answered without touching the disk again.
-        assert!(store.remembered("구급차", 0, 10).is_some());
-        assert!(store.remembered("소방차", 0, 10).is_none());
+        assert!(store.remembered("구급차", Among::default().key(), 0, 10).is_some());
+        assert!(store.remembered("소방차", Among::default().key(), 0, 10).is_none());
     }
 
     /// A shard taken in once is not fetched again.
@@ -1871,20 +1922,53 @@ mod tests {
         for id in 1..=7 {
             store.complete(id, &[page(0, &format!("안녕하세요 {id}번 손님"))]).unwrap();
         }
-        let first = store.search_page("안녕하세요", 0, 3).unwrap();
+        let first = store.search_page("안녕하세요", 0, 3, Among::default()).unwrap();
         assert_eq!(first.total, 7, "seven works said it");
         assert_eq!(first.reachable, 7, "and all seven can be paged to");
         assert_eq!(first.hits.len(), 3);
 
-        let second = store.search_page("안녕하세요", 3, 3).unwrap();
+        let second = store.search_page("안녕하세요", 3, 3, Among::default()).unwrap();
         assert_eq!(second.total, 7);
         assert_eq!(second.hits.len(), 3);
         let seen: std::collections::HashSet<i32> =
             first.hits.iter().chain(second.hits.iter()).map(|h| h.gallery_id).collect();
         assert_eq!(seen.len(), 6, "the second page is not the first one again");
 
-        assert_eq!(store.search_page("안녕하세요", 6, 3).unwrap().hits.len(), 1);
-        assert!(store.search_page("안녕하세요", 99, 3).unwrap().hits.is_empty());
+        assert_eq!(store.search_page("안녕하세요", 6, 3, Among::default()).unwrap().hits.len(), 1);
+        assert!(store.search_page("안녕하세요", 99, 3, Among::default()).unwrap().hits.is_empty());
+    }
+
+    /// The tags a reader reads, and the ones they never want to see, hold for
+    /// the dialogue as they do for every other list - and an answer held for
+    /// one set of works is not the answer for another.
+    #[test]
+    fn a_search_keeps_to_the_works_it_was_asked_of() {
+        let (store, _dir) = store();
+        // Each says it differently: the same passage in several works is
+        // folded into one hit, which is not what this is about.
+        for (id, said) in
+            [(1, "안녕 선배"), (2, "선배 왔어요"), (3, "어서 와 선배"), (4, "선배 미워")]
+        {
+            store.complete(id, &[page(0, said)]).unwrap();
+        }
+        let read: std::collections::HashSet<i32> = [1, 2, 3].into();
+        let hidden: std::collections::HashSet<i32> = [2].into();
+        let ids = |found: Found| {
+            let mut ids: Vec<i32> = found.hits.iter().map(|h| h.gallery_id).collect();
+            ids.sort_unstable();
+            (ids, found.total)
+        };
+
+        let every = store.search_page("선배", 0, 10, Among::default()).unwrap();
+        assert_eq!(ids(every), (vec![1, 2, 3, 4], 4));
+
+        let narrowed = Among { within: Some(&read), hidden: Some(&hidden) };
+        let kept = store.search_page("선배", 0, 10, narrowed).unwrap();
+        assert_eq!(ids(kept), (vec![1, 3], 2));
+
+        let only_hidden = Among { within: None, hidden: Some(&hidden) };
+        let left = store.search_page("선배", 0, 10, only_hidden).unwrap();
+        assert_eq!(ids(left), (vec![1, 3, 4], 3));
     }
 
     /// Storing anything makes what was kept stale, answers and keys alike.
@@ -1894,12 +1978,15 @@ mod tests {
         let store = DialogueStore::open(dir.path().join("d.redb")).unwrap();
         store.complete(1, &[page(0, "구급차라도 부르는 게 좋겠어요")]).unwrap();
         assert_eq!(store.search("구급차", 5).unwrap().len(), 1);
-        assert!(store.remembered("구급차", 0, 10).is_some());
+        assert!(store.remembered("구급차", Among::default().key(), 0, 10).is_some());
         let keys = store.search_keys().unwrap();
         assert_eq!(keys.len(), 1);
 
         store.complete(2, &[page(0, "구급차를 불렀다")]).unwrap();
-        assert!(store.remembered("구급차", 0, 10).is_none(), "the old answer is stale");
+        assert!(
+            store.remembered("구급차", Among::default().key(), 0, 10).is_none(),
+            "the old answer is stale"
+        );
         assert_eq!(store.search_keys().unwrap().len(), 2, "the new work is searchable");
         assert_eq!(store.search("구급차", 5).unwrap().len(), 2);
     }

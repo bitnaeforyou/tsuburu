@@ -287,7 +287,7 @@ export const en = {
   'hidden.empty': 'Nothing is hidden.',
   'hidden.slower': 'Hiding something means reading further down the list to fill a page. Expect searches to take a little longer.',
   'home.title': 'First-screen tags',
-  'home.note': 'When the first screen has nothing searched for, it shows only works tagged with at least one of these. Searches are not narrowed. Kept on this device only.',
+  'home.note': 'The first screen and dialogue search show only works tagged with at least one of these. Looking for a tag or a title in the search box is not narrowed. Kept on this device only.',
   'home.add': 'Tag for the first screen',
   'home.addButton': 'Add',
   'home.remove': 'Remove {tag}',

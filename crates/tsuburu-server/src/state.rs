@@ -226,14 +226,16 @@ impl AppState {
             return Arc::clone(&cached.value);
         }
         let tags = self.store.as_ref().and_then(|s| s.hidden_tags().ok()).unwrap_or_default();
-        let fresh = Arc::new(self.works_under(&tags).await);
+        let fresh = Arc::new(self.works_under(&tags).await.unwrap_or_default());
         *self.hidden.write().await =
             Some(Cached { value: Arc::clone(&fresh), fetched_at: Instant::now() });
         fresh
     }
 
-    /// The works the first screen keeps to, or `None` when the reader has
-    /// not chosen any and browsing shows everything.
+    /// The works the first screen and the dialogue keep to, or `None` when
+    /// the reader has not chosen any - or when hitomi could not be asked
+    /// which works they are, since the dialogue is searched without it and
+    /// narrowing it to nothing would look like a search that finds nothing.
     pub async fn home(&self) -> Option<Arc<HashSet<i32>>> {
         if let Some(cached) = self.home.read().await.as_ref()
             && cached.is_fresh()
@@ -244,30 +246,37 @@ impl AppState {
         if tags.is_empty() {
             return None;
         }
-        let fresh = Arc::new(self.works_under(&tags).await);
+        // Not held when it could not be worked out, so the next search asks
+        // again rather than going without for an hour.
+        let fresh = Arc::new(self.works_under(&tags).await?);
         *self.home.write().await =
             Some(Cached { value: Arc::clone(&fresh), fetched_at: Instant::now() });
         Some(fresh)
     }
 
-    /// Every work that carries at least one of `tags`.
-    async fn works_under(&self, tags: &[String]) -> HashSet<i32> {
+    /// Every work that carries at least one of `tags`, or `None` when hitomi
+    /// answered for none of them.
+    async fn works_under(&self, tags: &[String]) -> Option<HashSet<i32>> {
         let mut ids = HashSet::new();
         if tags.is_empty() {
-            return ids;
+            return Some(ids);
         }
-        let Ok(version) = self.version().await else { return ids };
+        let version = self.version().await.ok()?;
+        let mut answered = false;
         for tag in tags {
             match tsuburu_hitomi::search_term(self.fetcher.as_ref(), &self.cfg, &version, tag, None)
                 .await
             {
-                Ok(found) => ids.extend(found),
+                Ok(found) => {
+                    answered = true;
+                    ids.extend(found);
+                }
                 // A tag hitomi does not know finds nothing, which is not a
                 // reason to fail the search it was asked for.
                 Err(err) => tracing::debug!(%err, tag, "could not resolve a tag"),
             }
         }
-        ids
+        answered.then_some(ids)
     }
 
     /// Said when the list changes, so the next search resolves it again.

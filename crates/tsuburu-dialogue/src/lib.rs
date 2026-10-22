@@ -15,6 +15,6 @@ pub use matcher::{Match, Query};
 pub use shard::{RANGE as SHARD_RANGE, Shard, ShardEntry, ShardError};
 pub use store::Found;
 pub use store::{
-    Counts, DialogueError, DialogueStore, Hit, ImportSummary, JobRecord, PageText, Priority,
+    Among, Counts, DialogueError, DialogueStore, Hit, ImportSummary, JobRecord, PageText, Priority,
     Status, Stored, decode_pages, encode_pages,
 };

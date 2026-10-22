@@ -350,6 +350,8 @@ export type DialoguePage = {
   /// narrowing rather than another page.
   reachable: number
   counts: Counts
+  /** Whether the first-screen tags narrowed this search. */
+  narrowed: boolean
 }
 
 export function dialogueSearch(

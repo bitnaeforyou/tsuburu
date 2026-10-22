@@ -175,6 +175,8 @@ pub struct SearchResponse {
     /// wants narrowing rather than paging.
     pub reachable: usize,
     pub counts: Counts,
+    /// Whether the first screen's tags narrowed this, as they do browsing.
+    pub narrowed: bool,
 }
 
 pub async fn search(
@@ -187,21 +189,27 @@ pub async fn search(
     }
     let limit = params.limit.clamp(1, MAX_RESULTS);
     let offset = params.offset;
+    let (home, hidden) = (state.home().await, state.hidden().await);
+    let narrowed = home.is_some();
     // The scan is CPU work over the whole store; keep it off the runtime.
     let scanning = Arc::clone(store);
     let query = params.q.clone();
-    let found = tokio::task::spawn_blocking(move || scanning.search_page(&query, offset, limit))
-        .await
-        .map_err(|e| ApiError {
-            error: ErrorKind::Storage,
-            message: e.to_string(),
-            code: None,
-        })??;
+    let found = tokio::task::spawn_blocking(move || {
+        let among = tsuburu_dialogue::Among { within: home.as_deref(), hidden: Some(&hidden) };
+        scanning.search_page(&query, offset, limit, among)
+    })
+    .await
+    .map_err(|e| ApiError {
+        error: ErrorKind::Storage,
+        message: e.to_string(),
+        code: None,
+    })??;
     Ok(Json(SearchResponse {
         hits: found.hits,
         total: found.total,
         reachable: found.reachable,
         counts: store.counts()?,
+        narrowed,
     }))
 }
 
@@ -723,6 +731,7 @@ pub async fn phrase(
         None => tsuburu_embed::embedder::EmbedderConfig::default().dims,
     };
     let query = embed(&state, &settings, &params.q, dims).await?;
+    let (home, hidden) = (state.home().await, state.hidden().await);
 
     let hits = tokio::task::spawn_blocking(move || -> Result<Vec<SimilarHit>, String> {
         let store = store.as_ref();
@@ -761,6 +770,10 @@ pub async fn phrase(
             })
             .filter(|hit| {
                 hit.snippet.iter().map(|line| line.chars().count()).sum::<usize>() >= LEAST_TEXT
+            })
+            .filter(|hit| {
+                tsuburu_dialogue::Among { within: home.as_deref(), hidden: Some(&hidden) }
+                    .admits(hit.gallery_id)
             })
             .take(limit)
             .collect())
