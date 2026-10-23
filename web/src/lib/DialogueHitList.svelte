@@ -4,6 +4,7 @@
   import type { DialogueHit } from './api'
   import { t } from './i18n.svelte'
   import { toGallery } from './router'
+  import KeptMark from './KeptMark.svelte'
 
   /// A line that was found, and the work it was found in. The line is the
   /// answer, so it is what the row is mostly made of; the cover and the title
@@ -64,6 +65,7 @@
           {#if card?.thumbnail}
             <img src={card.thumbnail} alt="" loading="lazy" decoding="async" />
           {/if}
+          <KeptMark id={hit.gallery_id} />
         </span>
 
         <span class="body">
@@ -139,6 +141,7 @@
   }
 
   .thumb {
+    position: relative;
     display: block;
     aspect-ratio: 3 / 4;
     background: var(--bg);

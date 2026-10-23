@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from '../lib/api'
+  import { downloaded } from '../lib/library.svelte'
   import { t, type Key } from '../lib/i18n.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import Card from '../lib/Card.svelte'
@@ -65,6 +66,7 @@
     try {
       const list = await api.downloads()
       items = list.items
+      downloaded.replace(list.items)
       bytes = list.bytes
       shelves = await api.folders().catch(() => [])
       error = null

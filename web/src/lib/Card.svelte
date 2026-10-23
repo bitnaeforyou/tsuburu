@@ -3,6 +3,7 @@
   import * as api from './api'
   import * as cards from './cards.svelte'
   import { library, read } from './library.svelte'
+  import KeptMark from './KeptMark.svelte'
   import { split as splitTag } from './tags'
   import { view } from './view.svelte'
   import { toGallery } from './router'
@@ -127,6 +128,7 @@
       {:else if failed}
         <span class="placeholder">{t('card.unavailable')}</span>
       {/if}
+      <KeptMark {id} />
       {#if readSoFar && readSoFar.pages > 0}
         <div class="progress" style:--read={`${((readSoFar.page + 1) / readSoFar.pages) * 100}%`}>
           <span>{readSoFar.page + 1} / {readSoFar.pages}</span>

@@ -130,6 +130,8 @@ export const ko: Messages = {
   'card.unlistedNote': 'hitomi가 이 작품을 더는 목록에 올리지 않습니다. 쪽은 아직 남아 있으니, 가질 생각이면 받아두세요.',
   'card.favoriteAdd': '즐겨찾기에 추가',
   'card.favoriteRemove': '즐겨찾기에서 빼기',
+  'card.downloaded': '받아 둔 작품',
+  'card.downloadedPart': '{pages}쪽 중 {have}쪽 받아 둠',
 
   'gallery.back': '뒤로',
   'gallery.save': '저장',

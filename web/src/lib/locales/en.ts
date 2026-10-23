@@ -131,6 +131,8 @@ export const en = {
   'card.unlistedNote': 'The site has stopped listing this work. Its pages are still here, so keep a copy if you want it.',
   'card.favoriteAdd': 'Add to favorites',
   'card.favoriteRemove': 'Remove from favorites',
+  'card.downloaded': 'Downloaded',
+  'card.downloadedPart': '{have} of {pages} pages downloaded',
 
   'gallery.back': 'Back',
   'gallery.save': 'Save',

@@ -90,3 +90,53 @@ class Read {
 }
 
 export const read = new Read()
+
+/// How much of a work is downloaded.
+export type Kept = { have: number; pages: number; complete: boolean }
+
+/// Which works are downloaded, and how much of each.
+///
+/// Only the downloads screen knew, so a reader scanning a list for a work
+/// they already had had to go and look there. Read once, like the history,
+/// and kept current by the two screens that change it.
+class Downloaded {
+  entries = $state(new Map<number, Kept>())
+  private asked = false
+
+  async load() {
+    if (this.asked) return
+    this.asked = true
+    try {
+      this.replace((await api.downloads()).items)
+    } catch {
+      // A phone or a computer with downloads switched off has none to mark.
+    }
+  }
+
+  of(id: number): Kept | null {
+    return this.entries.get(id) ?? null
+  }
+
+  /// Everything on disk, as the downloads screen has just been told.
+  replace(items: api.DownloadItem[]) {
+    this.entries = new Map(items.map((item) => [item.id, keptOf(item)]))
+  }
+
+  /// One work, as the work's own screen has just been told.
+  note(item: api.DownloadItem) {
+    this.entries = new Map(this.entries).set(item.id, keptOf(item))
+  }
+
+  forget(id: number) {
+    if (!this.entries.has(id)) return
+    const next = new Map(this.entries)
+    next.delete(id)
+    this.entries = next
+  }
+}
+
+function keptOf(item: api.DownloadItem): Kept {
+  return { have: item.have, pages: item.pages, complete: item.complete }
+}
+
+export const downloaded = new Downloaded()

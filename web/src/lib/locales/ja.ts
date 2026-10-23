@@ -130,6 +130,8 @@ export const ja: Messages = {
   'card.unlistedNote': 'サイトがこの作品を一覧に出さなくなりました。ページはまだ残っているので、必要なら取得しておいてください。',
   'card.favoriteAdd': 'お気に入りに追加',
   'card.favoriteRemove': 'お気に入りから外す',
+  'card.downloaded': 'ダウンロード済み',
+  'card.downloadedPart': '{pages}ページ中 {have}ページをダウンロード済み',
 
   'gallery.back': '戻る',
   'gallery.save': '保存',

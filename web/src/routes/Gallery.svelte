@@ -4,7 +4,7 @@
   import { untrack } from 'svelte'
   import { i18n, t, number } from '../lib/i18n.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
-  import { library, read as readSoFar } from '../lib/library.svelte'
+  import { downloaded, library, read as readSoFar } from '../lib/library.svelte'
   import { toArtist, toGallery, toKeyword, toSearch, toSeries, toTerm } from '../lib/router'
   import { split as splitTag } from '../lib/tags'
   import Card from '../lib/Card.svelte'
@@ -119,9 +119,12 @@
   async function refreshDownload() {
     try {
       download = await api.downloadStatus(id)
+      downloaded.note(download)
     } catch {
-      // Never downloaded: not an error, just nothing to show.
+      // Never downloaded: not an error, just nothing to show - and nothing
+      // for the covers to mark either, if they thought otherwise.
       download = null
+      downloaded.forget(id)
     }
   }
 
