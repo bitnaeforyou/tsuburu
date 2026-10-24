@@ -8,6 +8,7 @@
   import { toArtist, toGallery, toKeyword, toSearch, toSeries, toTerm } from '../lib/router'
   import { split as splitTag } from '../lib/tags'
   import Card from '../lib/Card.svelte'
+  import CopyNumber from '../lib/CopyNumber.svelte'
   import Grid from '../lib/Grid.svelte'
   import LocalePicker from '../lib/LocalePicker.svelte'
   import ReaderView from '../lib/ReaderView.svelte'
@@ -345,8 +346,9 @@
 
         <p class="line">
           <!-- The number is the work's address on hitomi, and what someone
-               pasting it into the search box is pasting. -->
-          <span class="id">#{id}</span>
+               pasting it into the search box is pasting - so pressing it
+               copies it. -->
+          <span class="id"><CopyNumber {id} label={`#${id}`} /></span>
           &middot; {t('common.pages', { n: number(gallery.pages.length) })}
           {#if gallery.language}&middot; {gallery.language}{/if}
           {#if kindOf(gallery.kind)}&middot; {kindOf(gallery.kind)}{/if}
@@ -641,7 +643,21 @@
   }
   .id {
     font-variant-numeric: tabular-nums;
-    user-select: all;
+  }
+  /* It reads as part of the line it sits in, and the dotted underline is
+     what says it does something when pressed. */
+  .id :global(.copy) {
+    padding: 0.15rem 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-decoration: underline dotted;
+    text-underline-offset: 0.2em;
+    cursor: pointer;
+    /* Held at the start of the line: a button centres what it says, and
+       this one keeps room for the longer "copied". */
+    justify-items: start;
   }
 
   .credits {

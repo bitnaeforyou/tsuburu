@@ -4,6 +4,8 @@
   import { t, type Key } from '../lib/i18n.svelte'
   import AppHeader from '../lib/AppHeader.svelte'
   import Card from '../lib/Card.svelte'
+  import CopyNumber from '../lib/CopyNumber.svelte'
+  import { copy } from '../lib/clipboard'
   import Grid from '../lib/Grid.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import { keepScroll } from '../lib/keepScroll.svelte'
@@ -17,7 +19,7 @@
   let error = $state<unknown>(null)
   let loading = $state(true)
 
-  type Order = 'added' | 'title' | 'pages' | 'bytes'
+  type Order = 'added' | 'title' | 'pages' | 'bytes' | 'idDesc' | 'idAsc'
   let order = $state<Order>('added')
   let shelf = $state<Picked>('all')
 
@@ -39,13 +41,29 @@
     { value: 'title', key: 'sort.title' },
     { value: 'pages', key: 'sort.pages' },
     { value: 'bytes', key: 'downloads.biggest' },
+    { value: 'idDesc', key: 'sort.idDesc' },
+    { value: 'idAsc', key: 'sort.idAsc' },
   ]
+
+  /// What copying every number came to, said beside the button.
+  let copied = $state('')
+
+  /// The numbers of what is on screen - this shelf, in this order - one to a
+  /// line, which is what every box in tsuburu that takes numbers accepts.
+  async function copyNumbers() {
+    const ids = ordered.map((item) => item.id)
+    if (!(await copy(ids.join('\n')))) copied = t('copy.failed')
+    else if (ids.length === 1) copied = t('copy.allDoneOne')
+    else copied = t('copy.allDone', { n: ids.length })
+  }
 
   const ordered = $derived.by(() => {
     const sorted = [...onShelf(items, shelf)]
     if (order === 'title') sorted.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
     else if (order === 'pages') sorted.sort((a, b) => b.pages - a.pages)
     else if (order === 'bytes') sorted.sort((a, b) => b.bytes - a.bytes)
+    else if (order === 'idDesc') sorted.sort((a, b) => b.id - a.id)
+    else if (order === 'idAsc') sorted.sort((a, b) => a.id - b.id)
     else sorted.sort((a, b) => b.added_at - a.added_at)
     return sorted
   })
@@ -121,6 +139,7 @@
         &middot; {t('downloads.onDisk', { size: size(bytes) })}
       </p>
       <div class="how">
+        <button onclick={copyNumbers}>{t('copy.all')}</button>
         <ViewToggle />
         {#if items.length > 1}
           <label class="order">
@@ -134,6 +153,7 @@
         {/if}
       </div>
     </div>
+    <p class="muted copied" class:quiet={!copied} role="status">{copied}</p>
     <Grid>
       {#each ordered as item (item.id)}
         <div class="entry">
@@ -166,6 +186,7 @@
             {#if !item.complete && !item.job.running}
               <button onclick={() => resume(item.id)}>{t('gallery.getRest')}</button>
             {/if}
+            <CopyNumber id={item.id} label={t('copy.one')} />
             <button onclick={() => remove(item.id)}>{t('downloads.delete')}</button>
           </div>
         </div>
@@ -236,9 +257,17 @@
   }
   .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.35rem;
   }
-  .actions button {
+  /* Always in the page so the next copy is announced; taking no room while
+     it has nothing to say. */
+  .copied.quiet {
+    margin: 0;
+  }
+  /* `:global` for the one that is a component of its own: scoped styles
+     stop at its edge, and it came out a size larger than its neighbours. */
+  .actions :global(button) {
     font-size: var(--text-sm);
     padding: 0.15rem 0.45rem;
   }
