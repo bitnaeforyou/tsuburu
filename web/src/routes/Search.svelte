@@ -14,6 +14,7 @@
   } from '../lib/results.svelte'
   import { forget as forgetCards } from '../lib/cards.svelte'
   import { keepThisVisit } from '../lib/kept'
+  import { keepScroll } from '../lib/keepScroll.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import Card from '../lib/Card.svelte'
   import Grid from '../lib/Grid.svelte'
@@ -66,8 +67,19 @@
   // tag index is the one that can still browse.
   const sectioned = $derived(params.scope === 'all' && params.query.trim().length > 0)
 
+  // Whatever this screen is showing, so the search tab comes back to it from
+  // any other tab rather than to an empty first screen. Not a number, which
+  // this screen turns straight into the work it names: coming back to it
+  // would open that work again.
   $effect(() => {
-    if (params.query) keepThisVisit('tsuburu.lastSearch', location.hash)
+    if (galleryNamed(params.query) === null) keepThisVisit('tsuburu.lastSearch', toSearch(params))
+  })
+
+  // Every source at once is drawn by sections that fetch for themselves, so
+  // it has no list of its own to put back. The page can still be put back
+  // where it was, once the sections have come back.
+  $effect(() => {
+    if (sectioned) return keepScroll(`sections ${key}`, () => true)
   })
 
   // The same for a search arrived at by its own address, so a pasted

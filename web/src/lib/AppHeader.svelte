@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import { toSearch, toSettings } from './router'
+  import { keptThisVisit } from './kept'
   import { t } from './i18n.svelte'
   import LocalePicker from './LocalePicker.svelte'
 
@@ -46,13 +47,20 @@
     settings: 'M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5ZM19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.5-2.3 1a7.6 7.6 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5c-.6.2-1.2.6-1.7 1l-2.3-1-2 3.5L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.5 2.3-1c.5.4 1.1.8 1.7 1l.4 2.5h4l.4-2.5c.6-.2 1.2-.6 1.7-1l2.3 1 2-3.5Z',
   } as const
 
-  const TABS = [
-    { id: 'search', key: 'nav.search', href: toSearch() },
+  const TABS = $derived([
+    // Back to the search that was left, from anywhere else: going to the
+    // downloads and back used to land on an empty first screen. Pressed on
+    // the search screen itself, it is the way back to the first screen.
+    {
+      id: 'search',
+      key: 'nav.search',
+      href: active === 'search' ? toSearch() : (keptThisVisit('tsuburu.lastSearch') ?? toSearch()),
+    },
     { id: 'favorites', key: 'nav.favorites', href: '#/favorites' },
     { id: 'history', key: 'nav.history', href: '#/history' },
     { id: 'downloads', key: 'nav.downloads', href: '#/downloads' },
     { id: 'settings', key: 'nav.settings', href: toSettings() },
-  ] as const
+  ] as const)
 </script>
 
 <!-- `bare` is a header with nothing left in it once the phone has taken the
