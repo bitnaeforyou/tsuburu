@@ -323,6 +323,8 @@ export const ko: Messages = {
   'dialogue.exact': '정확',
   'dialogue.copy': '사본 +{n}',
   'dialogue.copies': '사본 +{n}',
+  'dialogue.elsewhere': '이 작품의 다른 {n}곳:',
+  'dialogue.elsewhereMore': '외 {n}곳',
   'dialogue.importHistory': '읽은 기록 가져오기',
   'dialogue.importHistoryNote':
     '브라우저 기록이나 예전에 쓰던 데이터베이스에서 hitomi 주소나 번호를 붙여 넣으세요. 다른 것보다 먼저 색인합니다.',

@@ -315,6 +315,8 @@ export type DialogueHit = {
   snippet: string[]
   /** Other galleries carrying the same passage: re-uploads of one work. */
   also?: number[]
+  /** The other pages of this work that say it too. */
+  elsewhere?: number[]
 }
 
 export function dialogueStatus(): Promise<DialogueStatus> {

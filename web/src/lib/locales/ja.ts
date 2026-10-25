@@ -323,6 +323,8 @@ export const ja: Messages = {
   'dialogue.exact': '完全一致',
   'dialogue.copy': '複製 +{n}',
   'dialogue.copies': '複製 +{n}',
+  'dialogue.elsewhere': 'この作品のほかの{n}か所:',
+  'dialogue.elsewhereMore': 'ほか{n}か所',
   'dialogue.importHistory': '読んだ履歴を取り込む',
   'dialogue.importHistoryNote':
     'ブラウザの履歴や以前使っていたデータベースから hitomi の URL か ID を貼り付けてください。ほかより先に索引します。',

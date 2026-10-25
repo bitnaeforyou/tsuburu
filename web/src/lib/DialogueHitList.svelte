@@ -17,6 +17,10 @@
 
   let known = $state(new Map<number, api.Card | null>())
 
+  /// How many of a work's other pages are linked before the rest are only
+  /// counted: a word like "오빠" is on most of the pages of most works.
+  const SHOWN = 12
+
   const keyOf = (hit: DialogueHit) => `${hit.gallery_id}:${hit.page}`
 
   /// hitomi carries the same doujin many times over, under a different number
@@ -105,6 +109,19 @@
           </span>
         </span>
       </a>
+      {#if hit.elsewhere?.length}
+        <!-- Beside the row rather than in it: the row is one link, to the
+             page above, and a link cannot hold others. -->
+        <p class="elsewhere">
+          <span>{t('dialogue.elsewhere', { n: hit.elsewhere.length })}</span>
+          {#each hit.elsewhere.slice(0, SHOWN) as page (page)}
+            <a href={toGallery(hit.gallery_id, page)}>{t('common.page', { n: page + 1 })}</a>
+          {/each}
+          {#if hit.elsewhere.length > SHOWN}
+            <span>{t('dialogue.elsewhereMore', { n: hit.elsewhere.length - SHOWN })}</span>
+          {/if}
+        </p>
+      {/if}
     </li>
   {/each}
 </ul>
@@ -178,6 +195,30 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* Under the quotation, lined up with it. */
+  .elsewhere {
+    margin: 0;
+    padding: 0 0.75rem 0.6rem calc(0.75rem + 64px + 0.8rem);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: var(--text-xs);
+    color: var(--muted);
+  }
+  .elsewhere a {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    text-decoration: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .elsewhere a:hover {
+    border-color: var(--accent);
   }
 
   .found {

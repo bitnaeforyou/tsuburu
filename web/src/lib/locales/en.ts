@@ -325,6 +325,8 @@ export const en = {
   'dialogue.exact': 'exact',
   'dialogue.copy': '+{n} copy',
   'dialogue.copies': '+{n} copies',
+  'dialogue.elsewhere': '{n} more in this work:',
+  'dialogue.elsewhereMore': 'and {n} more',
   'dialogue.importHistory': 'Import reading history',
   'dialogue.importHistoryNote':
     'Paste hitomi URLs or gallery ids from your browser history or an older database. They are indexed before anything else.',

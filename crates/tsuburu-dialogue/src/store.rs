@@ -210,6 +210,13 @@ pub struct Hit {
     /// matches identically. Showing them all buries the distinct results.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub also: Vec<i32>,
+    /// The other pages of this work that say it as well as `page` does.
+    ///
+    /// A work is one row however often its characters say a thing, and the
+    /// row used to give no sign that a word on page two was on page thirty
+    /// too - a reader asked whether the rest were simply not found.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elsewhere: Vec<u16>,
 }
 
 /// How many answers to keep. Asking the same thing twice is common - a reader
@@ -261,6 +268,7 @@ fn weight(hit: &Hit) -> usize {
     size_of::<Hit>()
         + hit.snippet.iter().map(|line| line.len() + size_of::<String>()).sum::<usize>()
         + hit.also.len() * size_of::<i32>()
+        + hit.elsewhere.len() * size_of::<u16>()
 }
 
 /// One remembered answer: the generation it was taken at, what was asked, how
@@ -1290,7 +1298,10 @@ impl DialogueStore {
                 continue;
             }
 
-            let mut best: Option<(u16, Match)> = None;
+            // Every page that says it, not just the first: the row shows the
+            // best and says where else. Only a work that matches at all pays
+            // for reading past its first match.
+            let mut matched: Vec<(u16, Match)> = Vec::new();
             for page in CodeIter::new(&raw) {
                 let m = if fuzzy {
                     match query.fuzzy(page.codes) {
@@ -1302,16 +1313,25 @@ impl DialogueStore {
                 } else {
                     continue;
                 };
-                if best.as_ref().is_none_or(|(_, b)| m.score > b.score) {
-                    best = Some((page.page, m));
-                }
-                if m.exact {
-                    break;
-                }
+                matched.push((page.page, m));
             }
+            // The earliest of the best, as it always was.
+            let best =
+                matched.iter().fold(None, |best: Option<(u16, Match)>, &(page, m)| match best {
+                    Some((_, b)) if m.score <= b.score => best,
+                    _ => Some((page, m)),
+                });
 
             // Only now touch the text: a hit is rare, a page is not.
             if let Some((page_no, m)) = best {
+                // Said as well as the best one is: an exact row lists the
+                // other exact pages, not every page that was near.
+                let mut elsewhere: Vec<u16> = matched
+                    .iter()
+                    .filter(|(page, other)| *page != page_no && other.exact == m.exact)
+                    .map(|(page, _)| *page)
+                    .collect();
+                elsewhere.sort_unstable();
                 let lines = texts
                     .get(gallery_id)
                     .map_err(db_err)?
@@ -1329,6 +1349,7 @@ impl DialogueStore {
                     exact: m.exact,
                     snippet: snippet(&lines, query),
                     also: Vec::new(),
+                    elsewhere,
                 });
             }
         }
@@ -1969,6 +1990,28 @@ mod tests {
         let only_hidden = Among { within: None, hidden: Some(&hidden) };
         let left = store.search_page("선배", 0, 10, only_hidden).unwrap();
         assert_eq!(ids(left), (vec![1, 3, 4], 3));
+    }
+
+    /// A work is one row however often it says a thing, and the row says
+    /// where else it does.
+    #[test]
+    fn a_phrase_said_on_several_pages_names_the_others() {
+        let (store, _dir) = store();
+        store
+            .complete(
+                7,
+                &[
+                    page(0, "오늘은 비가 온다"),
+                    page(1, "내일 보자"),
+                    page(2, "오늘 밤에"),
+                    page(5, "오늘도 수고했어"),
+                ],
+            )
+            .unwrap();
+        let hits = store.search("오늘", 10).unwrap();
+        assert_eq!(hits.len(), 1, "one row for the work");
+        assert_eq!(hits[0].page, 0, "the earliest page is the one shown");
+        assert_eq!(hits[0].elsewhere, vec![2, 5]);
     }
 
     /// Storing anything makes what was kept stale, answers and keys alike.
