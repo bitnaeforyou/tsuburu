@@ -6,6 +6,7 @@
   import Card from '../lib/Card.svelte'
   import CopyNumber from '../lib/CopyNumber.svelte'
   import { copy } from '../lib/clipboard'
+  import { galleriesNamed } from '../lib/router'
   import Grid from '../lib/Grid.svelte'
   import ErrorNote from '../lib/ErrorNote.svelte'
   import { keepScroll } from '../lib/keepScroll.svelte'
@@ -113,6 +114,49 @@
     }
   }
 
+  let asked = $state('')
+  let asking = $state(false)
+  /// What the last list of numbers came to, said under the box.
+  let started = $state('')
+
+  /// Starts every work a pasted list names, one after another, and says how
+  /// that went: started, already here, or refused and why.
+  async function downloadNumbers(event: SubmitEvent) {
+    event.preventDefault()
+    const { ids, unknown } = galleriesNamed(asked)
+    if (ids.length === 0) {
+      started = t('downloads.queuedNone')
+      return
+    }
+    asking = true
+    const had = new Set(items.filter((item) => item.complete).map((item) => item.id))
+    // Asked before the server is, which would refuse them in English.
+    const busy = new Set(items.filter((item) => item.job.running).map((item) => item.id))
+    const said: string[] = []
+    const failed: string[] = []
+    let begun = 0
+    for (const id of ids) {
+      if (had.has(id) || busy.has(id)) continue
+      try {
+        await api.startDownload(id)
+        begun += 1
+      } catch (cause) {
+        failed.push(`#${id} (${cause instanceof Error ? cause.message : String(cause)})`)
+      }
+    }
+    if (begun) said.push(t('downloads.queued', { n: begun }))
+    const already = ids.filter((id) => had.has(id)).length
+    if (already) said.push(t('downloads.queuedHad', { n: already }))
+    const running = ids.filter((id) => busy.has(id)).length
+    if (running) said.push(t('downloads.queuedBusy', { n: running }))
+    if (failed.length) said.push(t('downloads.queuedFailed', { list: failed.join(', ') }))
+    if (unknown.length) said.push(t('downloads.queuedUnknown', { list: unknown.join(', ') }))
+    started = said.join(' · ')
+    if (begun) asked = ''
+    asking = false
+    await load()
+  }
+
   const size = (n: number) =>
     n >= 1073741824
       ? `${(n / 1073741824).toFixed(1)} GB`
@@ -125,6 +169,19 @@
 
 <main>
   <h1>{t('nav.downloads')}</h1>
+  <!-- Above everything else, and there with nothing downloaded yet: it is
+       how a first download can start from here. -->
+  <form class="by-number" onsubmit={downloadNumbers}>
+    <input
+      bind:value={asked}
+      placeholder="4183648, 4183650"
+      aria-label={t('downloads.byNumber')}
+      inputmode="text"
+      autocomplete="off"
+    />
+    <button type="submit" disabled={asking || !asked.trim()}>{t('downloads.byNumberButton')}</button>
+  </form>
+  <p class="muted started" class:quiet={!started} role="status">{started}</p>
   {#if error}
     <ErrorNote {error} onretry={load} />
   {:else if loading}
@@ -262,8 +319,21 @@
   }
   /* Always in the page so the next copy is announced; taking no room while
      it has nothing to say. */
-  .copied.quiet {
+  .copied.quiet,
+  .started.quiet {
     margin: 0;
+  }
+  .by-number {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .by-number input {
+    flex: 1;
+    min-width: 0;
+  }
+  .started {
+    overflow-wrap: anywhere;
   }
   /* `:global` for the one that is a component of its own: scoped styles
      stop at its edge, and it came out a size larger than its neighbours. */

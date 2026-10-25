@@ -1,7 +1,7 @@
 /// A number is an address, not a search term. These say which is which.
 
 import { describe, expect, test } from 'vitest'
-import { galleryNamed } from './router'
+import { galleriesNamed, galleryNamed } from './router'
 
 describe('a query that names a gallery', () => {
   test('is a bare number long enough to be one', () => {
@@ -35,5 +35,22 @@ describe('a query that does not', () => {
   test('is somebody else"s address', () => {
     expect(galleryNamed('https://example.test/doujinshi/title-4183648.html')).toBeNull()
     expect(galleryNamed('https://nothitomi.la/4183648.html')).toBeNull()
+  })
+})
+
+describe('a pasted list of works', () => {
+  test('is split however it was written', () => {
+    expect(galleriesNamed('100, 200').ids).toEqual([100, 200])
+    expect(galleriesNamed('4277179\n4277180 4277182,').ids).toEqual([4277179, 4277180, 4277182])
+  })
+
+  test('takes hitomi addresses and leaves out repeats', () => {
+    const found = galleriesNamed('https://hitomi.la/doujinshi/title-4183648.html #4183648 4183650')
+    expect(found.ids).toEqual([4183648, 4183650])
+  })
+
+  test('says what it could not read', () => {
+    expect(galleriesNamed('4183648, banana').unknown).toEqual(['banana'])
+    expect(galleriesNamed('  ').ids).toEqual([])
   })
 })

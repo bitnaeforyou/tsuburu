@@ -137,6 +137,25 @@ export function galleryNamed(query: string): number | null {
   return found ? Number(found[1]) : null
 }
 
+/// Every work a pasted list names, and what in it named none.
+///
+/// For asking for several at once: numbers or hitomi addresses, split by
+/// commas, spaces or lines however they came. A number is taken at any
+/// length here, unlike in the search box, where a short one is as likely
+/// to be a word being looked for.
+export function galleriesNamed(text: string): { ids: number[]; unknown: string[] } {
+  const ids: number[] = []
+  const unknown: string[] = []
+  for (const piece of text.split(/[\s,]+/)) {
+    if (!piece) continue
+    const bare = /^#?(\d+)$/.exec(piece)
+    const id = bare ? Number(bare[1]) : galleryNamed(piece)
+    if (id === null || id <= 0) unknown.push(piece)
+    else if (!ids.includes(id)) ids.push(id)
+  }
+  return { ids, unknown }
+}
+
 /// A series, on a screen of its own. hitomi's search index has no term for
 /// one, but it keeps a list per name beside it, which is what that screen
 /// reads - so this works with nothing imported.
