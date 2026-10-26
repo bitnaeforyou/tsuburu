@@ -97,6 +97,17 @@
   /// separately, so they are counted separately.
   let wanted = 0
 
+  // A work opens at its top. Moving to it only changes the address, so the
+  // page kept the place the list had been scrolled to - and this screen is
+  // long, with every page of the work below the cover, so a reader coming
+  // from far down a list landed among the last of them. Only the work, not
+  // the language, which changes nothing about where one is; a page asked
+  // for by name is the reader's to scroll to.
+  $effect(() => {
+    void id
+    if (untrack(() => startPage) === null) scrollTo(0, 0)
+  })
+
   $effect(() => {
     // Both are read here, so that arriving at another work - or at another page
     // of this one - starts again instead of leaving the last one on screen.
