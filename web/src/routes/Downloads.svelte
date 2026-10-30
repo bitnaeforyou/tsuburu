@@ -379,6 +379,11 @@
   .entry {
     display: grid;
     gap: 0.35rem;
+    /* A grid item is otherwise as wide as its longest line, and a tag line
+       kept to one line made a whole card wider than its column - its cover
+       taller with it, by keeping its shape, and its neighbour stretched to
+       match. */
+    min-width: 0;
   }
   .bar {
     position: relative;
