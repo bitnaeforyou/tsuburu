@@ -96,13 +96,59 @@
     }
   }
 
-  async function remove(id: number) {
+  /// The one work whose delete was pressed, waiting to be confirmed. Its
+  /// pages were fetched one at a time and a mispress took all of them.
+  let doubting = $state<number | null>(null)
+
+  /// Picking several to delete at once.
+  let selecting = $state(false)
+  let picked = $state(new Set<number>())
+  /// The picked works were asked to go, and are waiting to be confirmed.
+  let doubtingPicked = $state(false)
+  /// What the last delete came to.
+  let deleted = $state('')
+
+  const pickedBytes = $derived(
+    items.filter((item) => picked.has(item.id)).reduce((sum, item) => sum + item.bytes, 0),
+  )
+  const allPicked = $derived(ordered.length > 0 && ordered.every((item) => picked.has(item.id)))
+
+  function pick(id: number) {
+    const next = new Set(picked)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    picked = next
+    doubtingPicked = false
+  }
+
+  /// Everything this shelf is showing, or nothing if it all already is.
+  function pickAll() {
+    picked = allPicked ? new Set() : new Set(ordered.map((item) => item.id))
+    doubtingPicked = false
+  }
+
+  function stopSelecting() {
+    selecting = false
+    picked = new Set()
+    doubtingPicked = false
+  }
+
+  /// Deletes each in turn and says how many went. One that will not go is
+  /// reported and the rest still are.
+  async function remove(ids: number[]) {
+    let gone = 0
     try {
-      await api.removeDownload(id)
-      await load()
+      for (const id of ids) {
+        await api.removeDownload(id)
+        gone += 1
+      }
     } catch (cause) {
       error = cause
     }
+    deleted = t('downloads.deleted', { n: gone })
+    doubting = null
+    stopSelecting()
+    await load()
   }
 
   async function resume(id: number) {
@@ -211,20 +257,56 @@
       </div>
     </div>
     <p class="muted copied" class:quiet={!copied} role="status">{copied}</p>
+
+    <!-- Held at the top while picking, so what to do with the picked ones
+         is in reach however far down the list they were picked. -->
+    <div class="picking" class:on={selecting}>
+      {#if !selecting}
+        <button onclick={() => (selecting = true)}>{t('downloads.select')}</button>
+      {:else if doubtingPicked}
+        <p>{t('downloads.deleteMany', { n: picked.size, size: size(pickedBytes) })}</p>
+        <button class="danger" onclick={() => void remove([...picked])}>
+          {t('downloads.deletePicked', { n: picked.size })}
+        </button>
+        <button onclick={() => (doubtingPicked = false)}>{t('common.cancel')}</button>
+      {:else}
+        <button onclick={pickAll}>{allPicked ? t('downloads.selectNone') : t('downloads.selectAll')}</button>
+        <button class="danger" disabled={picked.size === 0} onclick={() => (doubtingPicked = true)}>
+          {t('downloads.deletePicked', { n: picked.size })}
+        </button>
+        <button onclick={stopSelecting}>{t('common.cancel')}</button>
+      {/if}
+    </div>
+    <p class="muted deleted" class:quiet={!deleted} role="status">{deleted}</p>
+
     <Grid>
       {#each ordered as item (item.id)}
-        <div class="entry">
-          <Card
-            id={item.id}
-            preset={{
-              id: item.id,
-              title: item.title,
-              language: item.language,
-              kind: null,
-              pages: item.pages,
-              thumbnail_hash: null,
-            }}
-          />
+        <div class="entry" class:picked={picked.has(item.id)}>
+          <div class="work">
+            <Card
+              id={item.id}
+              preset={{
+                id: item.id,
+                title: item.title,
+                language: item.language,
+                kind: null,
+                pages: item.pages,
+                thumbnail_hash: null,
+              }}
+            />
+            {#if selecting}
+              <!-- Over the whole card while picking: pressing a work picks it
+                   rather than opening it. -->
+              <label class="pick">
+                <input
+                  type="checkbox"
+                  checked={picked.has(item.id)}
+                  onchange={() => pick(item.id)}
+                  aria-label={t('downloads.pick', { title: item.title ?? `#${item.id}` })}
+                />
+              </label>
+            {/if}
+          </div>
           <div class="bar" style:--done={`${item.pages ? (item.have / item.pages) * 100 : 0}%`}>
             <span>
               {item.have} / {item.pages}
@@ -239,13 +321,21 @@
             shelves={shelfNames}
             onmove={(id, to) => void move(id, to)}
           />
-          <div class="actions">
-            {#if !item.complete && !item.job.running}
-              <button onclick={() => resume(item.id)}>{t('gallery.getRest')}</button>
-            {/if}
-            <CopyNumber id={item.id} label={t('copy.one')} />
-            <button onclick={() => remove(item.id)}>{t('downloads.delete')}</button>
-          </div>
+          {#if doubting === item.id}
+            <div class="actions doubt">
+              <p>{t('downloads.deleteOne')}</p>
+              <button class="danger" onclick={() => void remove([item.id])}>{t('downloads.delete')}</button>
+              <button onclick={() => (doubting = null)}>{t('common.cancel')}</button>
+            </div>
+          {:else}
+            <div class="actions">
+              {#if !item.complete && !item.job.running}
+                <button onclick={() => resume(item.id)}>{t('gallery.getRest')}</button>
+              {/if}
+              <CopyNumber id={item.id} label={t('copy.one')} />
+              <button onclick={() => (doubting = item.id)}>{t('downloads.delete')}</button>
+            </div>
+          {/if}
         </div>
       {/each}
     </Grid>
@@ -320,8 +410,61 @@
   /* Always in the page so the next copy is announced; taking no room while
      it has nothing to say. */
   .copied.quiet,
-  .started.quiet {
+  .started.quiet,
+  .deleted.quiet {
     margin: 0;
+  }
+
+  .picking {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+  }
+  .picking.on {
+    position: sticky;
+    /* Below the phone's status bar, which the page is drawn under. */
+    top: var(--safe-top);
+    z-index: 2;
+    padding: 0.5rem 0;
+    background: var(--bg);
+  }
+  .picking p,
+  .doubt p {
+    margin: 0;
+    flex-basis: 100%;
+    font-size: var(--text-sm);
+  }
+  /* Taking something off the device, said in the colour that is only used
+     for that. */
+  .danger {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+
+  .work {
+    position: relative;
+  }
+  .pick {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 0.5rem;
+    cursor: pointer;
+  }
+  .pick input {
+    inline-size: 1.5rem;
+    block-size: 1.5rem;
+    accent-color: var(--accent);
+  }
+  .entry.picked .work {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius);
   }
   .by-number {
     display: flex;
