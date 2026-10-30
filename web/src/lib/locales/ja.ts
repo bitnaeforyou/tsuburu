@@ -223,6 +223,7 @@ export const ja: Messages = {
   'downloads.onDisk': 'ディスクに {size}',
   'downloads.failed': '{n}件失敗',
   'downloads.delete': '削除',
+  'downloads.manage': '{title} を管理',
   'downloads.select': '選択',
   'downloads.selectAll': 'すべて選択',
   'downloads.selectNone': '選択を解除',

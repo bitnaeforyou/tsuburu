@@ -228,6 +228,9 @@
     <button type="submit" disabled={asking || !asked.trim()}>{t('downloads.byNumberButton')}</button>
   </form>
   <p class="muted started" class:quiet={!started} role="status">{started}</p>
+  <!-- Out here rather than with the list: deleting the last of them takes
+       the list away, and the screen still has to say what happened. -->
+  <p class="muted deleted" class:quiet={!deleted} role="status">{deleted}</p>
   {#if error}
     <ErrorNote {error} onretry={load} />
   {:else if loading}
@@ -241,8 +244,16 @@
         {items.length === 1 ? t('downloads.work') : t('downloads.works', { n: items.length })}
         &middot; {t('downloads.onDisk', { size: size(bytes) })}
       </p>
+      <!-- What to do with the list, and how to look at it, on lines of their
+           own: four controls and a dropdown on one line left a phone
+           breaking "copy all numbers" over three. -->
       <div class="how">
+        {#if !selecting}
+          <button onclick={() => (selecting = true)}>{t('downloads.select')}</button>
+        {/if}
         <button onclick={copyNumbers}>{t('copy.all')}</button>
+      </div>
+      <div class="how">
         <ViewToggle />
         {#if items.length > 1}
           <label class="order">
@@ -260,10 +271,9 @@
 
     <!-- Held at the top while picking, so what to do with the picked ones
          is in reach however far down the list they were picked. -->
-    <div class="picking" class:on={selecting}>
-      {#if !selecting}
-        <button onclick={() => (selecting = true)}>{t('downloads.select')}</button>
-      {:else if doubtingPicked}
+    {#if selecting}
+    <div class="picking">
+      {#if doubtingPicked}
         <p>{t('downloads.deleteMany', { n: picked.size, size: size(pickedBytes) })}</p>
         <button class="danger" onclick={() => void remove([...picked])}>
           {t('downloads.deletePicked', { n: picked.size })}
@@ -277,7 +287,7 @@
         <button onclick={stopSelecting}>{t('common.cancel')}</button>
       {/if}
     </div>
-    <p class="muted deleted" class:quiet={!deleted} role="status">{deleted}</p>
+    {/if}
 
     <Grid>
       {#each ordered as item (item.id)}
@@ -307,33 +317,52 @@
               </label>
             {/if}
           </div>
-          <div class="bar" style:--done={`${item.pages ? (item.have / item.pages) * 100 : 0}%`}>
-            <span>
-              {item.have} / {item.pages}
-              {#if item.job.running}&middot; {t('gallery.downloading')}{/if}
-              {#if item.job.failed}&middot; {t('downloads.failed', { n: item.job.failed })}{/if}
-            </span>
-          </div>
-          <ShelfPicker
-            id={item.id}
-            folder={item.folder}
-            title={item.title ?? `#${item.id}`}
-            shelves={shelfNames}
-            onmove={(id, to) => void move(id, to)}
-          />
-          {#if doubting === item.id}
-            <div class="actions doubt">
-              <p>{t('downloads.deleteOne')}</p>
-              <button class="danger" onclick={() => void remove([item.id])}>{t('downloads.delete')}</button>
-              <button onclick={() => (doubting = null)}>{t('common.cancel')}</button>
+          <!-- How much is on disk is on the cover already; a bar under it is
+               only worth its room while pages are arriving or failing. -->
+          {#if item.job.running || item.job.failed}
+            <div class="bar" style:--done={`${item.pages ? (item.have / item.pages) * 100 : 0}%`}>
+              <span>
+                {item.have} / {item.pages}
+                {#if item.job.running}&middot; {t('gallery.downloading')}{/if}
+                {#if item.job.failed}&middot; {t('downloads.failed', { n: item.job.failed })}{/if}
+              </span>
             </div>
-          {:else}
+          {/if}
+          {#if !selecting}
             <div class="actions">
               {#if !item.complete && !item.job.running}
                 <button onclick={() => resume(item.id)}>{t('gallery.getRest')}</button>
               {/if}
-              <CopyNumber id={item.id} label={t('copy.one')} />
-              <button onclick={() => (doubting = item.id)}>{t('downloads.delete')}</button>
+              <!-- Everything else a work's download can be told, folded
+                   away: under every cover it was a dropdown and three
+                   buttons over two lines, and the list was mostly buttons. -->
+              <details class="more" ontoggle={() => doubting === item.id && (doubting = null)}>
+                <summary
+                  aria-label={t('downloads.manage', { title: item.title ?? `#${item.id}` })}
+                  title={t('downloads.manage', { title: item.title ?? `#${item.id}` })}
+                >&middot;&middot;&middot;</summary>
+                <div class="menu">
+                  <ShelfPicker
+                    id={item.id}
+                    folder={item.folder}
+                    title={item.title ?? `#${item.id}`}
+                    shelves={shelfNames}
+                    onmove={(id, to) => void move(id, to)}
+                  />
+                  {#if doubting === item.id}
+                    <p>{t('downloads.deleteOne')}</p>
+                    <div class="row">
+                      <button class="danger" onclick={() => void remove([item.id])}>{t('downloads.delete')}</button>
+                      <button onclick={() => (doubting = null)}>{t('common.cancel')}</button>
+                    </div>
+                  {:else}
+                    <div class="row">
+                      <CopyNumber id={item.id} label={t('copy.one')} />
+                      <button class="danger" onclick={() => (doubting = item.id)}>{t('downloads.delete')}</button>
+                    </div>
+                  {/if}
+                </div>
+              </details>
             </div>
           {/if}
         </div>
@@ -353,8 +382,12 @@
   }
   .how {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.6rem;
+  }
+  .how > :global(button) {
+    white-space: nowrap;
   }
   .order {
     display: flex;
@@ -382,8 +415,14 @@
     /* A grid item is otherwise as wide as its longest line, and a tag line
        kept to one line made a whole card wider than its column - its cover
        taller with it, by keeping its shape, and its neighbour stretched to
-       match. */
+       match. Both the box and the one column inside it have to be allowed
+       to be narrower than that line. */
     min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    /* A row is as tall as its tallest work; the others keep their own
+       height at the top of it rather than stretching what is under their
+       covers to match. */
+    align-content: start;
   }
   .bar {
     position: relative;
@@ -410,6 +449,53 @@
   .actions {
     display: flex;
     flex-wrap: wrap;
+    align-items: start;
+    gap: 0.35rem;
+  }
+  .more {
+    margin-inline-start: auto;
+    display: grid;
+    justify-items: end;
+    gap: 0.35rem;
+    flex-basis: auto;
+  }
+  .more[open] {
+    flex-basis: 100%;
+  }
+  /* Drawn as one of the buttons beside it rather than as a disclosure
+     triangle: it is the way to the rest of what can be done. */
+  .more summary {
+    list-style: none;
+    cursor: pointer;
+    /* The same small button open or shut, at the end of its line: a
+       details element does not take the grid it is given everywhere, and
+       open it pulled this across the whole card. */
+    display: block;
+    inline-size: max-content;
+    margin-inline-start: auto;
+    min-inline-size: 2.25rem;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--edge);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    text-align: center;
+    font-size: var(--text-sm);
+    letter-spacing: 0.1em;
+  }
+  .more summary::-webkit-details-marker {
+    display: none;
+  }
+  .more[open] summary {
+    border-color: var(--accent);
+  }
+  .menu {
+    justify-self: stretch;
+    display: grid;
+    gap: 0.35rem;
+  }
+  .menu .row {
+    display: flex;
+    flex-wrap: wrap;
     gap: 0.35rem;
   }
   /* Always in the page so the next copy is announced; taking no room while
@@ -427,7 +513,7 @@
     gap: 0.4rem;
     margin-bottom: 0.75rem;
   }
-  .picking.on {
+  .picking {
     position: sticky;
     /* Below the phone's status bar, which the page is drawn under. */
     top: var(--safe-top);
@@ -436,7 +522,7 @@
     background: var(--bg);
   }
   .picking p,
-  .doubt p {
+  .menu p {
     margin: 0;
     flex-basis: 100%;
     font-size: var(--text-sm);

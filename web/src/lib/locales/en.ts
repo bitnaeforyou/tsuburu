@@ -225,6 +225,7 @@ export const en = {
   'downloads.onDisk': '{size} on disk',
   'downloads.failed': '{n} failed',
   'downloads.delete': 'Delete',
+  'downloads.manage': 'Manage {title}',
   'downloads.select': 'Select',
   'downloads.selectAll': 'Select all',
   'downloads.selectNone': 'Clear selection',

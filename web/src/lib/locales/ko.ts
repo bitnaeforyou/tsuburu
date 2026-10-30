@@ -223,6 +223,7 @@ export const ko: Messages = {
   'downloads.onDisk': '디스크에 {size}',
   'downloads.failed': '{n}건 실패',
   'downloads.delete': '삭제',
+  'downloads.manage': '{title} 관리',
   'downloads.select': '선택',
   'downloads.selectAll': '모두 선택',
   'downloads.selectNone': '선택 해제',
