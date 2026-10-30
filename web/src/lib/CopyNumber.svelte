@@ -4,7 +4,17 @@
 
   /// A work's number, copied when pressed: it is what a reader pastes into
   /// hitomi, into a search box, or to someone else.
-  let { id, label }: { id: number; label: string } = $props()
+  let {
+    id,
+    label,
+    done,
+  }: {
+    id: number
+    label: string
+    /// What it says for a moment once copied, where "copied" in full would
+    /// be wider than the room it has. Said aloud in full either way.
+    done?: string
+  } = $props()
 
   /// What the last press came to, said for a moment in place of the label.
   let said = $state<string | null>(null)
@@ -24,7 +34,9 @@
      line and back again a second later. -->
 <button class="copy" onclick={press} title={t('copy.idTitle', { id })}>
   <span class:unseen={said !== null}>{label}</span>
-  <span class:unseen={said === null} aria-hidden="true">{said ?? t('copy.done')}</span>
+  <span class:unseen={said === null} aria-hidden="true">
+    {said === t('copy.failed') ? said : (done ?? t('copy.done'))}
+  </span>
 </button>
 <span class="sr-only" role="status">{said ?? ''}</span>
 

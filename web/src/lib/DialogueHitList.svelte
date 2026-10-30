@@ -5,6 +5,7 @@
   import { t } from './i18n.svelte'
   import { toGallery } from './router'
   import KeptMark from './KeptMark.svelte'
+  import CopyNumber from './CopyNumber.svelte'
 
   /// A line that was found, and the work it was found in. The line is the
   /// answer, so it is what the row is mostly made of; the cover and the title
@@ -64,15 +65,22 @@
   {#each shown as { hit, copies } (keyOf(hit))}
     {@const card = known.get(hit.gallery_id)}
     <li>
-      <a class="row" href={toGallery(hit.gallery_id, hit.page)}>
-        <span class="thumb">
-          {#if card?.thumbnail}
-            <img src={card.thumbnail} alt="" loading="lazy" decoding="async" />
-          {/if}
-          <KeptMark id={hit.gallery_id} />
-        </span>
+      <div class="row">
+        <!-- The cover and the work's number under it. The number copies
+             itself, so it cannot be inside the link the rest of the row
+             is: the cover is a link of its own to the same place, kept out
+             of the tab order so the row is still one stop. -->
+        <div class="side">
+          <a class="thumb" href={toGallery(hit.gallery_id, hit.page)} tabindex="-1" aria-hidden="true">
+            {#if card?.thumbnail}
+              <img src={card.thumbnail} alt="" loading="lazy" decoding="async" />
+            {/if}
+            <KeptMark id={hit.gallery_id} />
+          </a>
+          <CopyNumber id={hit.gallery_id} label={String(hit.gallery_id)} done="✓" />
+        </div>
 
-        <span class="body">
+        <a class="body" href={toGallery(hit.gallery_id, hit.page)}>
           <strong class="title">{card?.title ?? `#${hit.gallery_id}`}</strong>
 
           {#if card}
@@ -107,8 +115,8 @@
             </span>
             <q>{hit.snippet.join(' / ')}</q>
           </span>
-        </span>
-      </a>
+        </a>
+      </div>
       {#if hit.elsewhere?.length}
         <!-- Beside the row rather than in it: the row is one link, to the
              page above, and a link cannot hold others. -->
@@ -150,8 +158,22 @@
     grid-template-columns: 64px 1fr;
     gap: 0.8rem;
     padding: 0.6rem 0.75rem;
-    text-decoration: none;
-    color: inherit;
+  }
+  .side {
+    display: grid;
+    gap: 0.3rem;
+    align-content: start;
+  }
+  /* The number reads as a caption to the cover until it is pressed. */
+  .side :global(.copy) {
+    padding: 0.1rem 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 0.6875rem;
+    justify-items: center;
+    text-decoration: underline dotted;
+    text-underline-offset: 0.2em;
   }
   .row:hover {
     background: color-mix(in srgb, var(--accent) 7%, transparent);
@@ -173,6 +195,8 @@
   }
 
   .body {
+    text-decoration: none;
+    color: inherit;
     min-width: 0;
     display: grid;
     gap: 0.25rem;
