@@ -256,10 +256,13 @@ export const ko: Messages = {
     '이만큼을 인식하려면 컴퓨터가 몇 주를 돌아야 합니다. 그렇게 나온 텍스트를 올려두었고, 이 버튼이 그걸 받아옵니다 — 약 500 MB, 한 번만. Wi-Fi에서 받으세요. 직접 읽은 것은 그대로 남습니다.',
   'corpus.later': '나중에',
   'corpus.background': '계속 쓰기',
+  'corpus.progress': '{percent}% ({done} / {total} MB)',
+  'corpus.searchable': '{works}편 검색 가능',
+  'corpus.timing': '남은 시간 계산 중',
+  'corpus.left': '약 {minutes}분 남음',
+  'corpus.titleShort': '대사 받는 중',
   'corpus.get':
     '받아오기',
-  'corpus.fetching':
-    '받는 중 — {total}개 중 {done}개, 지금까지 {works}편',
   'corpus.failed':
     '받지 못했습니다: {error}',
   'corpus.again':

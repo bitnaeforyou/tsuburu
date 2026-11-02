@@ -329,6 +329,10 @@ export type CorpusState = {
   done?: number
   total?: number
   works?: number
+  bytes_done?: number
+  bytes_total?: number
+  /** How long fetching has taken so far. */
+  seconds?: number
   error?: string
 }
 

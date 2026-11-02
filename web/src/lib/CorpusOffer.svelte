@@ -2,6 +2,7 @@
   import * as api from './api'
   import { t, number } from './i18n.svelte'
   import { keep, kept } from './kept'
+  import { megabytes, minutesLeft, secondsLeft } from './corpus'
 
   let {
     /// Whether saying no should be remembered.
@@ -17,6 +18,9 @@
 
   let corpus = $state<api.CorpusState | null>(null)
   let dismissed = $state(false)
+  /// Told to get out of the way while it fetches. The download goes on, and
+  /// so does saying how far it has got - in one line rather than a panel.
+  let tucked = $state(false)
 
   function remember() {
     // A private window forgets; being asked twice is not a fault.
@@ -69,13 +73,37 @@
     dismissed = true
   }
 
+  const share = $derived(
+    corpus?.bytes_total ? (corpus.bytes_done ?? 0) / corpus.bytes_total : 0,
+  )
+  const left = $derived(
+    secondsLeft(corpus?.bytes_done ?? 0, corpus?.bytes_total ?? 0, corpus?.seconds ?? 0),
+  )
+  /// What fetching has come to, as one line: how much of it, how big, how
+  /// many works are searchable already, and how long is left.
+  const progress = $derived(
+    [
+      t('corpus.progress', {
+        percent: Math.floor(share * 100),
+        done: number(megabytes(corpus?.bytes_done ?? 0)),
+        total: number(megabytes(corpus?.bytes_total ?? 0)),
+      }),
+      t('corpus.searchable', { works: number(corpus?.works ?? 0) }),
+      left === null ? t('corpus.timing') : t('corpus.left', { minutes: minutesLeft(left) }),
+    ].join(' · '),
+  )
+
   // Nothing to offer if the build cannot fetch, or the corpus is already in.
   const offering = $derived(
     !dismissed && corpus?.available === true && corpus.state !== 'ready',
   )
 </script>
 
-{#if offering && corpus}
+{#if offering && corpus && tucked && corpus.state === 'fetching'}
+  <div class="meter alone" style:--done={`${share * 100}%`} role="status">
+    <span>{t('corpus.titleShort')} · {progress}</span>
+  </div>
+{:else if offering && corpus}
   <div class="offer" role="status">
     <div class="what">
       <strong>{t('corpus.title')}</strong>
@@ -86,16 +114,10 @@
     </div>
 
     {#if corpus.state === 'fetching'}
-      <div class="meter" style:--done={`${((corpus.done ?? 0) / Math.max(corpus.total ?? 1, 1)) * 100}%`}>
-        <span>
-          {t('corpus.fetching', {
-            done: corpus.done ?? 0,
-            total: corpus.total ?? 0,
-            works: number(corpus.works ?? 0),
-          })}
-        </span>
+      <div class="meter" style:--done={`${share * 100}%`}>
+        <span>{progress}</span>
       </div>
-      <button class="carry" onclick={() => (dismissed = true)}>{t('corpus.background')}</button>
+      <button class="carry" onclick={() => (tucked = true)}>{t('corpus.background')}</button>
     {:else}
       <div class="answers">
         <button class="primary" onclick={yes}>
@@ -160,6 +182,11 @@
   }
   .meter span {
     position: relative;
+  }
+  .meter.alone {
+    margin: 0 0 1rem;
+    font-size: var(--text-sm);
+    padding: 0.35rem 0.6rem;
   }
   .carry {
     justify-self: start;

@@ -258,10 +258,13 @@ export const en = {
     'Recognising this many works takes weeks of a machine. The text it produced is published, and this fetches it — about 500 MB, once, so do it on Wi-Fi. What you have read yourself is kept.',
   'corpus.later': 'Not now',
   'corpus.background': 'Carry on',
+  'corpus.progress': '{percent}% ({done} / {total} MB)',
+  'corpus.searchable': '{works} works searchable',
+  'corpus.timing': 'working out the time left',
+  'corpus.left': 'about {minutes} min left',
+  'corpus.titleShort': 'Fetching the dialogue',
   'corpus.get':
     'Fetch it',
-  'corpus.fetching':
-    'Fetching — {done} of {total} parts, {works} works so far',
   'corpus.failed':
     'It could not be fetched: {error}',
   'corpus.again':

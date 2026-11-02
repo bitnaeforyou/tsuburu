@@ -25,9 +25,25 @@ const RELEASES: Option<&str> = option_env!("TSUBURU_RELEASES");
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum Progress {
     Idle,
-    Fetching { done: usize, total: usize, works: usize },
-    Ready { works: usize },
-    Failed { error: String },
+    /// `done` and `total` count shards. The bytes and the seconds are what
+    /// the screen turns into a percentage and a time left: eighty shards
+    /// over half an hour is too coarse to watch as a count. `works` is how
+    /// many are searchable already, counting what an interrupted fetch
+    /// brought in before - not only what this one has.
+    Fetching {
+        done: usize,
+        total: usize,
+        works: usize,
+        bytes_done: u64,
+        bytes_total: u64,
+        seconds: u64,
+    },
+    Ready {
+        works: usize,
+    },
+    Failed {
+        error: String,
+    },
 }
 
 #[derive(Deserialize)]
@@ -83,7 +99,14 @@ impl Corpus {
         if matches!(self.progress(), Progress::Fetching { .. }) {
             return;
         }
-        self.set(Progress::Fetching { done: 0, total: 0, works: 0 });
+        self.set(Progress::Fetching {
+            done: 0,
+            total: 0,
+            works: 0,
+            bytes_done: 0,
+            bytes_total: 0,
+            seconds: 0,
+        });
         let me = Arc::clone(self);
         tokio::spawn(async move {
             match me.run(store, fetcher).await {
@@ -125,19 +148,26 @@ impl Corpus {
         let published = shards.len();
         shards.retain(|a| !taken.contains(&a.name));
         let total = shards.len();
+        let bytes_total: u64 = shards.iter().map(|a| a.size).sum();
         if total == 0 {
             tracing::info!(published, "the corpus is already here");
             return Ok(0);
         }
-        tracing::info!(
-            total,
-            bytes = shards.iter().map(|a| a.size).sum::<u64>(),
-            "fetching the corpus"
-        );
+        tracing::info!(total, bytes = bytes_total, "fetching the corpus");
 
+        let started = std::time::Instant::now();
         let mut works = 0usize;
+        let mut bytes_done = 0u64;
+        let fetching = |done, bytes_done| Progress::Fetching {
+            done,
+            total,
+            works: store.counts().map(|c| c.done).unwrap_or(0),
+            bytes_done,
+            bytes_total,
+            seconds: started.elapsed().as_secs(),
+        };
         for (done, asset) in shards.into_iter().enumerate() {
-            self.set(Progress::Fetching { done, total, works });
+            self.set(fetching(done, bytes_done));
             let bytes = fetcher
                 .stream(&asset.browser_download_url)
                 .await
@@ -160,7 +190,8 @@ impl Corpus {
             if let Err(err) = store.note_shard(&asset.name) {
                 tracing::debug!(%err, "could not note a shard as taken");
             }
-            self.set(Progress::Fetching { done: done + 1, total, works });
+            bytes_done += asset.size;
+            self.set(fetching(done + 1, bytes_done));
         }
         tracing::info!(works, "the corpus is in");
         Ok(works)

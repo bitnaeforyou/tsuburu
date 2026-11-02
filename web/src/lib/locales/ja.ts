@@ -256,10 +256,13 @@ export const ja: Messages = {
     'これだけを認識するには機械が数週間かかります。そうして得たテキストを公開してあり、このボタンが取ってきます — 約500 MB、一度だけ。Wi-Fi で取ってください。自分で読んだ分はそのまま残ります。',
   'corpus.later': 'あとで',
   'corpus.background': '続ける',
+  'corpus.progress': '{percent}%（{done} / {total} MB）',
+  'corpus.searchable': '{works}件を検索可能',
+  'corpus.timing': '残り時間を計算中',
+  'corpus.left': '残り約{minutes}分',
+  'corpus.titleShort': 'セリフを取得中',
   'corpus.get':
     '取ってくる',
-  'corpus.fetching':
-    '取得中 — {total}個中{done}個、これまで{works}作品',
   'corpus.failed':
     '取得できませんでした: {error}',
   'corpus.again':
