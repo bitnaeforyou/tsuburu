@@ -2,10 +2,24 @@
   import type { Term } from './api'
   import { t } from './i18n.svelte'
 
-  let { terms }: { terms: Term[] } = $props()
+  let {
+    terms,
+    onpick,
+  }: {
+    terms: Term[]
+    /// Searching again with `to` where `from` was typed.
+    onpick: (from: string, to: string) => void
+  } = $props()
 
-  // 번역된 것이 하나도 없으면 굳이 보여줄 필요가 없다.
-  const worthShowing = $derived(terms.some((t) => t.translated))
+  const HANGUL = /[가-힣]/
+
+  /// A Korean word the dictionary does not have is searched as written,
+  /// which only finds works with it in a Korean title. That is the one
+  /// untranslated word worth saying something about: a reader searching
+  /// `가축` got thirty works and no sign that the tag had two thousand.
+  const missed = (term: Term) => !term.translated && HANGUL.test(term.used)
+
+  const worthShowing = $derived(terms.some((term) => term.translated || missed(term)))
 </script>
 
 {#if worthShowing}
@@ -21,10 +35,26 @@
               +{term.alternatives.length}
             </span>
           {/if}
+        {:else if missed(term)}
+          <span class="note">{t('terms.titlesOnly')}</span>
         {:else}
           <span class="note">{t('terms.noTranslation')}</span>
         {/if}
       </span>
+      {#if missed(term) && term.nearby?.length}
+        <span class="nearby">
+          {t('terms.meant')}
+          {#each term.nearby as near (near.used)}
+            <button
+              class="near"
+              title={near.used}
+              onclick={() => onpick(term.input, `${term.excluded ? '-' : ''}${near.korean}`)}
+            >
+              {near.korean}
+            </button>
+          {/each}
+        </span>
+      {/if}
     {/each}
   </div>
 {/if}
@@ -33,6 +63,7 @@
   .terms {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 0.4rem;
     margin: 0 0 1rem;
   }
@@ -55,5 +86,18 @@
     margin-inline-start: 0.3rem;
     color: var(--accent);
     cursor: help;
+  }
+  .nearby {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: var(--text-sm);
+    color: var(--muted);
+  }
+  .near {
+    font-size: var(--text-sm);
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
   }
 </style>

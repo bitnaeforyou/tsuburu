@@ -76,6 +76,8 @@ export const en = {
   'error.changedHint': 'Retrying will not help until tsuburu is updated.',
 
   'terms.noTranslation': 'no translation',
+  'terms.titlesOnly': 'not in the dictionary, so titles only',
+  'terms.meant': 'Did you mean:',
 
   'search.placeholder': 'Words, a gallery number, or a hitomi address · -word excludes',
   'search.placeholderLocal': 'Title, artist, series, character — or a gallery number',

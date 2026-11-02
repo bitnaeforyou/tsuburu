@@ -51,6 +51,8 @@ export type Term = {
   alternatives: string[]
   translated: boolean
   excluded: boolean
+  /** Dictionary phrases containing a Korean word it does not have. */
+  nearby?: { used: string; korean: string }[]
 }
 
 export type SearchResponse = {

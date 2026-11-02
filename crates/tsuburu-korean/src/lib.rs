@@ -24,6 +24,17 @@ const MAX_PHRASE_WORDS: usize = 8;
 
 const EMBEDDED: &str = include_str!("../data/korean.tsv");
 
+/// Words added by hand, read after the generated table so they win over it.
+///
+/// The generated table comes from a published tag table and is rebuilt from
+/// it, so a word missing there is added here rather than edited in - where
+/// the next rebuild would take it out again.
+const ADDED: &str = include_str!("../data/korean-added.tsv");
+
+/// How many of the dictionary's phrases are offered for a word it does not
+/// have. More than a few is a list to read rather than a hint.
+const NEARBY: usize = 3;
+
 pub struct Dictionary {
     /// 한국어 구 -> 영어 후보. 후보 순서는 생성 시점에 고정된다.
     entries: HashMap<String, Vec<String>>,
@@ -71,7 +82,7 @@ impl Dictionary {
     /// 바이너리에 임베드된 사전. 처음 쓰일 때 한 번만 파싱한다.
     pub fn embedded() -> &'static Dictionary {
         static DICTIONARY: OnceLock<Dictionary> = OnceLock::new();
-        DICTIONARY.get_or_init(|| Dictionary::parse(EMBEDDED))
+        DICTIONARY.get_or_init(|| Dictionary::parse(&format!("{EMBEDDED}\n{ADDED}")))
     }
 
     pub fn len(&self) -> usize {
@@ -116,6 +127,40 @@ impl Dictionary {
                 korean: korean.to_string(),
             })
             .collect()
+    }
+
+    /// Phrases the dictionary has that contain `word`, for a word it does
+    /// not have on its own.
+    ///
+    /// `가축` alone is not in it, and searched as written it finds only the
+    /// works with that word in a Korean title - thirty-odd where the tag
+    /// `사람을 가축처럼 다룸` (human cattle) has two thousand. A reader who is
+    /// not told that has no way to know the tag is there.
+    pub fn containing(&self, word: &str) -> Vec<Suggestion> {
+        let word = word.trim().to_lowercase();
+        if word.is_empty() {
+            return Vec::new();
+        }
+        let mut found: Vec<(bool, usize, &str, &str)> = self
+            .entries
+            .iter()
+            .filter(|(phrase, _)| phrase.contains(&word) && **phrase != word)
+            .map(|(phrase, english)| {
+                (!phrase.starts_with(&word), phrase.len(), phrase.as_str(), english[0].as_str())
+            })
+            .collect();
+        found.sort_unstable();
+        let mut out: Vec<Suggestion> = Vec::new();
+        for (_, _, phrase, english) in found {
+            if out.iter().any(|s| s.used == english) {
+                continue;
+            }
+            out.push(Suggestion { used: english.to_string(), korean: phrase.to_string() });
+            if out.len() == NEARBY {
+                break;
+            }
+        }
+        out
     }
 
     /// Whether this is a tag hitomi uses, said in English.
@@ -168,6 +213,11 @@ pub struct Term {
     pub translated: bool,
     /// 제외 항목(`-`로 시작)인가.
     pub excluded: bool,
+    /// For a Korean word the dictionary does not have: the phrases it has
+    /// that contain it, which the reader may have meant. Searched as written,
+    /// such a word only matches works with it in a Korean title.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub nearby: Vec<Suggestion>,
 }
 
 /// 질의를 낱말 단위로 훑으며 사전에 있는 것을 영어로 바꾼다.
@@ -209,6 +259,7 @@ pub fn translate(dictionary: &Dictionary, query: &str) -> Vec<Term> {
                     alternatives: candidates[1..].to_vec(),
                     translated: true,
                     excluded,
+                    nearby: Vec::new(),
                 });
                 at += take;
             }
@@ -220,18 +271,26 @@ pub fn translate(dictionary: &Dictionary, query: &str) -> Vec<Term> {
                         alternatives: Vec::new(),
                         translated: false,
                         excluded,
+                        nearby: Vec::new(),
                     });
                     at += take;
                 }
                 None => {
                     let word = words[at];
                     let (body, excluded) = split_exclusion(word);
+                    // One syllable is in too many phrases to point at any.
+                    let nearby = if body.chars().filter(|&c| is_hangul(c)).count() >= 2 {
+                        dictionary.containing(body)
+                    } else {
+                        Vec::new()
+                    };
                     out.push(Term {
                         input: word.to_string(),
                         used: body.to_string(),
                         alternatives: Vec::new(),
                         translated: false,
                         excluded,
+                        nearby,
                     });
                     at += 1;
                 }
@@ -240,6 +299,10 @@ pub fn translate(dictionary: &Dictionary, query: &str) -> Vec<Term> {
     }
 
     out
+}
+
+fn is_hangul(c: char) -> bool {
+    ('가'..='힣').contains(&c)
 }
 
 /// 앞의 `-`를 떼어내고 제외 여부를 함께 돌려준다.
@@ -273,6 +336,39 @@ mod tests {
              펠라치오\tblow job\tblowjob\n\
              기동전사 건담\tmobile suit gundam\tgundam seed\n",
         )
+    }
+
+    /// A Korean word the dictionary does not have is searched as written,
+    /// which finds only Korean titles; the phrases it does have that contain
+    /// the word are offered beside it.
+    #[test]
+    fn a_word_it_does_not_have_comes_with_the_phrases_that_contain_it() {
+        let dictionary = Dictionary::parse(
+            "사람을 가축처럼 다룸\thuman cattle\n\
+             가축 사육\tlivestock\n\
+             거유\tbig breasts\n",
+        );
+        let terms = translate(&dictionary, "가축");
+        assert!(!terms[0].translated);
+        let offered: Vec<&str> = terms[0].nearby.iter().map(|s| s.used.as_str()).collect();
+        // Starting with the word comes before only containing it.
+        assert_eq!(offered, ["livestock", "human cattle"]);
+        assert_eq!(terms[0].nearby[1].korean, "사람을 가축처럼 다룸");
+
+        // Nothing is offered for a word it has, or for one in another script.
+        assert!(translate(&dictionary, "거유")[0].nearby.is_empty());
+        assert!(translate(&dictionary, "cattle")[0].nearby.is_empty());
+        assert!(translate(&dictionary, "가")[0].nearby.is_empty());
+    }
+
+    /// Words added by hand are read after the generated table, so one added
+    /// to fill a gap is found, and wins where the two disagree.
+    #[test]
+    fn words_added_by_hand_are_found() {
+        let terms = translate(Dictionary::embedded(), "목장");
+        assert!(terms[0].translated);
+        assert_eq!(terms[0].used, "farm");
+        assert_eq!(translate(Dictionary::embedded(), "가축")[0].used, "human cattle");
     }
 
     #[test]

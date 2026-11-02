@@ -75,6 +75,8 @@ export const ja: Messages = {
   'error.changedHint': 'tsuburu が更新されるまで、やり直しても直りません。',
 
   'terms.noTranslation': '訳語なし',
+  'terms.titlesOnly': '辞書にないため題名だけで検索',
+  'terms.meant': 'もしかして:',
 
   'search.placeholder': '検索語・作品番号・hitomi のアドレス · -語 で除外',
   'search.placeholderLocal': 'タイトル・作家・シリーズ・キャラクター、または作品番号',

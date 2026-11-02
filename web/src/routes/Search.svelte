@@ -328,6 +328,14 @@
     }
   }
 
+  /// The query with one typed word put in place of another.
+  function swapped(query: string, from: string, to: string): string {
+    return query
+      .split(/\s+/)
+      .map((word) => (word === from ? to : word))
+      .join(' ')
+  }
+
   /// A page added to what is shown, without what is already there.
   ///
   /// The list can move between pages - hitomi is posted to all the time, and
@@ -440,7 +448,7 @@
       <AllResults {params} {localAvailable} {dialogueAvailable} />
     {/key}
   {:else}
-  <Terms {terms} />
+  <Terms {terms} onpick={(from, to) => go({ query: swapped(params.query, from, to) })} />
 
   <!-- One paragraph, always in the page: a live region has to be there
        before its text changes, or the change is not announced. Submitting a

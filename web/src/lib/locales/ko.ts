@@ -75,6 +75,8 @@ export const ko: Messages = {
   'error.changedHint': 'tsuburu가 갱신되기 전에는 다시 시도해도 소용이 없습니다.',
 
   'terms.noTranslation': '번역 없음',
+  'terms.titlesOnly': '사전에 없어 제목에서만 찾음',
+  'terms.meant': '혹시:',
 
   'search.placeholder': '검색어 · 품번 · hitomi 주소 아무거나 · -단어로 제외',
   'search.placeholderLocal': '제목·작가·시리즈·캐릭터, 또는 품번',
