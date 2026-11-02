@@ -10,7 +10,7 @@ use quick_cache::sync::Cache;
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 use tsuburu_hitomi::fetcher::BoxFuture;
 use tsuburu_hitomi::{FetchError, Fetcher};
@@ -37,6 +37,15 @@ pub struct FetchConfig {
     /// address, that they read hitomi.
     pub referer_for: Vec<String>,
     pub timeout: Duration,
+    /// How long what was read from a list that changes is trusted.
+    ///
+    /// A `.nozomi` list is hitomi's newest-first order of everything, and
+    /// works are added to its front all day: the bytes at offset zero are a
+    /// different page an hour later. A B-tree file is named for the version
+    /// it belongs to and never changes under its name, so it is kept until
+    /// it falls out. Without this a program left running showed the first
+    /// screen it had loaded for as long as it ran.
+    pub lists_expire_after: Duration,
     /// Attempts per request, including the first.
     ///
     /// A long-lived client can keep a pooled connection that has gone bad,
@@ -54,6 +63,7 @@ impl Default for FetchConfig {
             referer: "https://hitomi.la/".into(),
             referer_for: vec!["hitomi.la".into(), "gold-usergeneratedcontent.net".into()],
             timeout: Duration::from_secs(20),
+            lists_expire_after: Duration::from_secs(10 * 60),
             attempts: 3,
         }
     }
@@ -77,22 +87,42 @@ struct Counters {
 #[derive(Clone)]
 struct ByLength;
 
-impl Weighter<(String, u64, u64), Arc<Vec<u8>>> for ByLength {
-    fn weight(&self, _key: &(String, u64, u64), body: &Arc<Vec<u8>>) -> u64 {
-        body.len() as u64
+/// A byte range of one file: the URL, and where it starts and ends.
+type RangeKey = (String, u64, u64);
+
+/// The bytes of one range, shared rather than copied between the readers of it.
+type Body = Kept<Arc<Vec<u8>>>;
+
+impl Weighter<RangeKey, Body> for ByLength {
+    fn weight(&self, _key: &RangeKey, kept: &Body) -> u64 {
+        kept.value.len() as u64
     }
+}
+
+/// A cached answer and when it was read, for the ones that go stale.
+#[derive(Clone)]
+struct Kept<T> {
+    value: T,
+    at: Instant,
+}
+
+/// Whether `url` is one of hitomi's lists, whose contents change under the
+/// same name. See [`FetchConfig::lists_expire_after`].
+fn is_list(url: &str) -> bool {
+    url.ends_with(".nozomi")
 }
 
 pub struct HttpFetcher {
     client: reqwest::Client,
-    cache: Cache<(String, u64, u64), Arc<Vec<u8>>, ByLength>,
-    /// `.nozomi` 목록의 길이. 목록마다 한 번만 물으면 된다.
-    lengths: Cache<String, u64>,
+    cache: Cache<RangeKey, Body, ByLength>,
+    /// `.nozomi` 목록의 길이. 목록이 바뀔 때까지는 한 번만 물으면 된다.
+    lengths: Cache<String, Kept<u64>>,
     limiter: Semaphore,
     counters: Counters,
     referer: String,
     referer_for: Vec<String>,
     attempts: usize,
+    lists_expire_after: Duration,
 }
 
 /// Whether a referer belongs on a request to `url`.
@@ -138,15 +168,20 @@ impl HttpFetcher {
             referer: cfg.referer,
             referer_for: cfg.referer_for,
             attempts: cfg.attempts.max(1),
+            lists_expire_after: cfg.lists_expire_after,
         })
+    }
+
+    /// Whether a cached answer for `url` read at `at` can still be used.
+    fn still_good(&self, url: &str, at: Instant) -> bool {
+        !is_list(url) || at.elapsed() < self.lists_expire_after
     }
 
     /// Throws away everything read so far, so the next read asks hitomi.
     ///
-    /// The byte ranges of a `.nozomi` list are cached with no expiry, which
-    /// is right while a reader looks through one answer and wrong when they
-    /// want to see what has been posted since. Nothing clears it on a timer;
-    /// only a reader asking for it does.
+    /// The byte ranges of a `.nozomi` list are re-read on their own once
+    /// they are [`FetchConfig::lists_expire_after`] old; this is for a reader
+    /// who wants what has been posted since right now.
     pub fn forget(&self) {
         self.cache.clear();
         self.lengths.clear();
@@ -281,13 +316,15 @@ impl Fetcher for HttpFetcher {
     ) -> BoxFuture<'a, Result<Vec<u8>, FetchError>> {
         Box::pin(async move {
             let key = (url.to_string(), range.start, range.end);
-            if let Some(hit) = self.cache.get(&key) {
+            if let Some(hit) = self.cache.get(&key)
+                && self.still_good(url, hit.at)
+            {
                 self.counters.cache_hits.fetch_add(1, Ordering::Relaxed);
-                return Ok(hit.as_ref().clone());
+                return Ok(hit.value.as_ref().clone());
             }
 
             let body = self.send(url, Some(range)).await?;
-            self.cache.insert(key, Arc::new(body.clone()));
+            self.cache.insert(key, Kept { value: Arc::new(body.clone()), at: Instant::now() });
             Ok(body)
         })
     }
@@ -298,8 +335,10 @@ impl Fetcher for HttpFetcher {
 
     fn length<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<u64, FetchError>> {
         Box::pin(async move {
-            if let Some(cached) = self.lengths.get(&url.to_string()) {
-                return Ok(cached);
+            if let Some(cached) = self.lengths.get(&url.to_string())
+                && self.still_good(url, cached.at)
+            {
+                return Ok(cached.value);
             }
 
             // HEAD 대신 첫 1바이트를 Range로 요청한다. 206 응답의
@@ -325,7 +364,7 @@ impl Fetcher for HttpFetcher {
                 .or_else(|| response.content_length())
                 .ok_or_else(|| FetchError::Network("server did not report a length".into()))?;
 
-            self.lengths.insert(url.to_string(), length);
+            self.lengths.insert(url.to_string(), Kept { value: length, at: Instant::now() });
             Ok(length)
         })
     }
@@ -390,6 +429,55 @@ mod tests {
         assert_eq!(stats.requests, 1, "second call must come from cache");
         assert_eq!(stats.cache_hits, 1);
         // expect(1)이 drop 시점에 검증된다
+    }
+
+    /// A list gains works at its front all day, so a page of it read a
+    /// while ago is read again; an index file named for its version is not.
+    #[tokio::test]
+    async fn a_list_is_read_again_once_it_is_old_and_an_index_is_not() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/index-korean.nozomi"))
+            .respond_with(ResponseTemplate::new(206).set_body_bytes(vec![1u8; 8]))
+            .expect(2)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/galleries.1.index"))
+            .respond_with(ResponseTemplate::new(206).set_body_bytes(vec![2u8; 8]))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let fetcher = HttpFetcher::new(FetchConfig {
+            lists_expire_after: Duration::ZERO,
+            ..FetchConfig::default()
+        })
+        .unwrap();
+        for _ in 0..2 {
+            fetcher
+                .get_range(&format!("{}/index-korean.nozomi", server.uri()), 0..8)
+                .await
+                .unwrap();
+            fetcher.get_range(&format!("{}/galleries.1.index", server.uri()), 0..8).await.unwrap();
+        }
+        // expect() is checked as the server drops.
+    }
+
+    #[tokio::test]
+    async fn a_list_is_answered_from_memory_while_it_is_fresh() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/index-all.nozomi"))
+            .respond_with(ResponseTemplate::new(206).set_body_bytes(vec![1u8; 8]))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let fetcher = HttpFetcher::new(FetchConfig::default()).unwrap();
+        let url = format!("{}/index-all.nozomi", server.uri());
+        fetcher.get_range(&url, 0..8).await.unwrap();
+        fetcher.get_range(&url, 0..8).await.unwrap();
     }
 
     #[tokio::test]
