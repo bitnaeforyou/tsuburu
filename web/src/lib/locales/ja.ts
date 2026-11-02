@@ -261,6 +261,9 @@ export const ja: Messages = {
   'corpus.timing': '残り時間を計算中',
   'corpus.left': '残り約{minutes}分',
   'corpus.titleShort': 'セリフを取得中',
+  'corpus.have': 'コーパスはダウンロード済みです（ファイル{n}個）。新しく公開されたセリフがあれば、その分だけ取得します。',
+  'corpus.updated': '取得が完了しました。今回新しく入ったセリフ: {works}件',
+  'corpus.update': '新しく公開された分を取得',
   'corpus.get':
     '取ってくる',
   'corpus.failed':

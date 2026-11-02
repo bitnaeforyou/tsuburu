@@ -263,6 +263,9 @@ export const en = {
   'corpus.timing': 'working out the time left',
   'corpus.left': 'about {minutes} min left',
   'corpus.titleShort': 'Fetching the dialogue',
+  'corpus.have': 'The corpus is here ({n} files). Anything published since is fetched on its own.',
+  'corpus.updated': 'All in. New this time: {works} works',
+  'corpus.update': 'Get what is new',
   'corpus.get':
     'Fetch it',
   'corpus.failed':

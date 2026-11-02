@@ -12,7 +12,10 @@
     /// standing suggestion at the moment it is most use - the results are
     /// thin because the corpus is not in - so it stays.
     ask = false,
-  }: { ask?: boolean } = $props()
+    /// Settings: always there, saying what is in and offering whatever has
+    /// been published since, rather than gone once the corpus is in.
+    standing = false,
+  }: { ask?: boolean; standing?: boolean } = $props()
 
   const ASKED = 'tsuburu.corpus.asked'
 
@@ -41,7 +44,8 @@
       dismissed = true
       return
     }
-    if (dismissed || corpus?.available === false || corpus?.state === 'ready') return
+    // Asked once, and then watched only while something is arriving.
+    if (dismissed || (corpus && corpus.state !== 'fetching')) return
     void look()
     const timer = setInterval(() => void look(), 1000)
     return () => clearInterval(timer)
@@ -93,9 +97,16 @@
     ].join(' · '),
   )
 
-  // Nothing to offer if the build cannot fetch, or the corpus is already in.
+  /// In already, and nothing running: a program started again is idle
+  /// either way, and this is the difference.
+  const had = $derived(corpus?.state === 'idle' && (corpus.taken ?? 0) > 0)
+
+  // Nothing to offer if the build cannot fetch, or the corpus is already in -
+  // except in settings, which is where to look for what is in.
   const offering = $derived(
-    !dismissed && corpus?.available === true && corpus.state !== 'ready',
+    !dismissed &&
+      corpus?.available === true &&
+      (standing || (corpus.state !== 'ready' && !had)),
   )
 </script>
 
@@ -113,11 +124,19 @@
       {/if}
     </div>
 
-    {#if corpus.state === 'fetching'}
+    {#if standing && corpus.state === 'ready'}
+      <p class="small">{t('corpus.updated', { works: number(corpus.works ?? 0) })}</p>
+      <button class="carry" onclick={yes}>{t('corpus.update')}</button>
+    {:else if standing && had}
+      <p class="small">{t('corpus.have', { n: number(corpus.taken ?? 0) })}</p>
+      <button class="carry" onclick={yes}>{t('corpus.update')}</button>
+    {:else if corpus.state === 'fetching'}
       <div class="meter" style:--done={`${share * 100}%`}>
         <span>{progress}</span>
       </div>
-      <button class="carry" onclick={() => (tucked = true)}>{t('corpus.background')}</button>
+      {#if !standing}
+        <button class="carry" onclick={() => (tucked = true)}>{t('corpus.background')}</button>
+      {/if}
     {:else}
       <div class="answers">
         <button class="primary" onclick={yes}>
@@ -190,6 +209,10 @@
   }
   .carry {
     justify-self: start;
+  }
+  .small {
+    margin: 0;
+    font-size: var(--text-sm);
   }
 
 </style>

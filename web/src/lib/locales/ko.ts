@@ -261,6 +261,9 @@ export const ko: Messages = {
   'corpus.timing': '남은 시간 계산 중',
   'corpus.left': '약 {minutes}분 남음',
   'corpus.titleShort': '대사 받는 중',
+  'corpus.have': '받아 둔 코퍼스가 있습니다(파일 {n}개). 새로 올라온 대사가 있으면 그것만 받아옵니다.',
+  'corpus.updated': '다 받았습니다. 이번에 새로 들어온 대사: {works}편',
+  'corpus.update': '새로 올라온 것 받기',
   'corpus.get':
     '받아오기',
   'corpus.failed':

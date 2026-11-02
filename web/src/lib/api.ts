@@ -325,6 +325,8 @@ export function dialogueStatus(): Promise<DialogueStatus> {
 
 export type CorpusState = {
   available: boolean
+  /** How many published shards are already in, running or not. */
+  taken?: number
   state: 'idle' | 'fetching' | 'ready' | 'failed'
   done?: number
   total?: number

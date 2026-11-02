@@ -503,7 +503,7 @@
       {/if}
     </div>
     {#if status.supported}
-      <CorpusOffer />
+      <CorpusOffer standing />
     {/if}
   {/if}
 
@@ -560,7 +560,7 @@
     <!-- The text somebody else's machine already spent weeks recognising.
          The same offer the search screen makes, said by the same component:
          two of them drifted apart on what the buttons were. -->
-    <CorpusOffer />
+    <CorpusOffer standing />
 
     <section class="panel status">
       <div class="row">

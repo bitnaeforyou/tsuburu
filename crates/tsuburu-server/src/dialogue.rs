@@ -640,8 +640,16 @@ pub struct CorpusState {
     /// False where the build does not know where it was published from, and
     /// so has nowhere to fetch from.
     pub available: bool,
+    /// How many of the published shards are already in. A program started
+    /// again is idle whether it has the corpus or not, and this is what
+    /// tells "never fetched" from "fetched, and nothing running now".
+    pub taken: usize,
     #[serde(flatten)]
     pub progress: crate::corpus::Progress,
+}
+
+fn shards_taken(state: &AppState) -> usize {
+    state.dialogue.as_ref().and_then(|d| d.taken_shards().ok()).map_or(0, |taken| taken.len())
 }
 
 pub async fn corpus_state(State(state): State<Arc<AppState>>) -> Json<CorpusState> {
@@ -649,7 +657,7 @@ pub async fn corpus_state(State(state): State<Arc<AppState>>) -> Json<CorpusStat
     // fetch it from. Offering on either count is what had a phone being asked
     // to download half a gigabyte it would then refuse.
     let available = state.corpus.publishable() && state.dialogue.is_some();
-    Json(CorpusState { available, progress: state.corpus.progress() })
+    Json(CorpusState { available, taken: shards_taken(&state), progress: state.corpus.progress() })
 }
 
 /// Fetches the published corpus, in the background.
@@ -665,7 +673,11 @@ pub async fn fetch_corpus(
         });
     }
     state.corpus.fetch(store, Arc::clone(&state.fetcher));
-    Ok(Json(CorpusState { available: true, progress: state.corpus.progress() }))
+    Ok(Json(CorpusState {
+        available: true,
+        taken: shards_taken(&state),
+        progress: state.corpus.progress(),
+    }))
 }
 
 #[derive(Debug, Deserialize)]
