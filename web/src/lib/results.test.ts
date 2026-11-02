@@ -1,6 +1,6 @@
 /// Coming back to a search should find it as it was left.
 
-import { beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { forget, markScroll, recall, remember } from './results.svelte'
 
 const found = (n: number) => ({
@@ -70,5 +70,51 @@ describe('when there have been many', () => {
     // q1 was the oldest once q0 was asked for again.
     expect(recall('q1')).toBeNull()
     expect(recall('q0')?.total).toBe(0)
+  })
+})
+
+describe('a search left for a while', () => {
+  afterEach(() => vi.useRealTimers())
+
+  /// hitomi is posted to all day; put back with no age at all, the first
+  /// screen showed what it had first found for weeks.
+  test('is asked again once it is old', () => {
+    vi.useFakeTimers()
+    remember('home', found(3))
+    vi.advanceTimersByTime(60 * 60 * 1000)
+    expect(recall('home')?.total).toBe(3)
+    vi.advanceTimersByTime(3 * 60 * 60 * 1000)
+    expect(recall('home')).toBeNull()
+  })
+
+  test('is as old as its first page, however many pages came after', () => {
+    vi.useFakeTimers()
+    remember('home', found(3))
+    vi.advanceTimersByTime(2 * 60 * 60 * 1000)
+    remember('home', found(4))
+    vi.advanceTimersByTime(90 * 60 * 1000)
+    expect(recall('home')).toBeNull()
+  })
+
+  /// What a closed program wrote down is only put back if it is recent:
+  /// opening the program again is coming back for what is new.
+  test('written down by a program since closed, is put back only if recent', async () => {
+    const write = (foundAt?: number) =>
+      localStorage.setItem(
+        'tsuburu.results',
+        JSON.stringify([['home', { ids: [1], total: 1, offset: 1, scrollY: 0, foundAt }]]),
+      )
+    const fresh = async () => {
+      vi.resetModules()
+      return (await import('./results.svelte')).recall('home')
+    }
+
+    write(Date.now() - 5 * 60 * 1000)
+    expect((await fresh())?.total).toBe(1)
+    write(Date.now() - 2 * 60 * 60 * 1000)
+    expect(await fresh()).toBeNull()
+    // Written by a version that kept no time at all.
+    write(undefined)
+    expect(await fresh()).toBeNull()
   })
 })

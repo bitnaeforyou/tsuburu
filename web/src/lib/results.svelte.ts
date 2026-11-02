@@ -36,6 +36,21 @@ const KEEP = 6
 
 const STORED = 'tsuburu.results'
 
+/// How long a search is put back as it was found, rather than asked again.
+///
+/// Long enough to read a work and come back to the list at the same place.
+/// Not for ever: hitomi is posted to all day, and kept with no age at all
+/// the first screen showed what it had first found for weeks, through
+/// updates, until the reload button was pressed.
+const KEPT_FOR = 3 * 60 * 60 * 1000
+
+/// The same, for what was written down by a program that has since been
+/// closed. Opening it again is coming back for what is new.
+const KEPT_ACROSS_LAUNCHES = 30 * 60 * 1000
+
+/// A search as it is held: what was found, and when its first page was.
+type Held = Remembered & { foundAt: number }
+
 /// Kept on the disk as well as in memory.
 ///
 /// A phone takes the app's window away when it needs the memory and builds it
@@ -45,42 +60,46 @@ const STORED = 'tsuburu.results'
 ///
 /// The passages a dialogue search found are not written down; they are large,
 /// and asking again is answered from the store's own cache.
-type Stored = Omit<Remembered, 'hits' | 'terms'>
+type Stored = Omit<Held, 'hits' | 'terms'>
 
-type Written = Omit<Stored, 'reachable' | 'narrowed'> &
-  Partial<Pick<Stored, 'reachable' | 'narrowed'>>
+type Written = Omit<Stored, 'reachable' | 'narrowed' | 'foundAt'> &
+  Partial<Pick<Stored, 'reachable' | 'narrowed' | 'foundAt'>>
 
-function load(): Map<string, Remembered> {
+function load(): Map<string, Held> {
   try {
     const raw = localStorage.getItem(STORED)
     if (!raw) return new Map()
-    // Rows written before a field existed come back without it.
+    // Rows written before a field existed come back without it - and one
+    // with no time on it is as old as can be, so it is not put back.
     const rows = JSON.parse(raw) as [string, Written][]
     return new Map(
-      rows.map(([key, row]) => [
-        key,
-        {
-          ...row,
-          reachable: row.reachable ?? 0,
-          narrowed: row.narrowed ?? false,
-          terms: [],
-          hits: [],
-        },
-      ]),
+      rows
+        .filter(([, row]) => Date.now() - (row.foundAt ?? 0) < KEPT_ACROSS_LAUNCHES)
+        .map(([key, row]) => [
+          key,
+          {
+            ...row,
+            foundAt: row.foundAt ?? 0,
+            reachable: row.reachable ?? 0,
+            narrowed: row.narrowed ?? false,
+            terms: [],
+            hits: [],
+          },
+        ]),
     )
   } catch {
     return new Map()
   }
 }
 
-const seen = load()
+const seen: Map<string, Held> = load()
 
 function save() {
   try {
     const rows: [string, Stored][] = [...seen].map(
-      ([key, { ids, total, offset, reachable, narrowed, scrollY, anchor }]) => [
+      ([key, { ids, total, offset, reachable, narrowed, scrollY, anchor, foundAt }]) => [
         key,
-        { ids, total, offset, reachable, narrowed, scrollY, anchor },
+        { ids, total, offset, reachable, narrowed, scrollY, anchor, foundAt },
       ],
     )
     localStorage.setItem(STORED, JSON.stringify(rows))
@@ -95,8 +114,10 @@ export function remember(key: string, found: Remembered) {
   const before = seen.get(key)
   const scrollY = found.scrollY || (before?.scrollY ?? 0)
   const anchor = found.anchor ?? before?.anchor
+  // Loading another page is the same answer, found when its first page was.
+  const foundAt = before?.foundAt ?? Date.now()
   seen.delete(key)
-  seen.set(key, { ...found, scrollY, anchor })
+  seen.set(key, { ...found, scrollY, anchor, foundAt })
   // A Map keeps insertion order, so the oldest is the first one out.
   while (seen.size > KEEP) {
     const oldest = seen.keys().next().value
@@ -109,6 +130,13 @@ export function remember(key: string, found: Remembered) {
 export function recall(key: string): Remembered | null {
   const found = seen.get(key)
   if (!found) return null
+  // Too old to show as it was: dropped, so the search asks again and what
+  // it finds is written down as new rather than under the old time.
+  if (Date.now() - found.foundAt >= KEPT_FOR) {
+    seen.delete(key)
+    save()
+    return null
+  }
   // Asked for again, so it is the freshest thing here.
   seen.delete(key)
   seen.set(key, found)
