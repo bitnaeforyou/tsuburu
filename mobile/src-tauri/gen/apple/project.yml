@@ -51,8 +51,8 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.6.11
-        CFBundleVersion: "0.6.11"
+        CFBundleShortVersionString: 0.6.12
+        CFBundleVersion: "0.6.12"
     entitlements:
       path: tsuburu-mobile_iOS/tsuburu-mobile_iOS.entitlements
     scheme:
