@@ -80,6 +80,11 @@
 
   --radius: 8px;
   --radius-sm: 5px;
+  /* An SVG in a url() cannot read a custom property, so this repeats --muted
+     in each scheme. */
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%2362656b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  /* What a dropdown keeps clear on its trailing side for the arrow. */
+  --select-arrow-room: 1.6rem;
   color-scheme: light dark;
 }
 
@@ -105,6 +110,7 @@
     --tag-female-quiet: var(--rose-950);
     --tag-male: var(--violet-400);
     --tag-male-quiet: var(--violet-950);
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23a0a3a8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   }
 }
 
@@ -249,17 +255,20 @@ input[type='radio'] {
    the sort beside the view toggle, three filters in a row, one on every
    card. Left at the browser's own shape it is a different height with a
    different edge and no hover, and the row reads as parts from two
-   interfaces. The arrow stays the platform's, which `color-scheme` above
-   already draws for the right scheme. */
+   interfaces. The arrow is drawn here too: the platform's sits against the
+   edge wherever the padding says, and no two browsers place it alike. */
 select {
   font: inherit;
   color: inherit;
-  background: var(--surface);
+  appearance: none;
+  background-color: var(--surface);
+  background-image: var(--select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 0.55rem center;
+  background-size: 0.75rem;
   border: 1px solid var(--edge);
   border-radius: var(--radius);
-  /* Less on the trailing side than a button: the arrow is drawn inside the
-     control and brings its own room. */
-  padding: 0.45rem 0.4rem 0.45rem 0.6rem;
+  padding: 0.45rem var(--select-arrow-room) 0.45rem 0.6rem;
   cursor: pointer;
 }
 
@@ -353,7 +362,7 @@ main:focus {
   body.has-tabs { padding-bottom: calc(3.4rem + var(--safe-bottom)); }
   button { padding: 0.55rem 0.9rem; }
   input { padding: 0.6rem 0.75rem; }
-  select { padding: 0.55rem 0.4rem 0.55rem 0.7rem; }
+  select { padding: 0.55rem var(--select-arrow-room) 0.55rem 0.7rem; }
   /* Under 16px, iOS Safari zooms the page on focus and the only way back is
      a pinch. Every typed-into or opened control holds the base size. */
   input, select, textarea { font-size: var(--text-base); }

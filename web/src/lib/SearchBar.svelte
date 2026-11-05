@@ -602,7 +602,7 @@
       gap: 0.5rem 0.75rem;
     }
     select {
-      padding: 0.35rem 0.4rem;
+      padding: 0.35rem var(--select-arrow-room) 0.35rem 0.4rem;
     }
   }
 </style>

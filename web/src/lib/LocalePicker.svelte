@@ -26,7 +26,7 @@
 
   @media (max-width: 640px) {
     .locale {
-      padding: 0.4rem 0.35rem;
+      padding: 0.4rem var(--select-arrow-room) 0.4rem 0.35rem;
       font-size: var(--text-base);
     }
   }

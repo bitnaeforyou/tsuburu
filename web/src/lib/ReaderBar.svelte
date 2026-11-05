@@ -248,9 +248,10 @@
     padding: 0.25rem 0.6rem;
   }
   select {
+    padding-right: var(--select-arrow-room);
     font-family: inherit;
     color: var(--text);
-    background: var(--bg);
+    background-color: var(--bg);
     border: 1px solid var(--edge);
     border-radius: var(--radius);
   }
@@ -297,7 +298,7 @@
     /* Anything below 16px zooms the page when iOS opens it. */
     select {
       font-size: var(--text-base);
-      padding: 0.45rem 0.7rem;
+      padding: 0.45rem var(--select-arrow-room) 0.45rem 0.7rem;
     }
     .scrub {
       height: 1.75rem;

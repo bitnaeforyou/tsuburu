@@ -1109,10 +1109,10 @@
   select {
     font: inherit;
     color: var(--text);
-    background: var(--bg);
+    background-color: var(--bg);
     border: 1px solid var(--edge);
     border-radius: var(--radius);
-    padding: 0.25rem 0.4rem;
+    padding: 0.25rem var(--select-arrow-room) 0.25rem 0.4rem;
   }
   input[type='number'] {
     width: 6rem;
