@@ -1072,9 +1072,9 @@ impl DialogueStore {
 
     /// Packs every stored gallery into shards of `range_size` ids.
     ///
-    /// `background_only` leaves out galleries that were indexed because the
-    /// user asked for them (imported history, hunts): those reveal what the
-    /// user read, and a shared file must not.
+    /// `background_only` leaves out galleries that are here because of the
+    /// user (imported history, hunts, pages opened in the reader): those
+    /// reveal what the user read, and a shared file must not.
     /// Packs what this machine recognised into shard files.
     ///
     /// Imported text is left out whatever `background_only` says: a shard is
@@ -1122,7 +1122,11 @@ impl DialogueStore {
             if !include_imported && job.as_ref().is_some_and(|j| j.source.is_some()) {
                 continue;
             }
-            if background_only && job.is_some_and(|j| j.priority != Priority::Background) {
+            // Reading files a work that never had a job, so it carries the
+            // sweep's priority; only `from_reading` tells the two apart.
+            if background_only
+                && job.is_some_and(|j| j.priority != Priority::Background || j.from_reading)
+            {
                 continue;
             }
             let pages = decode_pages(&decompress(value.value())?)?;
@@ -2103,6 +2107,28 @@ mod tests {
             .collect();
         assert_eq!(all, 3);
         assert_eq!(public, vec![1]);
+    }
+
+    /// Reading files a work with no job behind it, so it takes the sweep's
+    /// priority. That priority is not what says it was swept.
+    #[test]
+    fn background_only_export_keeps_what_reading_collected_out() {
+        let (store, _d) = store();
+        store.complete(1, &pages(&[&["배경 색인"]])).unwrap();
+        store.merge_pages(2, &[page(0, "읽은 작품")], true).unwrap();
+        store.complete(3, &pages(&[&["배경 색인"]])).unwrap();
+        store.merge_pages(3, &[page(1, "읽으면서")], true).unwrap();
+
+        let ids_of = |background_only| -> Vec<i32> {
+            store
+                .export_shards(1_000, background_only)
+                .unwrap()
+                .iter()
+                .flat_map(|s| s.entries.iter().map(|e| e.gallery_id))
+                .collect()
+        };
+        assert_eq!(ids_of(false), [1, 2, 3]);
+        assert_eq!(ids_of(true), [1, 3], "a work the sweep read stays, read or not");
     }
 
     #[test]

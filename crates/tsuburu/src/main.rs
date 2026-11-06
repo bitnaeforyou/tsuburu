@@ -75,8 +75,8 @@ enum Command {
         /// Where to write them. Created if it is not there.
         dir: std::path::PathBuf,
 
-        /// Leave out what was indexed on request - history and hunts - which
-        /// is the part that says what somebody read.
+        /// Leave out what is here because of a reader - history, hunts and
+        /// pages opened - which is the part that says what somebody read.
         #[arg(long)]
         background_only: bool,
     },
