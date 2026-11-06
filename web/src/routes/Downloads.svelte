@@ -14,6 +14,7 @@
   import Shelves from '../lib/Shelves.svelte'
   import ShelfPicker from '../lib/ShelfPicker.svelte'
   import { onShelf, type Picked, moveTo } from '../lib/folders'
+  import { matchesAsked, numberList } from '../lib/downloads'
 
   let items = $state<api.DownloadItem[]>([])
   let bytes = $state(0)
@@ -23,6 +24,7 @@
   type Order = 'added' | 'title' | 'pages' | 'bytes' | 'idDesc' | 'idAsc'
   let order = $state<Order>('added')
   let shelf = $state<Picked>('all')
+  let sought = $state('')
 
   let shelves = $state<api.Folder[]>([])
   const shelfNames = $derived(shelves.map((shelf) => shelf.name))
@@ -49,17 +51,16 @@
   /// What copying every number came to, said beside the button.
   let copied = $state('')
 
-  /// The numbers of what is on screen - this shelf, in this order - one to a
-  /// line, which is what every box in tsuburu that takes numbers accepts.
+  /// The numbers of what is on screen - this shelf, this search, in this order.
   async function copyNumbers() {
     const ids = ordered.map((item) => item.id)
-    if (!(await copy(ids.join('\n')))) copied = t('copy.failed')
+    if (!(await copy(numberList(ids)))) copied = t('copy.failed')
     else if (ids.length === 1) copied = t('copy.allDoneOne')
     else copied = t('copy.allDone', { n: ids.length })
   }
 
   const ordered = $derived.by(() => {
-    const sorted = [...onShelf(items, shelf)]
+    const sorted = onShelf(items, shelf).filter((item) => matchesAsked(item, sought))
     if (order === 'title') sorted.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
     else if (order === 'pages') sorted.sort((a, b) => b.pages - a.pages)
     else if (order === 'bytes') sorted.sort((a, b) => b.bytes - a.bytes)
@@ -239,10 +240,19 @@
     <p class="muted">{t('downloads.empty')}</p>
   {:else}
     <Shelves works={items} {shelves} bind:picked={shelf} onchange={(next) => (shelves = next)} />
+    <input
+      class="find"
+      type="search"
+      bind:value={sought}
+      placeholder={t('downloads.find')}
+      aria-label={t('downloads.find')}
+      autocomplete="off"
+    />
     <div class="tidy">
       <p class="muted">
         {items.length === 1 ? t('downloads.work') : t('downloads.works', { n: items.length })}
         &middot; {t('downloads.onDisk', { size: size(bytes) })}
+        {#if sought.trim()}&middot; {t('downloads.found', { n: ordered.length })}{/if}
       </p>
       <!-- What to do with the list, and how to look at it, on lines of their
            own: four controls and a dropdown on one line left a phone
@@ -287,6 +297,10 @@
         <button onclick={stopSelecting}>{t('common.cancel')}</button>
       {/if}
     </div>
+    {/if}
+
+    {#if sought.trim() && ordered.length === 0}
+      <p class="muted" role="status">{t('downloads.noMatch')}</p>
     {/if}
 
     <Grid>
@@ -556,6 +570,10 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     border-radius: var(--radius);
+  }
+  .find {
+    width: 100%;
+    margin-bottom: 0.75rem;
   }
   .by-number {
     display: flex;
